@@ -1,0 +1,28 @@
+<div class="app-shell">
+  <mat-toolbar class="topbar">
+    <a class="brand" routerLink="/" aria-label="Swyftly home">Swyftly</a>
+
+    <nav class="primary-nav" aria-label="Primary navigation">
+      @for (item of navigationItems; track item.route) {
+        <a
+          mat-button
+          [routerLink]="item.route"
+          routerLinkActive="active-link"
+          [routerLinkActiveOptions]="{ exact: true }"
+          ariaCurrentWhenActive="page"
+        >
+          {{ item.label }}
+        </a>
+      }
+    </nav>
+  </mat-toolbar>
+
+  <main class="app-main">
+    <router-outlet />
+  </main>
+
+  <footer class="footer">
+    <span>Swyftly marketplace foundation</span>
+    <span>Fashion, beauty, accessories</span>
+  </footer>
+</div>

@@ -61,6 +61,8 @@ BenchmarkDotNet.Artifacts/
 project.lock.json
 project.fragment.lock.json
 artifacts/
+.config/*
+!.config/dotnet-tools.json
 
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt
@@ -284,6 +286,20 @@ FakesAssemblies/
 # Node.js Tools for Visual Studio
 .ntvs_analysis.dat
 node_modules/
+npm-debug.log
+yarn-error.log
+
+# Angular / frontend build output
+dist/
+tmp/
+out-tsc/
+bazel-out/
+**/.angular/cache/
+coverage/
+typings/
+connect.lock
+libpeerconnection.log
+testem.log
 
 # Visual Studio 6 build log
 *.plg
@@ -376,12 +392,8 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
-# VS Code files for those working on multiple tools
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+# VS Code workspace files
+**/.vscode/
 *.code-workspace
 
 # Local History for Visual Studio Code
@@ -399,4 +411,11 @@ FodyWeavers.xsd
 
 .containers/
 
-documentation/
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db

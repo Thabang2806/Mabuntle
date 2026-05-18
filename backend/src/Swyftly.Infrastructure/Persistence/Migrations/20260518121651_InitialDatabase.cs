@@ -1,0 +1,24 @@
+﻿using Microsoft.EntityFrameworkCore.Migrations;
+
+#nullable disable
+
+namespace Swyftly.Infrastructure.Persistence.Migrations
+{
+    /// <inheritdoc />
+    public partial class InitialDatabase : Migration
+    {
+        /// <inheritdoc />
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.EnsureSchema(
+                name: "swyftly");
+        }
+
+        /// <inheritdoc />
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropSchema(
+                name: "swyftly");
+        }
+    }
+}

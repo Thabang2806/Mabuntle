@@ -1,0 +1,91 @@
+# Swyftly
+
+Swyftly is a transactional marketplace foundation for fashion, beauty, jewellery, and accessories.
+
+This repository is a monorepo with:
+
+- `backend/`: ASP.NET Core Web API, worker, domain/application/infrastructure projects, and tests.
+- `frontend/swyftly-web/`: Angular SSR app shell.
+- `database/`: migration and seed placeholders.
+- `docs/`: concise engineering docs derived from the larger source references in `Documentation/`.
+
+Prompt execution progress is tracked in `docs/codex-prompt-progress.md`.
+
+## Prerequisites
+
+- .NET SDK 9
+- Node.js 22 and npm
+- Angular CLI 19
+- Docker Desktop, for local PostgreSQL
+
+On this Windows machine, PowerShell blocks npm shim scripts. Use `cmd /c npm ...` for frontend commands unless the execution policy is changed.
+
+## Backend
+
+```powershell
+dotnet tool restore
+dotnet restore backend\Swyftly.sln
+dotnet build backend\Swyftly.sln
+dotnet test backend\Swyftly.sln
+dotnet run --project backend\src\Swyftly.Api\Swyftly.Api.csproj
+```
+
+Health check:
+
+```text
+GET https://localhost:<port>/health
+```
+
+Readiness check, including PostgreSQL:
+
+```text
+GET https://localhost:<port>/health/ready
+```
+
+Swagger UI is available in Development:
+
+```text
+https://localhost:<port>/swagger
+```
+
+## Frontend
+
+```powershell
+cd frontend\swyftly-web
+cmd /c npm install
+cmd /c npm run build
+cmd /c npm start
+```
+
+Default local route:
+
+```text
+http://localhost:4200
+```
+
+## Database
+
+```powershell
+docker compose up -d
+```
+
+The compose file starts PostgreSQL with pgvector support. Runtime verification requires Docker to be installed locally.
+
+EF Core migrations live in `backend/src/Swyftly.Infrastructure/Persistence/Migrations`.
+
+```powershell
+dotnet dotnet-ef migrations add MigrationName --project backend\src\Swyftly.Infrastructure --startup-project backend\src\Swyftly.Api --context SwyftlyDbContext --output-dir Persistence\Migrations
+dotnet dotnet-ef database update --project backend\src\Swyftly.Infrastructure --startup-project backend\src\Swyftly.Api --context SwyftlyDbContext
+```
+
+PostgreSQL integration tests are opt-in so normal test runs do not fail when Docker or PostgreSQL is unavailable.
+
+```powershell
+$env:SWYFTLY_RUN_POSTGRES_TESTS='true'
+$env:SWYFTLY_TEST_POSTGRES_CONNECTION='Host=localhost;Port=5432;Database=swyftly_integration_tests;Username=swyftly;Password=change_me'
+dotnet test backend\tests\Swyftly.IntegrationTests\Swyftly.IntegrationTests.csproj --filter PostgreSql
+```
+
+## Configuration
+
+Use `.env.example` as the reference for local variables. Do not commit `.env` files or real secrets.
