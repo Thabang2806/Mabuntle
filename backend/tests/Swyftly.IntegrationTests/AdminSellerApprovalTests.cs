@@ -1,0 +1,279 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Swyftly.Api.Admin;
+using Swyftly.Api.Authentication;
+using Swyftly.Api.Sellers;
+using Swyftly.Application.Identity;
+using Swyftly.Infrastructure.Identity;
+using Swyftly.Infrastructure.Persistence;
+
+namespace Swyftly.IntegrationTests;
+
+public sealed class AdminSellerApprovalTests
+{
+    [Fact]
+    public async Task Buyer_CannotAccessAdminSellerEndpoints()
+    {
+        using var factory = new AdminSellerApprovalTestFactory();
+        using var client = factory.CreateClient();
+        var buyerToken = await RegisterAndLoginBuyerAsync(client);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", buyerToken);
+
+        using var response = await client.GetAsync("/api/admin/sellers/pending");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_CanListPendingSellers()
+    {
+        using var factory = new AdminSellerApprovalTestFactory();
+        using var client = factory.CreateClient();
+        var seller = await RegisterLoginAndSubmitSellerAsync(client);
+        var adminToken = await CreateAndLoginAdminAsync(factory, client);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+
+        using var response = await client.GetAsync("/api/admin/sellers/pending");
+
+        response.EnsureSuccessStatusCode();
+        var sellers = await response.Content.ReadFromJsonAsync<AdminSellerSummaryResponse[]>();
+        Assert.NotNull(sellers);
+        var pendingSeller = Assert.Single(sellers!, s => s.SellerId == seller.SellerId);
+        Assert.Equal("UnderReview", pendingSeller.VerificationStatus);
+    }
+
+    [Fact]
+    public async Task Approve_ChangesSellerToVerified_AndWritesAuditLog()
+    {
+        using var factory = new AdminSellerApprovalTestFactory();
+        using var client = factory.CreateClient();
+        var seller = await RegisterLoginAndSubmitSellerAsync(client);
+        var adminToken = await CreateAndLoginAdminAsync(factory, client);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+
+        using var response = await client.PostAsJsonAsync($"/api/admin/sellers/{seller.SellerId}/approve", new { });
+
+        response.EnsureSuccessStatusCode();
+        var detail = await response.Content.ReadFromJsonAsync<AdminSellerDetailResponse>();
+        Assert.NotNull(detail);
+        Assert.Equal("Verified", detail!.VerificationStatus);
+        Assert.True(detail.Payout?.IsAdminApproved);
+        Assert.Contains(detail.AuditTrail, entry => entry.ActionType == "SellerApproved");
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        Assert.Equal(1, await dbContext.AuditLogs.CountAsync());
+    }
+
+    [Fact]
+    public async Task Reject_RequiresReason()
+    {
+        using var factory = new AdminSellerApprovalTestFactory();
+        using var client = factory.CreateClient();
+        var seller = await RegisterLoginAndSubmitSellerAsync(client);
+        var adminToken = await CreateAndLoginAdminAsync(factory, client);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/admin/sellers/{seller.SellerId}/reject",
+            new AdminSellerReasonRequest(" "));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Reject_ChangesSellerToRejected_AndWritesAuditLog()
+    {
+        using var factory = new AdminSellerApprovalTestFactory();
+        using var client = factory.CreateClient();
+        var seller = await RegisterLoginAndSubmitSellerAsync(client);
+        var adminToken = await CreateAndLoginAdminAsync(factory, client);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/admin/sellers/{seller.SellerId}/reject",
+            new AdminSellerReasonRequest("Documents are not clear."));
+
+        response.EnsureSuccessStatusCode();
+        var detail = await response.Content.ReadFromJsonAsync<AdminSellerDetailResponse>();
+        Assert.NotNull(detail);
+        Assert.Equal("Rejected", detail!.VerificationStatus);
+        Assert.Contains(
+            detail.AuditTrail,
+            entry => entry.ActionType == "SellerRejected" && entry.Reason == "Documents are not clear.");
+    }
+
+    [Fact]
+    public async Task Suspend_RequiresReason_AndChangesSellerToSuspended()
+    {
+        using var factory = new AdminSellerApprovalTestFactory();
+        using var client = factory.CreateClient();
+        var seller = await RegisterLoginAndSubmitSellerAsync(client);
+        var adminToken = await CreateAndLoginAdminAsync(factory, client);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+
+        using var missingReasonResponse = await client.PostAsJsonAsync(
+            $"/api/admin/sellers/{seller.SellerId}/suspend",
+            new AdminSellerReasonRequest(""));
+
+        Assert.Equal(HttpStatusCode.BadRequest, missingReasonResponse.StatusCode);
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/admin/sellers/{seller.SellerId}/suspend",
+            new AdminSellerReasonRequest("Policy review required."));
+
+        response.EnsureSuccessStatusCode();
+        var detail = await response.Content.ReadFromJsonAsync<AdminSellerDetailResponse>();
+        Assert.NotNull(detail);
+        Assert.Equal("Suspended", detail!.VerificationStatus);
+        Assert.Contains(
+            detail.AuditTrail,
+            entry => entry.ActionType == "SellerSuspended" && entry.Reason == "Policy review required.");
+    }
+
+    private static async Task<string> RegisterAndLoginBuyerAsync(HttpClient client)
+    {
+        const string email = "buyer@example.test";
+        await RegisterAsync(client, email, SwyftlyRoles.Buyer);
+        return await LoginAsync(client, email);
+    }
+
+    private static async Task<SellerOnboardingResponse> RegisterLoginAndSubmitSellerAsync(HttpClient client)
+    {
+        const string email = "seller@example.test";
+        await RegisterAsync(client, email, SwyftlyRoles.Seller);
+        var accessToken = await LoginAsync(client, email);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var profileResponse = await client.PutAsJsonAsync(
+            "/api/seller/onboarding/profile",
+            new UpdateSellerProfileRequest(
+                "Seller Store",
+                "seller@example.test",
+                "+27110000000",
+                "RegisteredBusiness",
+                "Seller Trading"));
+        profileResponse.EnsureSuccessStatusCode();
+
+        using var storefrontResponse = await client.PutAsJsonAsync(
+            "/api/seller/onboarding/storefront",
+            new UpdateSellerStorefrontRequest(
+                "Seller Store",
+                "seller-store",
+                "Seller storefront",
+                null,
+                null));
+        storefrontResponse.EnsureSuccessStatusCode();
+
+        using var addressResponse = await client.PutAsJsonAsync(
+            "/api/seller/onboarding/address",
+            new UpdateSellerAddressRequest(
+                "1 Market Street",
+                null,
+                "Johannesburg",
+                "Gauteng",
+                "2000",
+                "ZA"));
+        addressResponse.EnsureSuccessStatusCode();
+
+        using var payoutResponse = await client.PutAsJsonAsync(
+            "/api/seller/onboarding/payout",
+            new UpdateSellerPayoutRequest("provider-ref-123"));
+        payoutResponse.EnsureSuccessStatusCode();
+
+        using var submitResponse = await client.PostAsync("/api/seller/onboarding/submit-verification", null);
+        submitResponse.EnsureSuccessStatusCode();
+
+        var onboarding = await submitResponse.Content.ReadFromJsonAsync<SellerOnboardingResponse>();
+        Assert.NotNull(onboarding);
+        return onboarding!;
+    }
+
+    private static async Task RegisterAsync(HttpClient client, string email, string role)
+    {
+        using var response = await client.PostAsJsonAsync(
+            "/api/auth/register",
+            new RegisterRequest(email, "Password123!", role));
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static async Task<string> CreateAndLoginAdminAsync(
+        AdminSellerApprovalTestFactory factory,
+        HttpClient client)
+    {
+        const string email = "admin@example.test";
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var admin = new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                EmailConfirmed = true,
+                CreatedAtUtc = DateTimeOffset.UtcNow
+            };
+
+            var createResult = await userManager.CreateAsync(admin, "Password123!");
+            Assert.True(createResult.Succeeded, string.Join("; ", createResult.Errors.Select(error => error.Description)));
+
+            var roleResult = await userManager.AddToRoleAsync(admin, SwyftlyRoles.Admin);
+            Assert.True(roleResult.Succeeded, string.Join("; ", roleResult.Errors.Select(error => error.Description)));
+        }
+
+        return await LoginAsync(client, email);
+    }
+
+    private static async Task<string> LoginAsync(HttpClient client, string email)
+    {
+        using var response = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest(email, "Password123!"));
+
+        response.EnsureSuccessStatusCode();
+        var auth = await response.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(auth);
+        return auth!.AccessToken;
+    }
+
+    private sealed class AdminSellerApprovalTestFactory : WebApplicationFactory<Program>
+    {
+        private readonly string _databaseName = $"SwyftlyAdminSellerApprovalTests_{Guid.NewGuid():N}";
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Testing");
+
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<SwyftlyDbContext>>();
+                services.RemoveAll<IDbContextOptionsConfiguration<SwyftlyDbContext>>();
+
+                services.AddSingleton<AuditableEntitySaveChangesInterceptor>();
+                services.AddDbContext<SwyftlyDbContext>((serviceProvider, options) =>
+                {
+                    options
+                        .UseInMemoryDatabase(_databaseName)
+                        .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+                        .AddInterceptors(serviceProvider.GetRequiredService<AuditableEntitySaveChangesInterceptor>());
+                });
+            });
+        }
+    }
+}

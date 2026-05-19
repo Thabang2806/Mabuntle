@@ -18,14 +18,20 @@ Feature work should use vertical slices inside the application layer where pract
 
 The Angular app uses SSR/hybrid rendering for future public ecommerce pages and normal client-side behavior for private dashboard areas.
 
-Initial routes:
+Current primary frontend routes include:
 
 - `/`
 - `/shop`
 - `/seller`
 - `/admin`
 - `/account`
+- `/assistant`
+- `/visual-search`
+- `/cart`
+- `/checkout`
 
 ## Infrastructure
 
-PostgreSQL is the primary database. pgvector support is included in local Docker setup for later AI/search capabilities.
+PostgreSQL is the primary database. pgvector support is included for private product embeddings, using the local Docker `pgvector` image when Docker is available.
+
+Current external-provider integrations remain local placeholders: fake AI providers, fake payment provider, local image storage, and local search indexing. Production provider selection, secret management, payout execution, and provider-grade webhook hardening remain future work.

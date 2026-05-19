@@ -1,0 +1,62 @@
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { AdminSellerSummaryResponse } from '../admin/admin-seller.models';
+import { AdminSellerService } from '../admin/admin-seller.service';
+import { AdminSellersPageComponent } from './admin-sellers-page.component';
+
+describe('AdminSellersPageComponent', () => {
+  let fixture: ComponentFixture<AdminSellersPageComponent>;
+  let adminSellerService: jasmine.SpyObj<AdminSellerService>;
+
+  beforeEach(async () => {
+    adminSellerService = jasmine.createSpyObj<AdminSellerService>('AdminSellerService', ['getPendingSellers']);
+    adminSellerService.getPendingSellers.and.resolveTo([createSellerSummary()]);
+
+    await TestBed.configureTestingModule({
+      imports: [AdminSellersPageComponent],
+      providers: [
+        provideNoopAnimations(),
+        provideRouter([]),
+        { provide: AdminSellerService, useValue: adminSellerService }
+      ]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(AdminSellersPageComponent);
+  });
+
+  it('loads and displays pending sellers', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Seller Store');
+    expect(compiled.textContent).toContain('UnderReview');
+    const reviewLink = Array.from(compiled.querySelectorAll('a'))
+      .find(link => link.getAttribute('href') === '/admin/sellers/seller-id');
+    expect(reviewLink).toBeTruthy();
+  });
+
+  it('shows an empty state when there are no pending sellers', async () => {
+    adminSellerService.getPendingSellers.and.resolveTo([]);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('No pending sellers');
+  });
+});
+
+function createSellerSummary(): AdminSellerSummaryResponse {
+  return {
+    sellerId: 'seller-id',
+    displayName: 'Seller Store',
+    contactEmail: 'seller@example.test',
+    storeName: 'Seller Store',
+    storeSlug: 'seller-store',
+    verificationStatus: 'UnderReview',
+    submittedAtUtc: '2026-05-18T12:00:00Z'
+  };
+}

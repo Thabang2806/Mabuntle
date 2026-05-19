@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Pgvector.EntityFrameworkCore;
 using System.Text.Json;
 
 namespace Swyftly.Infrastructure.Persistence;
@@ -19,7 +20,8 @@ public sealed class SwyftlyDbContextFactory : IDesignTimeDbContextFactory<Swyftl
             ?? DefaultConnectionString;
 
         var options = new DbContextOptionsBuilder<SwyftlyDbContext>()
-            .UseNpgsql(connectionString)
+            .UseNpgsql(connectionString, npgsqlOptions => npgsqlOptions.UseVector())
+            .AddInterceptors(new AuditableEntitySaveChangesInterceptor(TimeProvider.System))
             .Options;
 
         return new SwyftlyDbContext(options);

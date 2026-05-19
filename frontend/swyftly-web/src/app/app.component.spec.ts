@@ -1,14 +1,32 @@
 import { TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting, HttpTestingController } from '@angular/common/http/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { AppComponent } from './app.component';
 
 describe('AppComponent', () => {
+  let httpTestingController: HttpTestingController;
+
   beforeEach(async () => {
+    sessionStorage.clear();
+
     await TestBed.configureTestingModule({
       imports: [AppComponent],
-      providers: [provideNoopAnimations(), provideRouter([])]
+      providers: [
+        provideNoopAnimations(),
+        provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting()
+      ]
     }).compileComponents();
+
+    httpTestingController = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpTestingController.verify();
+    sessionStorage.clear();
   });
 
   it('should create the app', () => {

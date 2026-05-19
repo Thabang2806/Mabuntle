@@ -48,6 +48,18 @@ Swagger UI is available in Development:
 https://localhost:<port>/swagger
 ```
 
+Auth foundation endpoints:
+
+```text
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/refresh
+POST /api/auth/logout
+GET  /api/auth/me
+```
+
+Public registration is limited to `Buyer` and `Seller`. Admin roles are seeded as roles only and are not self-assignable.
+
 ## Frontend
 
 ```powershell
@@ -89,3 +101,19 @@ dotnet test backend\tests\Swyftly.IntegrationTests\Swyftly.IntegrationTests.cspr
 ## Configuration
 
 Use `.env.example` as the reference for local variables. Do not commit `.env` files or real secrets.
+
+JWT configuration keys:
+
+```text
+Jwt__Issuer
+Jwt__Audience
+Jwt__SigningKey
+Jwt__AccessTokenMinutes
+Jwt__RefreshTokenDays
+```
+
+Use user-secrets or environment variables for real signing keys and database passwords. The committed appsettings values are development placeholders only.
+
+## CI
+
+GitHub Actions runs backend restore/build/tests, PostgreSQL integration tests, and frontend install/build/tests on pull requests and pushes to `main`.

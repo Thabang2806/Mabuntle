@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: swyftly_integration_tests
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d swyftly_integration_tests"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore .NET tools
+        run: dotnet tool restore
+
+      - name: Restore backend
+        run: dotnet restore backend/Swyftly.sln
+
+      - name: Build backend
+        run: dotnet build backend/Swyftly.sln --no-restore --configuration Release
+
+      - name: Test backend
+        run: dotnet test backend/Swyftly.sln --no-build --configuration Release
+
+      - name: Test PostgreSQL integration
+        env:
+          SWYFTLY_RUN_POSTGRES_TESTS: "true"
+          SWYFTLY_TEST_POSTGRES_CONNECTION: Host=localhost;Port=5432;Database=swyftly_integration_tests;Username=postgres;Password=postgres
+        run: dotnet test backend/tests/Swyftly.IntegrationTests/Swyftly.IntegrationTests.csproj --no-build --configuration Release --filter PostgreSql
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend/swyftly-web
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/swyftly-web/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Test frontend
+        run: npm run test:ci

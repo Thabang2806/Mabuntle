@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Pgvector.EntityFrameworkCore;
 using Swyftly.Infrastructure.Persistence;
 
 namespace Swyftly.IntegrationTests;
@@ -56,7 +57,7 @@ public class PostgreSqlIntegrationTests
     private static SwyftlyDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<SwyftlyDbContext>()
-            .UseNpgsql(ConnectionString)
+            .UseNpgsql(ConnectionString, npgsqlOptions => npgsqlOptions.UseVector())
             .Options;
 
         return new SwyftlyDbContext(options);

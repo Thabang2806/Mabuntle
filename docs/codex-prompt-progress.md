@@ -2,7 +2,7 @@
 
 Source prompt pack: `Documentation/swyftly_codex_development_prompts.md`
 
-Last updated: 2026-05-18
+Last updated: 2026-05-19
 
 ## How To Use This Tracker
 
@@ -15,10 +15,10 @@ Last updated: 2026-05-18
 
 ## Current Snapshot
 
-- Done: 7
+- Done: 66
 - Partial: 0
-- Not started: 62
-- Current recommended next step: start Prompt 8, common backend building blocks.
+- Not started: 3
+- Current recommended next step: fix the blocking payment/ledger and high security findings before adding production payment/provider integrations.
 
 ## Prompt Checklist
 
@@ -31,68 +31,68 @@ Last updated: 2026-05-18
 | 5 | Write feature roadmap documentation | Done | `docs/feature-roadmap.md` added. |
 | 6 | Write coding standards documentation | Done | `docs/coding-standards.md` added. |
 | 7 | Configure PostgreSQL and EF Core | Done | EF tooling, design-time factory, initial schema migration, `/health/ready`, and opt-in PostgreSQL tests exist. Migration applied to local PostgreSQL and DB readiness/tests passed. |
-| 8 | Add common backend building blocks | Not started | Add reusable result/error, domain events, current user abstraction, audit placeholder, and tests. |
-| 9 | Add CI pipeline | Not started | Add build/test pipeline for backend and frontend. |
-| 10 | Implement identity and roles | Not started | Implement buyer, seller, admin identity and authorization foundation. |
-| 11 | Implement Angular auth screens and guards | Not started | Add frontend auth routes, forms, guards, and API integration. |
-| 12 | Implement seller profile and verification domain | Not started | Add seller profile aggregate and verification statuses. |
-| 13 | Seller onboarding API | Not started | Add seller onboarding commands, endpoints, validation, and tests. |
-| 14 | Angular seller onboarding wizard | Not started | Add seller onboarding UI flow. |
-| 15 | Admin seller approval | Not started | Add admin review and approval workflow. |
-| 16 | Implement categories and category attributes | Not started | Add category model and attribute definitions. |
-| 17 | Implement product aggregate and statuses | Not started | Add product aggregate and state transitions. |
-| 18 | Implement product variants | Not started | Add variant model for size, colour, SKU, price, and inventory ties. |
-| 19 | Implement product images | Not started | Add product image model and storage abstraction. |
-| 20 | Seller product draft API | Not started | Add draft product endpoints and application slices. |
-| 21 | Angular seller product form | Not started | Add product draft UI. |
-| 22 | Define AI product suggestion schema and database tables | Not started | Add AI suggestion schema, persistence, and validation boundaries. |
-| 23 | Implement AI Listing Assistant service abstraction | Not started | Add backend AI provider interface and placeholder adapter. |
-| 24 | Implement AI product suggestion endpoint | Not started | Add endpoint and application command. |
-| 25 | Apply AI suggestions to product draft | Not started | Add seller-reviewed suggestion application flow. |
-| 26 | Angular AI Product Listing Assistant panel | Not started | Add seller UI panel for listing suggestions. |
-| 27 | AI moderation rules for product listings | Not started | Add moderation policies and review flags. |
-| 28 | Admin product review workflow | Not started | Add admin product approval workflow. |
-| 29 | Admin audit logs | Not started | Add audit log model and recording for sensitive actions. |
-| 30 | Implement basic product search API | Not started | Add search query endpoint and filters. |
-| 31 | Angular shop and category pages | Not started | Build public browsing pages beyond current placeholders. |
-| 32 | Add Typesense or Meilisearch integration placeholder | Not started | Add search provider abstraction and placeholder implementation. |
-| 33 | Add product embeddings and pgvector foundation | Not started | Add embedding storage foundation and pgvector migration. |
-| 34 | Implement single-seller cart | Not started | Add cart domain/application/API flow. |
-| 35 | Implement inventory reservations | Not started | Add reservation rules and expiry path. |
-| 36 | Create order aggregate from cart | Not started | Add order creation workflow. |
-| 37 | Angular cart and checkout UI | Not started | Add buyer cart and checkout screens. |
-| 38 | Payment provider abstraction | Not started | Add payment strategy interfaces and provider placeholders. |
-| 39 | Implement payments and payment events | Not started | Add payment entities and event handling. |
-| 40 | Payment webhook idempotency | Not started | Add idempotent webhook processing and signature validation. |
-| 41 | Internal marketplace ledger | Not started | Add ledger model and transaction entries. |
-| 42 | Seller balances and payout workflow | Not started | Add balance calculation and payout states. |
-| 43 | Manual shipping and fulfilment | Not started | Add manual tracking and fulfilment statuses. |
-| 44 | Return request workflow | Not started | Add return requests and statuses. |
-| 45 | Refund workflow and ledger reversals | Not started | Add refund flow and ledger reversal entries. |
-| 46 | Dispute workflow | Not started | Add dispute model and admin/support handling. |
-| 47 | Admin dashboard foundation | Not started | Add admin shell and summary endpoints. |
-| 48 | Support ticket system | Not started | Add support tickets and agent workflow. |
-| 49 | Ad campaign domain model | Not started | Add campaign model and statuses. |
-| 50 | Seller ad campaign API | Not started | Add seller campaign endpoints. |
-| 51 | Admin ad campaign review | Not started | Add admin review for campaigns. |
-| 52 | Track ad impressions, clicks, and conversions | Not started | Add tracking endpoints/events. |
-| 53 | Seller ad campaign dashboard UI | Not started | Add seller advertising dashboard. |
-| 54 | Seller analytics dashboard | Not started | Add seller metrics and UI. |
-| 55 | Admin finance and marketplace reports | Not started | Add admin reporting endpoints/UI. |
-| 56 | AI usage analytics | Not started | Add AI usage and cost reporting. |
-| 57 | Add API authorization audit | Not started | Review and test authorization coverage. |
-| 58 | Add rate limiting and abuse protection placeholders | Not started | Add rate-limit policies and abuse hooks. |
-| 59 | Add webhook security and idempotency review | Not started | Review webhook security once webhooks exist. |
-| 60 | Add observability foundation | Not started | Add tracing, correlation IDs, and structured observability. |
-| 61 | Buyer AI shopping assistant intent extraction | Not started | Add buyer AI intent extraction. |
-| 62 | Buyer AI shopping assistant product recommendations | Not started | Add recommendation flow using catalog data. |
-| 63 | Visual search MVP | Not started | Add image-based search foundation. |
+| 8 | Add common backend building blocks | Done | Added entity/domain-event primitives, result/error and validation types, current-user abstraction, auditable timestamp interceptor, result-to-ProblemDetails mapping, audit placeholder, and tests. No new migration. |
+| 9 | Add CI pipeline | Done | Added GitHub Actions CI with backend restore/build/test, PostgreSQL integration tests, frontend npm ci/build/test, and README mention. |
+| 10 | Implement identity and roles | Done | Added ASP.NET Core Identity, JWT access tokens, hashed refresh tokens, buyer/seller profiles, role policies, auth endpoints, Identity migrations, docs, and auth integration tests. Build/tests passed; migrations applied to local PostgreSQL and opt-in PostgreSQL tests passed with local connection. |
+| 11 | Implement Angular auth screens and guards | Done | Added Angular login, buyer/seller registration, session-scoped auth service, JWT interceptor, current-user loading, logout, role guards, navigation updates, and tests. `cmd /c npm run build` and `cmd /c npm run test:ci` passed. |
+| 12 | Implement seller profile and verification domain | Done | Added seller profile fields, UnderReview status, storefront/address/verification/payout placeholder entities, EF configurations, migration, and status-rule unit tests. Build/tests passed; migration applied to local PostgreSQL and opt-in PostgreSQL tests passed. |
+| 13 | Seller onboarding API | Done | Added seller-only onboarding endpoints, current-user ownership, profile/storefront/address/payout placeholder updates, verification submission to UnderReview, validation, slug conflict handling, API docs, and integration tests. Build/test passed. |
+| 14 | Angular seller onboarding wizard | Done | Added seller onboarding wizard on `/seller`, API client, profile/storefront/address/payout/review steps, verification status display, validation, submit flow, lazy route loading, and Angular tests. `cmd /c npm run build` and `cmd /c npm run test:ci` passed. |
+| 15 | Admin seller approval | Done | Added admin seller review endpoints, approval/rejection/suspension transitions, persisted seller audit logs, Angular admin review pages, migration, and tests. Build/test passed; migration applied to local PostgreSQL and opt-in PostgreSQL tests passed. |
+| 16 | Implement categories and category attributes | Done | Added category hierarchy and category-attribute domain models, seeded initial fashion/beauty/accessory taxonomy, admin category listing API, EF migration, validation rules for required/allowed attributes, and tests. Build/test passed; migration applied to local PostgreSQL and opt-in PostgreSQL tests passed. |
+| 17 | Implement product aggregate and statuses | Done | Added product aggregate, Draft/PendingReview/Published/Rejected/Archived/OutOfStock statuses, seller edit rules, admin-only publishing transition, seller-scoped slug uniqueness, EF migration, and unit tests. Build/test passed; migration applied to local PostgreSQL and opt-in PostgreSQL tests passed. |
+| 18 | Implement product variants | Done | Added product variant model/statuses, price/stock/reservation rules, seller draft variant commands, EF mapping, migration, and tests. |
+| 19 | Implement product images | Done | Added product image records, primary-image rule, storage provider abstraction with development placeholder, seller image attach endpoint, EF mapping, migration, and tests. |
+| 20 | Seller product draft API | Done | Added seller product draft endpoints, ownership checks, verified-seller submit rule, category attribute validation, variant/image submission validation, and integration tests. Build/test passed; migration applied to local PostgreSQL and opt-in PostgreSQL tests passed. |
+| 21 | Angular seller product form | Done | Added seller product list, create/edit form, dynamic category attributes, variant/image add/remove flows, review submit state, route wiring, seller catalog category endpoint support, and Angular tests. `cmd /c npm run build` and `cmd /c npm run test:ci` passed. |
+| 22 | Define AI product suggestion schema and database tables | Done | Added AI suggestion, field audit, usage log, prompt version entities/DTOs, EF mappings, JSONB tables, migration, and tests. Build/test passed; migration applied to local PostgreSQL and opt-in PostgreSQL tests passed. |
+| 23 | Implement AI Listing Assistant service abstraction | Done | Added AI listing assistant service contract/implementation, provider abstraction, prompt builder, validator, usage logger, local fake provider, DI registration, and unit tests. Build/test passed. |
+| 24 | Implement AI product suggestion endpoint | Done | Added `POST /api/seller/products/{productId}/ai-suggestions`, seller ownership/editability checks, image/category validation, fake-provider generation, persistence, usage logging, API docs, and integration tests. Build/test passed. |
+| 25 | Apply AI suggestions to product draft | Done | Added `POST /api/seller/products/{productId}/ai-suggestions/{suggestionId}/apply`, selected-field application, seller edits, risk confirmation guard, attribute/image ownership validation, product tags JSONB migration, field audits, docs, and integration tests. Build/test passed; migration applied locally and opt-in PostgreSQL tests passed with explicit local connection. |
+| 26 | Angular AI Product Listing Assistant panel | Done | Added AI Product Assistant panel to seller product editor, generate/apply service calls, reactive review/edit forms, field-by-field apply controls, risk/missing-field display, AI styling, and Angular tests. `cmd /c npm run build` and `cmd /c npm run test:ci` passed. |
+| 27 | AI moderation rules for product listings | Done | Added product moderation service, counterfeit/beauty/missing-field business rules, `AiModerationResult` table, `NeedsAdminReview` product status, submit-review moderation hook, migration, docs, and unit/integration tests. Build/test passed; migration applied locally and opt-in PostgreSQL tests passed with explicit local connection. |
+| 28 | Admin product review workflow | Done | Added admin product review endpoints, product approval/rejection/change-request transitions, high-risk override rule, product audit logs, Angular admin product queue/detail pages, and tests. Backend build/test and Angular build/test passed. |
+| 29 | Admin audit logs | Done | Added shared audit logging service, refactored seller/product admin workflows to use it, added filtered `GET /api/admin/audit-logs`, Angular audit-log page, docs, and tests. Backend build/test and Angular build/test passed. |
+| 30 | Implement basic product search API | Done | Added PostgreSQL-backed `GET /api/products/search`, public product/category/seller detail endpoints, published-only visibility, variant/attribute filters, sorting, pagination, docs, and integration tests. Backend build/test passed. |
+| 31 | Angular shop and category pages | Done | Added `/shop`, `/category/:slug`, `/product/:slug`, `/seller/:storeSlug`, public catalog service, product cards, filters, sort, empty/loading states, docs, and Angular tests. Frontend build/test passed. |
+| 32 | Add Typesense or Meilisearch integration placeholder | Done | Added `ISearchIndexService`, `IProductSearchIndexer`, `ProductSearchDocument`, local in-memory placeholder indexing, publish-time product indexing, PostgreSQL search fallback, docs, and tests. Backend build/test passed. |
+| 33 | Add product embeddings and pgvector foundation | Done | Added `ProductEmbedding`, pgvector EF mapping, `ProductEmbeddingsPgvector` migration, embedding contracts, fake provider, publish-time generator, docs, and tests. `dotnet build backend\Swyftly.sln --no-restore`, `dotnet test backend\Swyftly.sln --no-build`, local `dotnet dotnet-ef database update`, and opt-in PostgreSQL tests passed after pgvector was installed on PostgreSQL. |
+| 34 | Implement single-seller cart | Done | Added `Cart` and `CartItem`, buyer-only `/api/cart` endpoints, one-active-cart and single-seller rules, stock validation against variant available quantity, captured display pricing, EF migration, docs, and tests. Build/test passed; migration applied locally and opt-in PostgreSQL tests passed. |
+| 35 | Implement inventory reservations | Done | Added `InventoryReservation`, reservation statuses, `IInventoryReservationService`, EF reservation service with transactional cart reservation and expiry release, worker expiry placeholder, migration, docs, and tests. Build/test passed; migration applied locally and opt-in PostgreSQL tests passed. |
+| 36 | Create order aggregate from cart | Done | Added order aggregate/statuses/status history, order creation service from active cart, inventory reservation hook, idempotent pending-payment order creation, buyer/seller order endpoints, EF migration, docs, and tests. Build/test passed; migration applied locally and opt-in PostgreSQL tests passed with the local API connection string. |
+| 37 | Angular cart and checkout UI | Done | Added Angular cart service/models, `/cart`, `/checkout`, `/checkout/success`, `/checkout/failed`, buyer cart nav, product-detail add-to-cart, quantity update/remove flows, checkout shipping placeholder, backend order creation call, docs, and tests. `cmd /c npm run build` and `cmd /c npm run test:ci` passed. |
+| 38 | Payment provider abstraction | Done | Added `IPaymentProvider`, payment initiation/verification/webhook DTOs, `PaymentProviderOptions`, `IPaymentInitiationService`, fake Infrastructure provider with success/failure simulation and optional webhook signature verification, non-secret config defaults, docs, and tests. Build/test passed; EF model drift check showed no migration needed. |
+| 39 | Implement payments and payment events | Done | Added `Payment` and `PaymentEvent` entities/statuses, local payment initiation flow, buyer-only `POST /api/payments/initiate`, provider reference storage, migration, docs, and tests. Fake provider success/failure paths covered. |
+| 40 | Payment webhook idempotency | Done | Added anonymous `POST /api/payments/webhook/{provider}`, provider signature verification hook, raw event storage, `(Provider, ProviderEventId)` idempotency, paid/failed webhook processing, order/payment/reservation updates, duplicate-event test coverage, and docs. |
+| 41 | Internal marketplace ledger | Done | Added `LedgerEntry`, `SellerBalance`, `CommissionRule`, fee configuration, successful-payment ledger service, seller pending balance crediting, migration, docs, and tests for commission calculation and ledger idempotency. |
+| 42 | Seller balances and payout workflow | Done | Added seller payout records/items, seller balance and payout read APIs, admin pending/hold/release payout endpoints, pending-to-held balance transitions, payout audit logs, migration, docs, and tests. Build/test, EF drift check, local migration update, and opt-in PostgreSQL tests passed. |
+| 43 | Manual shipping and fulfilment | Done | Added Shipment/ShipmentEvent entities, seller mark-processing/tracking/mark-shipped endpoints, buyer `/api/buyer/orders` aliases, order responses with shipment tracking, EF migration, docs, authorization/status-transition tests, local migration update, EF drift check, and opt-in PostgreSQL tests. Delivered status is modeled, but delivery confirmation endpoint remains future work. |
+| 44 | Return request workflow | Done | Added ReturnRequest/ReturnItem/ReturnMessage entities and statuses/reasons, buyer return/dispute endpoints, seller return approve/reject endpoints, admin disputed-return listing, return-triggered payout holds, EF migration, docs, unit/integration tests, local migration update, EF drift check, and opt-in PostgreSQL tests. Refunds and final dispute resolution remain future prompts. |
+| 45 | Refund workflow and ledger reversals | Done | Added Refund/RefundEvent entities and statuses, payment-provider refund contract/fake provider support, admin refund create/approve endpoints, proportional ledger reversal entries, seller balance refund debit including negative-balance recovery signal, payment/order refund status updates, audit logs, EF migration, docs, full/partial refund tests, local migration update, EF drift check, and opt-in PostgreSQL tests. |
+| 46 | Dispute workflow | Done | Added Dispute/DisputeMessage/DisputeEvidence entities and statuses, buyer order/return dispute endpoints, buyer/seller messages and evidence, admin dispute listing/resolution, dispute-triggered payout holds, seller-favoured payout release, buyer-favoured hold retention for refund/recovery, audit logs, EF migration, docs, unit/integration tests, local migration update, EF drift check, and opt-in PostgreSQL tests. |
+| 47 | Admin dashboard foundation | Done | Added admin-only `GET /api/admin/dashboard/summary`, aggregate operational metrics, Angular `/admin` dashboard, `/admin/sellers` queue route, protected admin section placeholders, docs, and tests. Backend build/test and Angular build/test passed. |
+| 48 | Support ticket system | Done | Added SupportTicket/SupportMessage entities, categories/statuses, buyer/seller create/read/message endpoints, support/admin read/respond/internal-note/resolve/close endpoints, private internal-note filtering, EF migration, docs, unit/integration tests, local migration update, EF drift check, and opt-in PostgreSQL tests. |
+| 49 | Ad campaign domain model | Done | Added ad campaign, campaign product, budget, impression, click, conversion, charge, and seller ad credit models; EF mappings; eligibility service with verified-seller, published/in-stock product, moderation, quality-score, suspension, and serious-dispute rules; migration; docs; and tests. |
+| 50 | Seller ad campaign API | Done | Added seller-owned ad campaign create/list/detail/update/submit-review/pause/resume/cancel endpoints, budget handling, eligibility validation, ownership checks, docs, integration tests, local migration update, EF drift check, and opt-in PostgreSQL tests. |
+| 51 | Admin ad campaign review | Done | Added admin campaign pending/detail/approve/reject API, approval eligibility recheck, campaign audit logs, Angular admin ad queue/detail pages, docs, and tests. Backend build/test, EF drift check, Angular build/test passed. |
+| 52 | Track ad impressions, clicks, and conversions | Done | Added anonymous impression/click capture, active/in-flight/published/in-stock tracking rules, click spend charges with budget limits, seller campaign metrics query, paid-order conversion attribution hook, docs, tests, backend build/test, and EF drift check. |
+| 53 | Seller ad campaign dashboard UI | Done | Added Angular seller ad campaign service/models, `/seller/ads`, `/seller/ads/new`, `/seller/ads/:id`, campaign list/create/detail flows, product selection, eligibility warnings, metrics cards, pause/resume/cancel/submit actions, docs, and tests. `cmd /c npm run build` and `cmd /c npm run test:ci` passed. |
+| 54 | Seller analytics dashboard | Done | Added seller-only analytics summary endpoint, aggregate sales/order/AOV/product/refund/return/ad/AI metrics, low-stock and top-product tables, Angular `/seller/analytics` dashboard, seller workspace link, docs, seller-isolation integration tests, Angular tests, backend/frontend build/test, and EF drift check. |
+| 55 | Admin finance and marketplace reports | Done | Added admin-only marketplace report API, aggregate CSV export, Angular `/admin/reports` page, docs, admin access tests, backend/frontend build/test, and EF drift check. |
+| 56 | AI usage analytics | Done | Added admin-only AI usage analytics API, Angular `/admin/ai-usage` dashboard, seller AI benefit metrics, docs, and tests. Quality score improvement is nullable because pre-AI baseline scores are not captured yet. |
+| 57 | Add API authorization audit | Done | Added `docs/authorization-audit.md` and integration tests covering anonymous/seller/buyer/admin role boundaries plus buyer/seller ownership isolation. |
+| 58 | Add rate limiting and abuse protection placeholders | Done | Added ASP.NET Core fixed-window rate-limit policies for auth, AI, product writes, payment initiation, ad clicks, and search; configurable defaults; 429 JSON response; docs; and a search policy integration test. |
+| 59 | Add webhook security and idempotency review | Done | Required fake-provider webhook signing secret, rejected invalid/misconfigured signatures before event persistence, kept duplicate webhook idempotency tests, added invalid-signature payment-service test, and documented webhook signature/idempotency behavior. |
+| 60 | Add observability foundation | Done | Added correlation ID middleware, request/error logging middleware, provider placeholder readiness checks, `Swyftly.Api` meter counters, docs, and correlation ID integration test. |
+| 61 | Buyer AI shopping assistant intent extraction | Done | Added `IAiShoppingIntentService`, intent DTOs, fake intent provider, DI registration, docs, and unit tests for fashion, jewellery, beauty, blank, and vague buyer prompts. No product recommendation endpoint yet. |
+| 62 | Buyer AI shopping assistant product recommendations | Done | Added buyer-only shopping assistant endpoint, backend product search over published in-stock products, deterministic match reasons, Angular `/assistant` page with product cards, docs, and tests verifying only real product IDs are returned. |
+| 63 | Visual search MVP | Done | Added buyer-only visual search endpoint, Application vision contracts, fake vision provider, transient image validation, Angular `/visual-search` page with upload/reference flow, docs, and tests verifying only real published in-stock product ids are returned. |
 | 64 | Codex PR review prompt | Not started | Use when reviewing a PR. |
-| 65 | Security review prompt | Not started | Use for focused security review. |
-| 66 | Payment and ledger review prompt | Not started | Use after payment and ledger work exists. |
+| 65 | Security review prompt | Done | Added `docs/security-review.md` with prioritized findings. High issues include production default secrets, missing login lockout, unthrottled ad impressions, and webhook DoS surface. |
+| 66 | Payment and ledger review prompt | Done | Added `docs/payment-ledger-review.md` with blocking finance findings, including duplicate payment initiation and non-idempotent refund approval. |
 | 67 | Refactor prompt template | Not started | Use for scoped refactoring tasks. |
 | 68 | Bug fix prompt template | Not started | Use for defects. |
-| 69 | Documentation update prompt | Not started | Use whenever behavior or architecture changes need docs updates. |
+| 69 | Documentation update prompt | Done | Reviewed and updated `docs/architecture.md`, `docs/database-schema.md`, `docs/api-contracts.md`, `docs/feature-roadmap.md`, and `docs/coding-standards.md` after the latest visual-search and review work. |
 
 ## Ad Hoc Work Completed
 

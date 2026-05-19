@@ -20,11 +20,13 @@
 8. Orders, manual shipping, returns, refunds, and disputes.
 9. Admin approval, moderation, support, and reports.
 10. AI listing assistant and basic AI moderation.
-11. Search, filters, analytics, and seller dashboards.
+11. Search, filters, analytics, seller dashboards, buyer AI assistant, and visual search.
 
 ## Deferred
 
 - Multi-seller checkout.
+- Payment reconciliation hardening before real provider launch.
+- External payout processing.
 - Native mobile app.
 - Virtual try-on.
 - Advanced personalization.

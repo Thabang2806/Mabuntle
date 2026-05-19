@@ -1,6 +1,32 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
+using Swyftly.Api.Advertising;
+using Swyftly.Api.Admin;
+using Swyftly.Api.Ai;
+using Swyftly.Api.Analytics;
+using Swyftly.Api.Authentication;
+using Swyftly.Api.Carts;
+using Swyftly.Api.Catalog;
+using Swyftly.Api.Disputes;
+using Swyftly.Api.Observability;
+using Swyftly.Api.Orders;
+using Swyftly.Api.Payments;
+using Swyftly.Api.Payouts;
+using Swyftly.Api.Refunds;
+using Swyftly.Api.Returns;
+using Swyftly.Api.Sellers;
+using Swyftly.Api.Security;
+using Swyftly.Api.Support;
+using Swyftly.Application.Abstractions;
+using Swyftly.Application.Identity;
 using Swyftly.Infrastructure;
+using Swyftly.Infrastructure.Identity;
 using Swyftly.Infrastructure.Persistence;
+using System.Threading.RateLimiting;
 
 const int ReadinessTimeoutSeconds = 5;
 
@@ -19,19 +45,96 @@ builder.Services.AddCors(options =>
     options.AddPolicy("LocalFrontend", policy =>
     {
         policy
-            .WithOrigins("http://localhost:4200", "https://localhost:4200")
+            .WithOrigins(
+                "http://localhost:4200",
+                "https://localhost:4200",
+                "http://localhost:4201",
+                "https://localhost:4201")
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
 });
 
+builder.Services.AddProblemDetails();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<SwyftlyMetrics>();
+builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+var rateLimitOptions = builder.Configuration
+    .GetSection(SwyftlyRateLimitOptions.SectionName)
+    .Get<SwyftlyRateLimitOptions>() ?? new SwyftlyRateLimitOptions();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            title = "RateLimit.Exceeded",
+            status = StatusCodes.Status429TooManyRequests,
+            detail = "Too many requests. Please wait before trying again."
+        }, cancellationToken);
+    };
+
+    options.AddPolicy(SwyftlyRateLimitPolicies.Auth, httpContext => CreateFixedWindowLimiter(httpContext, rateLimitOptions.Auth));
+    options.AddPolicy(SwyftlyRateLimitPolicies.Ai, httpContext => CreateFixedWindowLimiter(httpContext, rateLimitOptions.Ai));
+    options.AddPolicy(SwyftlyRateLimitPolicies.ProductWrite, httpContext => CreateFixedWindowLimiter(httpContext, rateLimitOptions.ProductWrite));
+    options.AddPolicy(SwyftlyRateLimitPolicies.Payment, httpContext => CreateFixedWindowLimiter(httpContext, rateLimitOptions.Payment));
+    options.AddPolicy(SwyftlyRateLimitPolicies.AdClick, httpContext => CreateFixedWindowLimiter(httpContext, rateLimitOptions.AdClick));
+    options.AddPolicy(SwyftlyRateLimitPolicies.Search, httpContext => CreateFixedWindowLimiter(httpContext, rateLimitOptions.Search));
+});
+
+var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtOptions.Issuer,
+            ValidAudience = jwtOptions.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
+            ClockSkew = TimeSpan.FromMinutes(1)
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(SwyftlyPolicies.BuyerOnly, policy => policy.RequireRole(SwyftlyRoles.Buyer));
+    options.AddPolicy(SwyftlyPolicies.SellerOnly, policy => policy.RequireRole(SwyftlyRoles.Seller));
+    options.AddPolicy(SwyftlyPolicies.AdminOnly, policy => policy.RequireRole(SwyftlyRoles.Admin, SwyftlyRoles.SuperAdmin));
+    options.AddPolicy(SwyftlyPolicies.SuperAdminOnly, policy => policy.RequireRole(SwyftlyRoles.SuperAdmin));
+    options.AddPolicy(SwyftlyPolicies.SupportAgentOnly, policy => policy.RequireRole(
+        SwyftlyRoles.SupportAgent,
+        SwyftlyRoles.Admin,
+        SwyftlyRoles.SuperAdmin));
+});
+
 builder.Services
     .AddHealthChecks()
     .AddDbContextCheck<SwyftlyDbContext>(
         name: "postgresql",
         failureStatus: HealthStatus.Unhealthy,
-        tags: new[] { "ready", "database" });
+        tags: new[] { "ready", "database" })
+    .AddCheck(
+        "search-placeholder",
+        () => HealthCheckResult.Healthy("Search provider placeholder is available."),
+        tags: new[] { "ready", "search" })
+    .AddCheck(
+        "storage-placeholder",
+        () => HealthCheckResult.Healthy("Storage provider placeholder is available."),
+        tags: new[] { "ready", "storage" })
+    .AddCheck(
+        "payment-provider-placeholder",
+        () => HealthCheckResult.Healthy("Payment provider placeholder is available."),
+        tags: new[] { "ready", "payments" });
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -41,6 +144,16 @@ builder.Services.AddSwaggerGen(options =>
         Title = "Swyftly API",
         Version = "v1",
         Description = "Foundation API for the Swyftly marketplace."
+    });
+
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter a JWT access token."
     });
 });
 
@@ -56,7 +169,16 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+app.UseRouting();
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseCors("LocalFrontend");
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
+
+await IdentitySeeder.TrySeedIdentityRolesAsync(app.Services, app.Logger);
+await CatalogSeeder.TrySeedCatalogAsync(app.Services, app.Logger);
 
 app.MapGet("/health", () => new HealthResponse(
     "Healthy",
@@ -122,7 +244,53 @@ app.MapGet("/health/ready", async (HealthCheckService healthCheckService) =>
     .Produces<ReadinessHealthResponse>(StatusCodes.Status200OK)
     .Produces<ReadinessHealthResponse>(StatusCodes.Status503ServiceUnavailable);
 
+app.MapAuthEndpoints();
+app.MapSellerOnboardingEndpoints();
+app.MapAdminSellerEndpoints();
+app.MapAdminProductEndpoints();
+app.MapAdminAuditLogEndpoints();
+app.MapAdminDashboardEndpoints();
+app.MapAdminMarketplaceReportEndpoints();
+app.MapAdminAiUsageAnalyticsEndpoints();
+app.MapAdminCategoryEndpoints();
+app.MapSellerCatalogEndpoints();
+app.MapSellerProductEndpoints();
+app.MapPublicProductEndpoints();
+app.MapCartEndpoints();
+app.MapOrderEndpoints();
+app.MapPaymentEndpoints();
+app.MapPayoutEndpoints();
+app.MapReturnEndpoints();
+app.MapRefundEndpoints();
+app.MapDisputeEndpoints();
+app.MapSupportTicketEndpoints();
+app.MapSellerAdCampaignEndpoints();
+app.MapAdminAdCampaignEndpoints();
+app.MapAdTrackingEndpoints();
+app.MapSellerAnalyticsEndpoints();
+app.MapBuyerAiShoppingAssistantEndpoints();
+app.MapBuyerVisualSearchEndpoints();
+
 app.Run();
+
+static RateLimitPartition<string> CreateFixedWindowLimiter(
+    HttpContext httpContext,
+    RateLimitPolicyOptions options)
+{
+    var partitionKey = httpContext.User.Identity?.IsAuthenticated == true
+        ? $"user:{httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "unknown"}"
+        : $"ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+
+    return RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey,
+        _ => new FixedWindowRateLimiterOptions
+        {
+            AutoReplenishment = true,
+            PermitLimit = options.PermitLimit,
+            QueueLimit = 0,
+            Window = TimeSpan.FromSeconds(options.WindowSeconds)
+        });
+}
 
 public partial class Program;
 
