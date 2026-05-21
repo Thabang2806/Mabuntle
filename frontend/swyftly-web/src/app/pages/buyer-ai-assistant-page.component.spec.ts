@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { HttpErrorResponse } from '@angular/common/http';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { BuyerAiAssistantService } from '../buyer/buyer-ai-assistant.service';
@@ -68,6 +69,82 @@ describe('BuyerAiAssistantPageComponent', () => {
 
     expect(assistantService.search).toHaveBeenCalledWith({ message: 'black dress' });
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Black Wedding Dress');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Dresses');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Up to R1,500');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Available in Black.');
+  });
+
+  it('populates the form from an example prompt without submitting', () => {
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const exampleButton = Array.from(compiled.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Minimal gold earrings')) as HTMLButtonElement;
+
+    exampleButton.click();
+    fixture.detectChanges();
+
+    const input = compiled.querySelector('textarea') as HTMLTextAreaElement;
+    expect(input.value).toBe('Minimal gold earrings for everyday wear');
+    expect(assistantService.search).not.toHaveBeenCalled();
+  });
+
+  it('renders an empty state when the backend returns no products', async () => {
+    assistantService.search.and.resolveTo({
+      intent: {
+        category: null,
+        subcategory: null,
+        budgetMax: null,
+        budgetMin: null,
+        size: null,
+        colour: null,
+        occasion: null,
+        style: null,
+        material: null,
+        brand: null,
+        beautySkinType: null,
+        beautyConcern: null,
+        searchText: 'specific request',
+        isVague: true,
+        clarificationPrompt: 'Can you add a category or budget?'
+      },
+      products: [],
+      summary: 'No published products matched this request.',
+      safetyNote: 'Beauty results are product discovery only.'
+    });
+
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const input = compiled.querySelector('textarea') as HTMLTextAreaElement;
+    input.value = 'specific request';
+    input.dispatchEvent(new Event('input'));
+
+    const form = compiled.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(compiled.textContent).toContain('Needs more detail');
+    expect(compiled.textContent).toContain('Can you add a category or budget?');
+    expect(compiled.textContent).toContain('No product cards to show');
+  });
+
+  it('renders backend errors', async () => {
+    assistantService.search.and.rejectWith(new HttpErrorResponse({
+      status: 503,
+      error: { title: 'Assistant unavailable' }
+    }));
+
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const input = compiled.querySelector('textarea') as HTMLTextAreaElement;
+    input.value = 'black dress';
+    input.dispatchEvent(new Event('input'));
+
+    const form = compiled.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(compiled.textContent).toContain('Assistant unavailable');
   });
 });

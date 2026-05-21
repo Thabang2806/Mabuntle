@@ -14,6 +14,8 @@ using Swyftly.Application.Disputes;
 using Swyftly.Application.Identity;
 using Swyftly.Domain.Ledger;
 using Swyftly.Domain.Orders;
+using Swyftly.Domain.Payments;
+using Swyftly.Domain.Refunds;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Identity;
 using Swyftly.Infrastructure.Persistence;
@@ -96,7 +98,7 @@ public sealed class DisputeTests
     }
 
     [Fact]
-    public async Task AdminCanResolveBuyerFavoured_AndPayoutRemainsHeldForRefund()
+    public async Task AdminCanResolveBuyerFavoured_CreatesRefundRequestAndKeepsPayoutHeld()
     {
         await using var factory = new DisputeTestFactory();
         using var buyerClient = factory.CreateClient();
@@ -126,8 +128,15 @@ public sealed class DisputeTests
         var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
         var payout = await dbContext.SellerPayouts.SingleAsync(payout => payout.SellerId == sellerId);
         var balance = await dbContext.SellerBalances.SingleAsync(balance => balance.SellerId == sellerId);
+        var refund = await dbContext.Refunds.SingleAsync(refund => refund.OrderId == orderId);
+        var order = await dbContext.Orders.SingleAsync(order => order.Id == orderId);
         Assert.Equal(SellerPayoutStatus.OnHold, payout.Status);
         Assert.Equal(875m, balance.HeldBalance);
+        Assert.Equal(RefundStatus.Requested, refund.Status);
+        Assert.Equal(1000m, refund.Amount);
+        Assert.Equal(order.BuyerId, refund.BuyerId);
+        Assert.Equal(order.SellerId, refund.SellerId);
+        Assert.Contains(opened.DisputeId.ToString(), refund.Reason, StringComparison.Ordinal);
     }
 
     private static async Task<AuthResponse> RegisterAndLoginAsync(HttpClient client, string email, string role)
@@ -181,6 +190,9 @@ public sealed class DisputeTests
         order.ChangeStatus(OrderStatus.Paid, now.AddMinutes(1), "TestPaid");
         order.ChangeStatus(OrderStatus.Shipped, now.AddMinutes(2), "TestShipped");
         order.ChangeStatus(OrderStatus.Delivered, now.AddMinutes(3), "TestDelivered");
+        var payment = new Payment(order.Id, buyerId, "Fake", 1000m, "ZAR", now);
+        payment.SetProviderReference($"fake_{order.Id:N}", now);
+        payment.MarkPaid(now.AddMinutes(1));
         var balance = new SellerBalance(sellerId, "ZAR");
         balance.CreditPending(payoutAmount);
         var ledgerEntry = new LedgerEntry(
@@ -188,7 +200,7 @@ public sealed class DisputeTests
             order.Items.Single().Id,
             sellerId,
             buyerId,
-            null,
+            payment.Id,
             LedgerEntryType.SellerPendingBalanceCredited,
             payoutAmount,
             "ZAR",
@@ -196,9 +208,10 @@ public sealed class DisputeTests
             "Seller pending balance credited.",
             now);
         var payout = new SellerPayout(sellerId, payoutAmount, "ZAR", now);
-        payout.AddItem(ledgerEntry.Id, order.Id, null, payoutAmount, now);
+        payout.AddItem(ledgerEntry.Id, order.Id, payment.Id, payoutAmount, now);
 
         dbContext.Orders.Add(order);
+        dbContext.Payments.Add(payment);
         dbContext.SellerBalances.Add(balance);
         dbContext.LedgerEntries.Add(ledgerEntry);
         dbContext.SellerPayouts.Add(payout);

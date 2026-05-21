@@ -8,49 +8,79 @@ import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
 import { CartResponse } from '../cart/cart.models';
 import { CartService } from '../cart/cart.service';
+import { EmptyStateComponent } from '../shared/ui/empty-state.component';
+import { PageHeaderComponent } from '../shared/ui/page-header.component';
+import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
+import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
 @Component({
   selector: 'app-cart-page',
-  imports: [CurrencyPipe, FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, RouterLink],
+  imports: [
+    CurrencyPipe,
+    EmptyStateComponent,
+    FormsModule,
+    MatButtonModule,
+    MatFormFieldModule,
+    MatInputModule,
+    PageHeaderComponent,
+    RouterLink,
+    StatusBadgeComponent,
+    UiAlertComponent
+  ],
   template: `
     <section class="page cart-page">
-      <div class="page-header cart-header">
-        <div>
-          <span class="eyebrow">Cart</span>
-          <h1>Cart</h1>
-          <p>Review quantities before checkout. This MVP cart supports products from one seller at a time.</p>
-        </div>
-        <a mat-stroked-button routerLink="/shop">Continue shopping</a>
-      </div>
+      <app-page-header
+        eyebrow="Cart"
+        heading="Cart"
+        description="Review product quantities, seller details, and subtotal before checkout."
+      >
+        <a pageHeaderActions mat-stroked-button routerLink="/shop">Continue shopping</a>
+      </app-page-header>
 
       @if (isLoading()) {
         <div class="route-card">Loading cart...</div>
       } @else {
         @if (errorMessage()) {
-          <p class="auth-alert error" role="alert">{{ errorMessage() }}</p>
+          <app-ui-alert tone="error">{{ errorMessage() }}</app-ui-alert>
         }
 
         @if (!cart()?.items?.length) {
-          <div class="route-card compact-card">
-            <span class="status-pill">Empty</span>
-            <h2>Your cart is empty</h2>
-            <p>Products you add from the shop will appear here.</p>
+          <app-empty-state
+            eyebrow="Empty"
+            heading="Your cart is empty"
+            message="Products you add from the shop will appear here."
+          >
             <a mat-flat-button routerLink="/shop">Shop products</a>
-          </div>
+          </app-empty-state>
         } @else {
+          <div class="cart-trust-strip" aria-label="Cart trust signals">
+            <div>
+              <app-status-badge label="Single-seller checkout" tone="accent" />
+              <strong>{{ cart()?.sellerStoreName ?? 'Seller' }}</strong>
+              <span>Items from one seller are checked out together so stock and fulfilment stay clear.</span>
+            </div>
+            <div>
+              <app-status-badge label="Stock checked at checkout" tone="success" />
+              <span>Inventory is reserved when checkout starts.</span>
+            </div>
+            <div>
+              <app-status-badge label="Support path visible" />
+              <span>Order support and returns are handled through the marketplace account area.</span>
+            </div>
+          </div>
+
           <div class="cart-layout">
             <div class="cart-items">
-              <div class="single-seller-notice">
-                <strong>{{ cart()?.sellerStoreName ?? 'Single seller checkout' }}</strong>
-                <span>Only items from this seller can be checked out together.</span>
-              </div>
-
               @for (item of cart()?.items; track item.cartItemId) {
                 <article class="cart-item">
-                  <div>
+                  <div class="cart-item-media" aria-hidden="true">
+                    {{ productInitial(item.productTitle) }}
+                  </div>
+
+                  <div class="cart-item-copy">
                     <strong>{{ item.productTitle ?? 'Product' }}</strong>
-                    <span>{{ item.size }} / {{ item.colour }} · {{ item.sku }}</span>
-                    <small>{{ item.unitPrice | currency:'ZAR':'symbol-narrow' }} each</small>
+                    <span>{{ item.size }} / {{ item.colour }}</span>
+                    <small>SKU {{ item.sku }} - {{ item.unitPrice | currency:'ZAR':'symbol-narrow' }} each</small>
                   </div>
 
                   <mat-form-field appearance="outline">
@@ -65,7 +95,10 @@ import { CartService } from '../cart/cart.service';
                     >
                   </mat-form-field>
 
-                  <strong>{{ item.lineTotal | currency:'ZAR':'symbol-narrow' }}</strong>
+                  <div class="cart-item-total">
+                    <span>Line total</span>
+                    <strong>{{ item.lineTotal | currency:'ZAR':'symbol-narrow' }}</strong>
+                  </div>
 
                   <div class="cart-item-actions">
                     <button
@@ -91,6 +124,7 @@ import { CartService } from '../cart/cart.service';
 
             <aside class="order-summary">
               <h2>Order summary</h2>
+              <span class="product-card-seller">{{ cart()?.sellerStoreName ?? 'Seller' }}</span>
               <div class="summary-row">
                 <span>Items</span>
                 <strong>{{ cart()?.totalQuantity }}</strong>
@@ -99,7 +133,19 @@ import { CartService } from '../cart/cart.service';
                 <span>Subtotal</span>
                 <strong>{{ cart()?.subtotal | currency:'ZAR':'symbol-narrow' }}</strong>
               </div>
-              <p>Shipping, discounts, fees, and payment confirmation are handled in later checkout prompts.</p>
+              <div class="summary-row">
+                <span>Delivery</span>
+                <strong>Confirmed next</strong>
+              </div>
+              <div class="summary-row">
+                <span>Payment</span>
+                <strong>After order creation</strong>
+              </div>
+              <div class="summary-row total">
+                <span>Estimated total</span>
+                <strong>{{ cart()?.subtotal | currency:'ZAR':'symbol-narrow' }}</strong>
+              </div>
+              <p>Delivery, discounts, fees, and payment confirmation are finalized during checkout.</p>
               <a mat-flat-button routerLink="/checkout" [class.disabled-link]="!cart()?.items?.length">Checkout</a>
             </aside>
           </div>
@@ -119,6 +165,10 @@ export class CartPageComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     await this.loadCart();
+  }
+
+  protected productInitial(title: string | null): string {
+    return title?.trim().charAt(0).toUpperCase() || 'S';
   }
 
   protected setLocalQuantity(cartItemId: string, rawValue: string | number): void {

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Swyftly.Api.Security;
 using Swyftly.Application.Search;
 using Swyftly.Domain.Catalog;
+using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Persistence;
 using HttpResults = Microsoft.AspNetCore.Http.Results;
 
@@ -171,8 +172,8 @@ public static class PublicProductEndpoints
         CancellationToken cancellationToken)
     {
         var normalizedSlug = slug.Trim().ToLowerInvariant();
-        var productId = await dbContext.Products
-            .Where(product => product.Status == ProductStatus.Published && product.Slug == normalizedSlug)
+        var productId = await BuildVisiblePublishedProductQuery(dbContext)
+            .Where(product => product.Slug == normalizedSlug)
             .OrderByDescending(product => product.PublishedAtUtc)
             .Select(product => (Guid?)product.Id)
             .FirstOrDefaultAsync(cancellationToken);
@@ -215,7 +216,14 @@ public static class PublicProductEndpoints
     {
         var normalizedSlug = storeSlug.Trim().ToLowerInvariant();
         var storefront = await dbContext.SellerStorefronts
-            .SingleOrDefaultAsync(store => store.Slug == normalizedSlug, cancellationToken);
+            .AsNoTracking()
+            .Where(store => store.Slug == normalizedSlug && store.IsPublished)
+            .Join(
+                dbContext.SellerProfiles.AsNoTracking().Where(seller => seller.VerificationStatus == SellerVerificationStatus.Verified),
+                store => store.SellerId,
+                seller => seller.Id,
+                (store, _) => store)
+            .SingleOrDefaultAsync(cancellationToken);
         if (storefront is null)
         {
             return HttpResults.Problem(
@@ -263,9 +271,7 @@ public static class PublicProductEndpoints
         string? material,
         bool? inStock)
     {
-        var products = dbContext.Products
-            .AsNoTracking()
-            .Where(product => product.Status == ProductStatus.Published);
+        var products = BuildVisiblePublishedProductQuery(dbContext);
 
         if (!string.IsNullOrWhiteSpace(query))
         {
@@ -375,7 +381,13 @@ public static class PublicProductEndpoints
         SwyftlyDbContext dbContext,
         CancellationToken cancellationToken)
     {
-        var product = await dbContext.Products.SingleAsync(product => product.Id == productId, cancellationToken);
+        var product = await BuildVisiblePublishedProductQuery(dbContext)
+            .SingleOrDefaultAsync(product => product.Id == productId, cancellationToken);
+        if (product is null)
+        {
+            return null;
+        }
+
         var storefront = await dbContext.SellerStorefronts.SingleOrDefaultAsync(
             storefront => storefront.SellerId == product.SellerId,
             cancellationToken);
@@ -459,6 +471,17 @@ public static class PublicProductEndpoints
             images,
             variants);
     }
+
+    private static IQueryable<Product> BuildVisiblePublishedProductQuery(SwyftlyDbContext dbContext) =>
+        dbContext.Products
+            .AsNoTracking()
+            .Where(product => product.Status == ProductStatus.Published
+                && dbContext.SellerProfiles.Any(seller =>
+                    seller.Id == product.SellerId
+                    && seller.VerificationStatus == SellerVerificationStatus.Verified)
+                && dbContext.SellerStorefronts.Any(storefront =>
+                    storefront.SellerId == product.SellerId
+                    && storefront.IsPublished));
 
     private static async Task<string?> GetCategoryPathAsync(
         Guid? categoryId,

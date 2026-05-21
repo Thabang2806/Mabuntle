@@ -32,7 +32,36 @@ public class AuthenticationTests
         Assert.Null(registerResponse.SellerVerificationStatus);
         Assert.Contains(SwyftlyRoles.Buyer, loginResponse.Roles);
         Assert.False(string.IsNullOrWhiteSpace(loginResponse.AccessToken));
+        Assert.Null(loginResponse.Auth.RefreshToken);
         Assert.False(string.IsNullOrWhiteSpace(loginResponse.RefreshToken));
+        Assert.False(string.IsNullOrWhiteSpace(loginResponse.CsrfToken));
+    }
+
+    [Fact]
+    public async Task Login_SetsHardenedRefreshAndCsrfCookies()
+    {
+        await using var factory = new AuthTestFactory();
+        using var client = factory.CreateClient();
+
+        await RegisterAsync(client, "cookie-buyer@example.test", SwyftlyRoles.Buyer);
+        using var response = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest("cookie-buyer@example.test", TestPassword));
+
+        await EnsureSuccessAsync(response);
+
+        var refreshCookie = GetSetCookieHeader(response, AuthEndpoints.RefreshTokenCookieName);
+        var csrfCookie = GetSetCookieHeader(response, AuthEndpoints.CsrfCookieName);
+
+        Assert.Contains("httponly", refreshCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("secure", refreshCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("samesite=lax", refreshCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("path=/api/auth", refreshCookie, StringComparison.OrdinalIgnoreCase);
+
+        Assert.DoesNotContain("httponly", csrfCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("secure", csrfCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("samesite=lax", csrfCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("path=/", csrfCookie, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -105,16 +134,98 @@ public class AuthenticationTests
         await RegisterAsync(client, "buyer@example.test", SwyftlyRoles.Buyer);
         var loginResponse = await LoginAsync(client, "buyer@example.test");
 
-        using var response = await client.PostAsJsonAsync(
-            "/api/auth/refresh",
-            new RefreshTokenRequest(loginResponse.RefreshToken));
-
-        response.EnsureSuccessStatusCode();
-        var refreshResponse = await ReadJsonAsync<AuthResponse>(response);
+        var refreshResponse = await RefreshAsync(client, loginResponse);
 
         Assert.Contains(SwyftlyRoles.Buyer, refreshResponse.Roles);
         Assert.NotEqual(loginResponse.RefreshToken, refreshResponse.RefreshToken);
+        Assert.Null(refreshResponse.Auth.RefreshToken);
         Assert.False(string.IsNullOrWhiteSpace(refreshResponse.AccessToken));
+    }
+
+    [Fact]
+    public async Task Refresh_RequiresCsrfHeaderWithCookie()
+    {
+        await using var factory = new AuthTestFactory();
+        using var client = factory.CreateClient();
+
+        await RegisterAsync(client, "csrf-buyer@example.test", SwyftlyRoles.Buyer);
+        var loginResponse = await LoginAsync(client, "csrf-buyer@example.test");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh")
+        {
+            Content = JsonContent.Create(new { })
+        };
+        request.Headers.Add("Cookie", $"{AuthEndpoints.RefreshTokenCookieName}={loginResponse.RefreshToken}; {AuthEndpoints.CsrfCookieName}={loginResponse.CsrfToken}");
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Refresh_ReplayedRevokedTokenRevokesReplacementFamilyOnly()
+    {
+        await using var factory = new AuthTestFactory();
+        using var client = factory.CreateClient();
+        const string email = "refresh-replay@example.test";
+
+        await RegisterAsync(client, email, SwyftlyRoles.Buyer);
+        var firstLogin = await LoginAsync(client, email);
+        var firstReplacement = await RefreshAsync(client, firstLogin);
+        var secondLogin = await LoginAsync(client, email);
+
+        using var replayResponse = await PostCookieRefreshAsync(client, firstLogin.RefreshToken, firstLogin.CsrfToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, replayResponse.StatusCode);
+
+        using var revokedReplacementResponse = await PostCookieRefreshAsync(client, firstReplacement.RefreshToken, firstReplacement.CsrfToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, revokedReplacementResponse.StatusCode);
+
+        var secondFamilyReplacement = await RefreshAsync(client, secondLogin);
+        Assert.False(string.IsNullOrWhiteSpace(secondFamilyReplacement.AccessToken));
+    }
+
+    [Fact]
+    public async Task Login_LocksAccountAfterRepeatedFailedAttempts()
+    {
+        await using var factory = new AuthTestFactory();
+        using var client = factory.CreateClient();
+        const string email = "lockout-buyer@example.test";
+
+        await RegisterAsync(client, email, SwyftlyRoles.Buyer);
+
+        HttpResponseMessage? lockedResponse = null;
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var response = await client.PostAsJsonAsync(
+                "/api/auth/login",
+                new LoginRequest(email, "wrong-password"));
+
+            if (response.StatusCode == HttpStatusCode.Locked)
+            {
+                lockedResponse = response;
+                break;
+            }
+
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+            response.Dispose();
+        }
+
+        if (lockedResponse is null)
+        {
+            lockedResponse = await client.PostAsJsonAsync(
+                "/api/auth/login",
+                new LoginRequest(email, "wrong-password"));
+        }
+
+        Assert.NotNull(lockedResponse);
+        Assert.Equal(HttpStatusCode.Locked, lockedResponse!.StatusCode);
+        lockedResponse.Dispose();
+
+        using var correctPasswordResponse = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest(email, TestPassword));
+
+        Assert.Equal(HttpStatusCode.Locked, correctPasswordResponse.StatusCode);
     }
 
     [Fact]
@@ -126,16 +237,10 @@ public class AuthenticationTests
         await RegisterAsync(client, "buyer@example.test", SwyftlyRoles.Buyer);
         var loginResponse = await LoginAsync(client, "buyer@example.test");
 
-        using var logoutResponse = await client.PostAsJsonAsync(
-            "/api/auth/logout",
-            new LogoutRequest(loginResponse.RefreshToken));
-
+        using var logoutResponse = await PostCookieLogoutAsync(client, loginResponse.RefreshToken, loginResponse.CsrfToken);
         Assert.Equal(HttpStatusCode.NoContent, logoutResponse.StatusCode);
 
-        using var refreshResponse = await client.PostAsJsonAsync(
-            "/api/auth/refresh",
-            new RefreshTokenRequest(loginResponse.RefreshToken));
-
+        using var refreshResponse = await PostCookieRefreshAsync(client, loginResponse.RefreshToken, loginResponse.CsrfToken);
         Assert.Equal(HttpStatusCode.Unauthorized, refreshResponse.StatusCode);
     }
 
@@ -151,14 +256,90 @@ public class AuthenticationTests
         return await ReadJsonAsync<RegisterResponse>(response);
     }
 
-    private static async Task<AuthResponse> LoginAsync(HttpClient client, string email)
+    private static async Task<CookieAuthSession> LoginAsync(HttpClient client, string email)
     {
         using var response = await client.PostAsJsonAsync(
             "/api/auth/login",
             new LoginRequest(email, TestPassword));
 
         await EnsureSuccessAsync(response);
-        return await ReadJsonAsync<AuthResponse>(response);
+        var auth = await ReadJsonAsync<AuthResponse>(response);
+        return CreateCookieAuthSession(auth, response);
+    }
+
+    private static async Task<CookieAuthSession> RefreshAsync(HttpClient client, CookieAuthSession session)
+    {
+        using var response = await PostCookieRefreshAsync(client, session.RefreshToken, session.CsrfToken);
+
+        await EnsureSuccessAsync(response);
+        var auth = await ReadJsonAsync<AuthResponse>(response);
+        return CreateCookieAuthSession(auth, response);
+    }
+
+    private static Task<HttpResponseMessage> PostCookieRefreshAsync(HttpClient client, string refreshToken, string csrfToken) =>
+        SendCookieAuthRequestAsync(client, "/api/auth/refresh", refreshToken, csrfToken);
+
+    private static Task<HttpResponseMessage> PostCookieLogoutAsync(HttpClient client, string refreshToken, string csrfToken) =>
+        SendCookieAuthRequestAsync(client, "/api/auth/logout", refreshToken, csrfToken);
+
+    private static async Task<HttpResponseMessage> SendCookieAuthRequestAsync(
+        HttpClient client,
+        string path,
+        string refreshToken,
+        string csrfToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, path)
+        {
+            Content = JsonContent.Create(new { })
+        };
+        request.Headers.Add("Cookie", $"{AuthEndpoints.RefreshTokenCookieName}={refreshToken}; {AuthEndpoints.CsrfCookieName}={csrfToken}");
+        request.Headers.Add(AuthEndpoints.CsrfHeaderName, csrfToken);
+        return await client.SendAsync(request);
+    }
+
+    private static CookieAuthSession CreateCookieAuthSession(AuthResponse auth, HttpResponseMessage response) =>
+        new(
+            auth,
+            GetSetCookie(response, AuthEndpoints.RefreshTokenCookieName),
+            GetSetCookie(response, AuthEndpoints.CsrfCookieName));
+
+    private static string GetSetCookie(HttpResponseMessage response, string cookieName)
+    {
+        var setCookieHeader = GetSetCookieHeader(response, cookieName);
+        var cookie = setCookieHeader.Split(';', 2)[0];
+        var separatorIndex = cookie.IndexOf('=');
+        if (separatorIndex <= 0)
+        {
+            throw new InvalidOperationException($"Response set malformed cookie '{cookieName}'.");
+        }
+
+        return cookie[(separatorIndex + 1)..];
+    }
+
+    private static string GetSetCookieHeader(HttpResponseMessage response, string cookieName)
+    {
+        if (!response.Headers.TryGetValues("Set-Cookie", out var setCookieHeaders))
+        {
+            throw new InvalidOperationException("Response did not include Set-Cookie headers.");
+        }
+
+        foreach (var setCookieHeader in setCookieHeaders)
+        {
+            var cookie = setCookieHeader.Split(';', 2)[0];
+            var separatorIndex = cookie.IndexOf('=');
+            if (separatorIndex <= 0)
+            {
+                continue;
+            }
+
+            var name = cookie[..separatorIndex];
+            if (string.Equals(name, cookieName, StringComparison.Ordinal))
+            {
+                return setCookieHeader;
+            }
+        }
+
+        throw new InvalidOperationException($"Response did not set cookie '{cookieName}'.");
     }
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response)
@@ -178,6 +359,16 @@ public class AuthenticationTests
         var content = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<T>(content, JsonOptions)
             ?? throw new InvalidOperationException($"Response body could not be deserialized as {typeof(T).Name}.");
+    }
+
+    private sealed record CookieAuthSession(
+        AuthResponse Auth,
+        string RefreshToken,
+        string CsrfToken)
+    {
+        public IReadOnlyCollection<string> Roles => Auth.Roles;
+
+        public string AccessToken => Auth.AccessToken;
     }
 
     private sealed class AuthTestFactory : WebApplicationFactory<Program>

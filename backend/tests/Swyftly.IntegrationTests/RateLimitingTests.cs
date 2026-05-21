@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +30,41 @@ public sealed class RateLimitingTests
             }
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            response.Dispose();
+        }
+
+        Assert.NotNull(rejectedResponse);
+        var body = await rejectedResponse!.Content.ReadAsStringAsync();
+        Assert.Contains("RateLimit.Exceeded", body);
+        rejectedResponse.Dispose();
+    }
+
+    [Fact]
+    public async Task AdImpressionEndpoint_ReturnsTooManyRequestsWhenPolicyLimitIsExceeded()
+    {
+        using var factory = new RateLimitingTestFactory();
+        using var client = factory.CreateClient();
+
+        HttpResponseMessage? rejectedResponse = null;
+        for (var index = 0; index < 121; index++)
+        {
+            var response = await client.PostAsJsonAsync(
+                "/api/ads/impressions",
+                new
+                {
+                    AdCampaignId = Guid.NewGuid(),
+                    ProductId = Guid.NewGuid(),
+                    Placement = "shop-grid",
+                    AnonymousVisitorId = (string?)null
+                });
+
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                rejectedResponse = response;
+                break;
+            }
+
+            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
             response.Dispose();
         }
 

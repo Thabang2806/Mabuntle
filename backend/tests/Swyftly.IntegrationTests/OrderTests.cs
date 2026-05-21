@@ -13,6 +13,7 @@ using Swyftly.Api.Authentication;
 using Swyftly.Api.Carts;
 using Swyftly.Api.Orders;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Notifications;
 using Swyftly.Application.Orders;
 using Swyftly.Domain.Catalog;
 using Swyftly.Domain.Orders;
@@ -129,11 +130,62 @@ public class OrderTests
         Assert.Contains(shipment.Events, shipmentEvent => shipmentEvent.EventType == "TrackingUpdated");
         Assert.Contains(shipment.Events, shipmentEvent => shipmentEvent.EventType == "ShipmentInTransit");
 
+        using var deliveredResponse = await sellerClient.PostAsync(
+            $"/api/seller/orders/{order.OrderId}/mark-delivered",
+            content: null);
+        deliveredResponse.EnsureSuccessStatusCode();
+        var deliveredOrder = await ReadJsonAsync<OrderResult>(deliveredResponse);
+        Assert.Equal("Delivered", deliveredOrder.Status);
+        var deliveredShipment = Assert.Single(deliveredOrder.Shipments);
+        Assert.Equal("Delivered", deliveredShipment.Status);
+        Assert.NotNull(deliveredShipment.DeliveredAtUtc);
+        Assert.Contains(deliveredShipment.Events, shipmentEvent => shipmentEvent.EventType == "ShipmentDelivered");
+
+        using var duplicateDeliveredResponse = await sellerClient.PostAsync(
+            $"/api/seller/orders/{order.OrderId}/mark-delivered",
+            content: null);
+        duplicateDeliveredResponse.EnsureSuccessStatusCode();
+        var duplicateDeliveredOrder = await ReadJsonAsync<OrderResult>(duplicateDeliveredResponse);
+        Assert.Equal("Delivered", duplicateDeliveredOrder.Status);
+
         using var buyerTrackResponse = await buyerClient.GetAsync($"/api/buyer/orders/{order.OrderId}");
         buyerTrackResponse.EnsureSuccessStatusCode();
         var trackedOrder = await ReadJsonAsync<OrderResult>(buyerTrackResponse);
-        Assert.Equal("Shipped", trackedOrder.Status);
+        Assert.Equal("Delivered", trackedOrder.Status);
         Assert.Equal("TRACK-123", Assert.Single(trackedOrder.Shipments).TrackingNumber);
+
+        using var notificationsResponse = await buyerClient.GetAsync("/api/buyer/notifications");
+        notificationsResponse.EnsureSuccessStatusCode();
+        var notifications = await ReadJsonAsync<NotificationResult[]>(notificationsResponse);
+        Assert.Contains(notifications, notification => notification.Type == "OrderTrackingAdded" && notification.RelatedEntityId == order.OrderId);
+        Assert.Contains(notifications, notification => notification.Type == "OrderShipped" && notification.RelatedEntityId == order.OrderId);
+        Assert.Single(notifications, notification => notification.Type == "OrderDelivered" && notification.RelatedEntityId == order.OrderId);
+    }
+
+    [Fact]
+    public async Task SellerCannotMarkPaidOrderDeliveredBeforeShipment()
+    {
+        await using var factory = new OrderTestFactory();
+        using var buyerClient = factory.CreateClient();
+        using var sellerClient = factory.CreateClient();
+        var sellerAuth = await AuthorizeAsync(sellerClient, "seller-delivery-invalid@example.test", SwyftlyRoles.Seller);
+        var sellerId = await GetSellerProfileIdAsync(factory, sellerAuth.UserId);
+        var variantId = await CreatePublishedProductAsync(factory, sellerId, "Invalid Delivery Dress", 300m);
+        await AuthorizeAsync(buyerClient, "buyer-delivery-invalid@example.test", SwyftlyRoles.Buyer);
+        using var addCartResponse = await buyerClient.PostAsJsonAsync("/api/cart/items", new AddCartItemRequest(variantId, 1));
+        addCartResponse.EnsureSuccessStatusCode();
+        using var orderResponse = await buyerClient.PostAsJsonAsync(
+            "/api/orders/from-cart",
+            new CreateOrderFromCartApiRequest(null, null));
+        orderResponse.EnsureSuccessStatusCode();
+        var order = await ReadJsonAsync<OrderResult>(orderResponse);
+        await MarkOrderPaidAsync(factory, order.OrderId);
+
+        using var deliveredResponse = await sellerClient.PostAsync(
+            $"/api/seller/orders/{order.OrderId}/mark-delivered",
+            content: null);
+
+        Assert.Equal(HttpStatusCode.Conflict, deliveredResponse.StatusCode);
     }
 
     [Fact]

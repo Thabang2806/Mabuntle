@@ -38,6 +38,34 @@ describe('AdminSellersPageComponent', () => {
     expect(reviewLink).toBeTruthy();
   });
 
+  it('filters sellers by storefront', async () => {
+    adminSellerService.getPendingSellers.and.resolveTo([
+      createSellerSummary(),
+      createSellerSummary({
+        sellerId: 'second-seller-id',
+        displayName: 'Second Seller',
+        storeName: 'Second Store',
+        storeSlug: 'second-store'
+      })
+    ]);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const storefrontInput = compiled.querySelector('input[formControlName="storefront"]') as HTMLInputElement;
+    storefrontInput.value = 'second-store';
+    storefrontInput.dispatchEvent(new Event('input'));
+
+    const form = compiled.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+
+    expect(compiled.textContent).toContain('Second Store');
+    expect(compiled.textContent).not.toContain('Seller Store');
+  });
+
   it('shows an empty state when there are no pending sellers', async () => {
     adminSellerService.getPendingSellers.and.resolveTo([]);
 
@@ -49,7 +77,7 @@ describe('AdminSellersPageComponent', () => {
   });
 });
 
-function createSellerSummary(): AdminSellerSummaryResponse {
+function createSellerSummary(overrides: Partial<AdminSellerSummaryResponse> = {}): AdminSellerSummaryResponse {
   return {
     sellerId: 'seller-id',
     displayName: 'Seller Store',
@@ -57,6 +85,7 @@ function createSellerSummary(): AdminSellerSummaryResponse {
     storeName: 'Seller Store',
     storeSlug: 'seller-store',
     verificationStatus: 'UnderReview',
-    submittedAtUtc: '2026-05-18T12:00:00Z'
+    submittedAtUtc: '2026-05-18T12:00:00Z',
+    ...overrides
   };
 }

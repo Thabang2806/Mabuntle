@@ -1,0 +1,285 @@
+import { DatePipe } from '@angular/common';
+import { Component, OnInit, inject, signal } from '@angular/core';
+import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
+import { getApiErrorMessage } from '../auth/api-error';
+import { BuyerDisputeResponse } from '../buyer/buyer-dispute.models';
+import { BuyerDisputeService } from '../buyer/buyer-dispute.service';
+import { BuyerWorkspaceNavComponent } from '../buyer/buyer-workspace-nav.component';
+import { EmptyStateComponent } from '../shared/ui/empty-state.component';
+import { PageHeaderComponent } from '../shared/ui/page-header.component';
+import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge.component';
+import { UiAlertComponent } from '../shared/ui/ui-alert.component';
+
+@Component({
+  selector: 'app-buyer-disputes-page',
+  imports: [
+    BuyerWorkspaceNavComponent,
+    DatePipe,
+    EmptyStateComponent,
+    MatButtonModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    PageHeaderComponent,
+    ReactiveFormsModule,
+    StatusBadgeComponent,
+    UiAlertComponent
+  ],
+  template: `
+    <section class="page buyer-ops-page">
+      <app-buyer-workspace-nav />
+
+      <app-page-header
+        eyebrow="Buyer account"
+        heading="Disputes"
+        description="Review dispute messages and add buyer evidence when a case is open."
+      />
+
+      @if (isLoading()) {
+        <div class="route-card">Loading disputes...</div>
+      } @else {
+        @if (errorMessage()) {
+          <app-ui-alert tone="error">{{ errorMessage() }}</app-ui-alert>
+        }
+
+        @if (successMessage()) {
+          <app-ui-alert tone="success">{{ successMessage() }}</app-ui-alert>
+        }
+
+        @if (disputes().length === 0 && !errorMessage()) {
+          <app-empty-state
+            eyebrow="Disputes"
+            heading="No disputes"
+            message="Disputes opened from returns or eligible orders will appear here."
+          />
+        } @else {
+          <div class="admin-finance-layout buyer-case-layout">
+            <div class="admin-table buyer-ops-table" role="table" aria-label="Buyer disputes">
+              <div class="admin-table-row heading buyer-ops-table-row" role="row">
+                <span role="columnheader">Dispute</span>
+                <span role="columnheader">Order</span>
+                <span role="columnheader">Opened</span>
+                <span role="columnheader">Status</span>
+                <span role="columnheader">Action</span>
+              </div>
+
+              @for (dispute of disputes(); track dispute.disputeId) {
+                <div class="admin-table-row buyer-ops-table-row" role="row">
+                  <span role="cell">
+                    <strong>{{ dispute.reason }}</strong>
+                    <small>{{ dispute.disputeId }}</small>
+                  </span>
+                  <span role="cell">
+                    <strong>{{ dispute.orderId }}</strong>
+                    <small>{{ dispute.returnRequestId ? 'Return ' + dispute.returnRequestId : 'Order dispute' }}</small>
+                  </span>
+                  <span role="cell">{{ dispute.openedAtUtc | date:'medium' }}</span>
+                  <span role="cell">
+                    <app-status-badge [label]="dispute.status" [tone]="statusTone(dispute.status)" />
+                    @if (dispute.resolutionReason) {
+                      <small>{{ dispute.resolutionReason }}</small>
+                    }
+                  </span>
+                  <span role="cell">
+                    <button mat-stroked-button type="button" (click)="selectDispute(dispute)">Review</button>
+                  </span>
+                </div>
+              }
+            </div>
+
+            <aside class="admin-finance-action-panel">
+              <h2>Case detail</h2>
+              @if (!selectedDispute()) {
+                <p>Select a dispute to review messages and add evidence.</p>
+              } @else {
+                <app-status-badge [label]="selectedDispute()!.status" [tone]="statusTone(selectedDispute()!.status)" />
+                <strong>{{ selectedDispute()!.reason }}</strong>
+                <small>Opened {{ selectedDispute()!.openedAtUtc | date:'medium' }}</small>
+
+                <section class="admin-finance-subsection">
+                  <h3>Messages</h3>
+                  @if (selectedDispute()!.messages.length === 0) {
+                    <p>No dispute messages yet.</p>
+                  } @else {
+                    @for (message of selectedDispute()!.messages; track message.disputeMessageId) {
+                      <article class="admin-finance-note-card">
+                        <strong>{{ message.senderRole }}</strong>
+                        <span>{{ message.createdAtUtc | date:'medium' }}</span>
+                        <p>{{ message.message }}</p>
+                      </article>
+                    }
+                  }
+                </section>
+
+                <form [formGroup]="messageForm" (ngSubmit)="addMessage()" class="admin-finance-form" novalidate>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Message</mat-label>
+                    <textarea matInput rows="3" formControlName="message"></textarea>
+                  </mat-form-field>
+                  <button mat-flat-button type="submit" [disabled]="isSaving()">Send message</button>
+                </form>
+
+                <section class="admin-finance-subsection">
+                  <h3>Evidence</h3>
+                  @if (selectedDispute()!.evidence.length === 0) {
+                    <p>No evidence has been attached.</p>
+                  } @else {
+                    @for (item of selectedDispute()!.evidence; track item.disputeEvidenceId) {
+                      <article class="admin-finance-note-card">
+                        <strong>{{ item.evidenceType }}</strong>
+                        <span>{{ item.submittedByRole }} - {{ item.createdAtUtc | date:'medium' }}</span>
+                        <p>{{ item.storageReference }}</p>
+                        @if (item.description) {
+                          <small>{{ item.description }}</small>
+                        }
+                      </article>
+                    }
+                  }
+                </section>
+
+                <form [formGroup]="evidenceForm" (ngSubmit)="addEvidence()" class="admin-finance-form" novalidate>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Evidence type</mat-label>
+                    <mat-select formControlName="evidenceType">
+                      <mat-option value="Image">Image</mat-option>
+                      <mat-option value="Document">Document</mat-option>
+                      <mat-option value="Message">Message</mat-option>
+                      <mat-option value="Other">Other</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Storage reference or URL</mat-label>
+                    <input matInput formControlName="storageReference" />
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Description</mat-label>
+                    <textarea matInput rows="2" formControlName="description"></textarea>
+                  </mat-form-field>
+
+                  <button mat-stroked-button type="submit" [disabled]="isSaving()">Add evidence</button>
+                </form>
+              }
+            </aside>
+          </div>
+        }
+      }
+    </section>
+  `
+})
+export class BuyerDisputesPageComponent implements OnInit {
+  private readonly disputeService = inject(BuyerDisputeService);
+  private readonly formBuilder = inject(NonNullableFormBuilder);
+
+  protected readonly disputes = signal<BuyerDisputeResponse[]>([]);
+  protected readonly selectedDispute = signal<BuyerDisputeResponse | null>(null);
+  protected readonly isLoading = signal(true);
+  protected readonly isSaving = signal(false);
+  protected readonly errorMessage = signal<string | null>(null);
+  protected readonly successMessage = signal<string | null>(null);
+
+  protected readonly messageForm = this.formBuilder.group({
+    message: ['', [Validators.required]]
+  });
+
+  protected readonly evidenceForm = this.formBuilder.group({
+    evidenceType: ['Image', [Validators.required]],
+    storageReference: ['', [Validators.required]],
+    description: ['']
+  });
+
+  async ngOnInit(): Promise<void> {
+    await this.loadDisputes();
+  }
+
+  protected selectDispute(dispute: BuyerDisputeResponse): void {
+    this.selectedDispute.set(dispute);
+    this.messageForm.reset({ message: '' });
+    this.evidenceForm.reset({ evidenceType: 'Image', storageReference: '', description: '' });
+  }
+
+  protected async addMessage(): Promise<void> {
+    const dispute = this.selectedDispute();
+    if (!dispute || this.messageForm.invalid || this.isSaving()) {
+      this.messageForm.markAllAsTouched();
+      return;
+    }
+
+    await this.runAction(
+      () => this.disputeService.addMessage(dispute.disputeId, this.messageForm.getRawValue()),
+      'Message added.');
+    this.messageForm.reset({ message: '' });
+  }
+
+  protected async addEvidence(): Promise<void> {
+    const dispute = this.selectedDispute();
+    if (!dispute || this.evidenceForm.invalid || this.isSaving()) {
+      this.evidenceForm.markAllAsTouched();
+      return;
+    }
+
+    const value = this.evidenceForm.getRawValue();
+    await this.runAction(
+      () => this.disputeService.addEvidence(dispute.disputeId, {
+        evidenceType: value.evidenceType,
+        storageReference: value.storageReference,
+        description: emptyToNull(value.description)
+      }),
+      'Evidence added.');
+    this.evidenceForm.reset({ evidenceType: 'Image', storageReference: '', description: '' });
+  }
+
+  protected statusTone(status: string): StatusBadgeTone {
+    if (['Open', 'UnderReview', 'Disputed'].includes(status)) {
+      return 'warning';
+    }
+
+    if (['Resolved', 'Closed'].includes(status)) {
+      return 'success';
+    }
+
+    return 'neutral';
+  }
+
+  private async loadDisputes(): Promise<void> {
+    this.isLoading.set(true);
+    this.errorMessage.set(null);
+
+    try {
+      const disputes = await this.disputeService.listDisputes();
+      this.disputes.set(disputes);
+      this.selectedDispute.set(disputes[0] ?? null);
+    } catch (error) {
+      this.errorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isLoading.set(false);
+    }
+  }
+
+  private async runAction(action: () => Promise<BuyerDisputeResponse>, successMessage: string): Promise<void> {
+    this.isSaving.set(true);
+    this.errorMessage.set(null);
+    this.successMessage.set(null);
+
+    try {
+      const updated = await action();
+      this.disputes.set(this.disputes().map(item => item.disputeId === updated.disputeId ? updated : item));
+      this.selectedDispute.set(updated);
+      this.successMessage.set(successMessage);
+    } catch (error) {
+      this.errorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isSaving.set(false);
+    }
+  }
+}
+
+function emptyToNull(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}

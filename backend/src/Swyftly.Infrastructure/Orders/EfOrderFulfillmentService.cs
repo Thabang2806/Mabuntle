@@ -123,6 +123,50 @@ public sealed class EfOrderFulfillmentService(SwyftlyDbContext dbContext) : IOrd
         return Result<OrderResult>.Success(Map(order));
     }
 
+    public async Task<Result<OrderResult>> MarkDeliveredAsync(
+        OrderFulfillmentRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var validation = Validate(request.SellerId, request.OrderId);
+        if (validation is not null)
+        {
+            return validation;
+        }
+
+        var order = await GetSellerOrderAsync(request.SellerId, request.OrderId, cancellationToken);
+        if (order is null)
+        {
+            return OrderNotFound();
+        }
+
+        var shipment = order.Shipments
+            .OrderByDescending(existing => existing.CreatedAtUtc)
+            .FirstOrDefault();
+
+        if (order.Status == OrderStatus.Delivered && shipment?.Status == ShipmentStatus.Delivered)
+        {
+            return Result<OrderResult>.Success(Map(order));
+        }
+
+        if (order.Status != OrderStatus.Shipped)
+        {
+            return InvalidTransition("Only shipped orders can be marked as delivered.");
+        }
+
+        if (shipment is null || shipment.Status != ShipmentStatus.InTransit)
+        {
+            return InvalidTransition("Only in-transit shipments can be marked as delivered.");
+        }
+
+        order.ChangeStatus(OrderStatus.Delivered, request.OccurredAtUtc, "SellerMarkedDelivered");
+        TrackLatestOrderStatusHistory(order);
+        shipment.MarkDelivered(request.OccurredAtUtc);
+        TrackLatestShipmentEvent(shipment);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Result<OrderResult>.Success(Map(order));
+    }
+
     private async Task<Order?> GetSellerOrderAsync(
         Guid sellerId,
         Guid orderId,

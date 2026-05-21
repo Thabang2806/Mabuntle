@@ -5,14 +5,13 @@ import { environment } from '../../environments/environment';
 import { AuthResponse } from './auth.models';
 import { AuthService } from './auth.service';
 
-const AUTH_SESSION_KEY = 'swyftly.auth.session';
-
 describe('AuthService', () => {
   let service: AuthService;
   let httpTestingController: HttpTestingController;
 
   beforeEach(() => {
     sessionStorage.clear();
+    clearCookie('swyftly_csrf');
 
     TestBed.configureTestingModule({
       providers: [
@@ -28,9 +27,10 @@ describe('AuthService', () => {
   afterEach(() => {
     httpTestingController.verify();
     sessionStorage.clear();
+    clearCookie('swyftly_csrf');
   });
 
-  it('stores auth state after login', async () => {
+  it('stores access token in memory after login without writing session storage', async () => {
     const loginPromise = service.login({
       email: 'buyer@example.test',
       password: 'Password123'
@@ -38,16 +38,19 @@ describe('AuthService', () => {
 
     const request = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/auth/login`);
     expect(request.request.method).toBe('POST');
+    expect(request.request.withCredentials).toBeTrue();
     request.flush(createAuthResponse());
 
     await loginPromise;
 
     expect(service.isAuthenticated()).toBeTrue();
     expect(service.currentUser()?.email).toBe('buyer@example.test');
-    expect(sessionStorage.getItem(AUTH_SESSION_KEY)).toContain('buyer@example.test');
+    expect(service.accessToken).toBe('access-token');
+    expect(sessionStorage.length).toBe(0);
   });
 
-  it('clears auth state on logout', async () => {
+  it('clears auth state on logout and calls cookie logout with CSRF header', async () => {
+    document.cookie = 'swyftly_csrf=csrf-token; path=/';
     const loginPromise = service.login({
       email: 'buyer@example.test',
       password: 'Password123'
@@ -57,12 +60,32 @@ describe('AuthService', () => {
 
     const logoutPromise = service.logout();
     const request = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/auth/logout`);
-    expect(request.request.body).toEqual({ refreshToken: 'refresh-token' });
+    expect(request.request.body).toEqual({});
+    expect(request.request.withCredentials).toBeTrue();
+    expect(request.request.headers.get('X-Swyftly-CSRF')).toBe('csrf-token');
     request.flush(null);
     await logoutPromise;
 
     expect(service.isAuthenticated()).toBeFalse();
-    expect(sessionStorage.getItem(AUTH_SESSION_KEY)).toBeNull();
+    expect(service.accessToken).toBeNull();
+  });
+
+  it('restores a browser session by refreshing with credentials', async () => {
+    document.cookie = 'swyftly_csrf=csrf-token; path=/';
+
+    const initializePromise = service.initialize();
+
+    const request = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/auth/refresh`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({});
+    expect(request.request.withCredentials).toBeTrue();
+    expect(request.request.headers.get('X-Swyftly-CSRF')).toBe('csrf-token');
+    request.flush(createAuthResponse());
+
+    await initializePromise;
+
+    expect(service.isInitialized()).toBeTrue();
+    expect(service.isAuthenticated()).toBeTrue();
   });
 });
 
@@ -72,8 +95,10 @@ function createAuthResponse(): AuthResponse {
     email: 'buyer@example.test',
     roles: ['Buyer'],
     accessToken: 'access-token',
-    accessTokenExpiresAtUtc: '2026-05-18T12:30:00+00:00',
-    refreshToken: 'refresh-token',
-    refreshTokenExpiresAtUtc: '2026-06-01T12:00:00+00:00'
+    accessTokenExpiresAtUtc: '2026-05-18T12:30:00+00:00'
   };
+}
+
+function clearCookie(name: string): void {
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
 }

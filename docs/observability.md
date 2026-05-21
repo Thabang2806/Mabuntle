@@ -29,9 +29,9 @@ Unhandled request exceptions are logged with the exception and increment the pla
 - `postgresql`
 - `search-placeholder`
 - `storage-placeholder`
-- `payment-provider-placeholder`
+- `payment-provider`
 
-The placeholder checks exist so later real providers can replace them without changing the readiness response shape.
+The payment-provider check reports the configured provider. `Fake` is healthy for local development. `PayFast` is healthy only when the required PayFast checkout, callback, and validation configuration is present; remote validation can be disabled for local adapter testing, but that is not production evidence.
 
 ## Metrics Placeholders
 

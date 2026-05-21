@@ -1,0 +1,35 @@
+import { HttpClient } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import { environment } from '../../environments/environment';
+import { AddSellerOrderTrackingRequest, SellerOrderResult } from './seller-order.models';
+
+@Injectable({ providedIn: 'root' })
+export class SellerOrderService {
+  private readonly http = inject(HttpClient);
+  private readonly baseUrl = `${environment.apiBaseUrl}/api/seller/orders`;
+
+  listOrders(): Promise<SellerOrderResult[]> {
+    return firstValueFrom(this.http.get<SellerOrderResult[]>(this.baseUrl));
+  }
+
+  getOrder(orderId: string): Promise<SellerOrderResult> {
+    return firstValueFrom(this.http.get<SellerOrderResult>(`${this.baseUrl}/${orderId}`));
+  }
+
+  markProcessing(orderId: string): Promise<SellerOrderResult> {
+    return firstValueFrom(this.http.post<SellerOrderResult>(`${this.baseUrl}/${orderId}/mark-processing`, {}));
+  }
+
+  addTracking(orderId: string, request: AddSellerOrderTrackingRequest): Promise<SellerOrderResult> {
+    return firstValueFrom(this.http.post<SellerOrderResult>(`${this.baseUrl}/${orderId}/tracking`, request));
+  }
+
+  markShipped(orderId: string): Promise<SellerOrderResult> {
+    return firstValueFrom(this.http.post<SellerOrderResult>(`${this.baseUrl}/${orderId}/mark-shipped`, {}));
+  }
+
+  markDelivered(orderId: string): Promise<SellerOrderResult> {
+    return firstValueFrom(this.http.post<SellerOrderResult>(`${this.baseUrl}/${orderId}/mark-delivered`, {}));
+  }
+}

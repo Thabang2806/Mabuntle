@@ -9,6 +9,7 @@ using Swyftly.Api.Admin;
 using Swyftly.Api.Ai;
 using Swyftly.Api.Analytics;
 using Swyftly.Api.Authentication;
+using Swyftly.Api.Buyers;
 using Swyftly.Api.Carts;
 using Swyftly.Api.Catalog;
 using Swyftly.Api.Disputes;
@@ -51,7 +52,8 @@ builder.Services.AddCors(options =>
                 "http://localhost:4201",
                 "https://localhost:4201")
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 
@@ -59,6 +61,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<SwyftlyMetrics>();
 builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
+builder.Services.Configure<AuthCookieOptions>(builder.Configuration.GetSection(AuthCookieOptions.SectionName));
 builder.Services.AddInfrastructure(builder.Configuration);
 
 var rateLimitOptions = builder.Configuration
@@ -82,9 +85,13 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy(SwyftlyRateLimitPolicies.Ai, httpContext => CreateFixedWindowLimiter(httpContext, rateLimitOptions.Ai));
     options.AddPolicy(SwyftlyRateLimitPolicies.ProductWrite, httpContext => CreateFixedWindowLimiter(httpContext, rateLimitOptions.ProductWrite));
     options.AddPolicy(SwyftlyRateLimitPolicies.Payment, httpContext => CreateFixedWindowLimiter(httpContext, rateLimitOptions.Payment));
+    options.AddPolicy(SwyftlyRateLimitPolicies.Webhook, httpContext => CreateFixedWindowLimiter(httpContext, rateLimitOptions.Webhook));
+    options.AddPolicy(SwyftlyRateLimitPolicies.AdImpression, httpContext => CreateFixedWindowLimiter(httpContext, rateLimitOptions.AdImpression));
     options.AddPolicy(SwyftlyRateLimitPolicies.AdClick, httpContext => CreateFixedWindowLimiter(httpContext, rateLimitOptions.AdClick));
     options.AddPolicy(SwyftlyRateLimitPolicies.Search, httpContext => CreateFixedWindowLimiter(httpContext, rateLimitOptions.Search));
 });
+
+SecurityConfigurationValidator.Validate(builder.Configuration, builder.Environment);
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
 builder.Services
@@ -115,6 +122,17 @@ builder.Services.AddAuthorization(options =>
         SwyftlyRoles.SupportAgent,
         SwyftlyRoles.Admin,
         SwyftlyRoles.SuperAdmin));
+    options.AddPolicy(SwyftlyPolicies.FinanceRead, policy => policy.RequireRole(
+        SwyftlyRoles.Admin,
+        SwyftlyRoles.SuperAdmin,
+        SwyftlyRoles.FinanceOperator,
+        SwyftlyRoles.FinanceApprover));
+    options.AddPolicy(SwyftlyPolicies.FinanceOperate, policy => policy.RequireRole(
+        SwyftlyRoles.FinanceOperator,
+        SwyftlyRoles.SuperAdmin));
+    options.AddPolicy(SwyftlyPolicies.FinanceApprove, policy => policy.RequireRole(
+        SwyftlyRoles.FinanceApprover,
+        SwyftlyRoles.SuperAdmin));
 });
 
 builder.Services
@@ -131,9 +149,9 @@ builder.Services
         "storage-placeholder",
         () => HealthCheckResult.Healthy("Storage provider placeholder is available."),
         tags: new[] { "ready", "storage" })
-    .AddCheck(
-        "payment-provider-placeholder",
-        () => HealthCheckResult.Healthy("Payment provider placeholder is available."),
+    .AddCheck<PaymentProviderHealthCheck>(
+        name: "payment-provider",
+        failureStatus: HealthStatus.Unhealthy,
         tags: new[] { "ready", "payments" });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -145,6 +163,8 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "Foundation API for the Swyftly marketplace."
     });
+
+    options.CustomSchemaIds(type => (type.FullName ?? type.Name).Replace("+", "."));
 
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -248,14 +268,17 @@ app.MapAuthEndpoints();
 app.MapSellerOnboardingEndpoints();
 app.MapAdminSellerEndpoints();
 app.MapAdminProductEndpoints();
+app.MapAdminReviewEndpoints();
 app.MapAdminAuditLogEndpoints();
 app.MapAdminDashboardEndpoints();
 app.MapAdminMarketplaceReportEndpoints();
 app.MapAdminAiUsageAnalyticsEndpoints();
 app.MapAdminCategoryEndpoints();
+app.MapAdminOrderPaymentEndpoints();
 app.MapSellerCatalogEndpoints();
 app.MapSellerProductEndpoints();
 app.MapPublicProductEndpoints();
+app.MapBuyerEngagementEndpoints();
 app.MapCartEndpoints();
 app.MapOrderEndpoints();
 app.MapPaymentEndpoints();

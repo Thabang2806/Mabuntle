@@ -100,6 +100,31 @@ public class InventoryReservationServiceTests
         Assert.Equal(startedAt.AddMinutes(16), reservation.ExpiredAtUtc);
     }
 
+    [Fact]
+    public async Task ExpireReservationsAsync_DoesNotDriveReservedQuantityBelowZero()
+    {
+        await using var dbContext = CreateDbContext();
+        var buyer = new BuyerProfile(Guid.NewGuid());
+        var product = new Product(Guid.NewGuid());
+        var variant = new ProductVariant(product.Id, "SKU-1", "M", "Black", 499m, 599m, 5);
+        var cart = new Cart(buyer.Id);
+        var startedAt = DateTimeOffset.Parse("2026-05-18T12:00:00Z");
+        var reservation = new InventoryReservation(variant.Id, buyer.Id, cart.Id, 2, startedAt.AddMinutes(15), startedAt);
+        dbContext.BuyerProfiles.Add(buyer);
+        dbContext.Products.Add(product);
+        dbContext.ProductVariants.Add(variant);
+        dbContext.Carts.Add(cart);
+        dbContext.InventoryReservations.Add(reservation);
+        await dbContext.SaveChangesAsync();
+        var service = new EfInventoryReservationService(dbContext);
+
+        var result = await service.ExpireReservationsAsync(startedAt.AddMinutes(16));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal("InventoryReservations.ReleaseConflict", result.Error.Code);
+        Assert.Equal(0, variant.ReservedQuantity);
+    }
+
     private static SwyftlyDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<SwyftlyDbContext>()

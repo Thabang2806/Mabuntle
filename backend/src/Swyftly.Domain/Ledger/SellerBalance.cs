@@ -55,6 +55,38 @@ public sealed class SellerBalance : AuditableEntity
         HeldBalance += amount;
     }
 
+    public void MovePendingToAvailable(decimal amount)
+    {
+        if (amount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount), "Amount must be positive.");
+        }
+
+        if (amount > PendingBalance)
+        {
+            throw new InvalidOperationException("Cannot make more than the pending balance available.");
+        }
+
+        PendingBalance -= amount;
+        AvailableBalance += amount;
+    }
+
+    public void HoldAvailable(decimal amount)
+    {
+        if (amount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount), "Amount must be positive.");
+        }
+
+        if (amount > AvailableBalance)
+        {
+            throw new InvalidOperationException("Cannot hold more than the available balance.");
+        }
+
+        AvailableBalance -= amount;
+        HeldBalance += amount;
+    }
+
     public void ReleaseHeldToPending(decimal amount)
     {
         if (amount <= 0)
@@ -69,6 +101,77 @@ public sealed class SellerBalance : AuditableEntity
 
         HeldBalance -= amount;
         PendingBalance += amount;
+    }
+
+    public void ReleaseHeldToAvailable(decimal amount)
+    {
+        if (amount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount), "Amount must be positive.");
+        }
+
+        if (amount > HeldBalance)
+        {
+            throw new InvalidOperationException("Cannot release more than the held balance.");
+        }
+
+        HeldBalance -= amount;
+        AvailableBalance += amount;
+    }
+
+    public void DebitPending(decimal amount)
+    {
+        if (amount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount), "Amount must be positive.");
+        }
+
+        if (amount > PendingBalance)
+        {
+            throw new InvalidOperationException("Cannot debit more than the pending balance.");
+        }
+
+        PendingBalance -= amount;
+    }
+
+    public void DebitAvailable(decimal amount)
+    {
+        if (amount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount), "Amount must be positive.");
+        }
+
+        if (amount > AvailableBalance)
+        {
+            throw new InvalidOperationException("Cannot debit more than the available balance.");
+        }
+
+        AvailableBalance -= amount;
+    }
+
+    public void CreditAvailable(decimal amount)
+    {
+        if (amount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount), "Amount must be positive.");
+        }
+
+        AvailableBalance += amount;
+    }
+
+    public void DebitHeld(decimal amount)
+    {
+        if (amount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount), "Amount must be positive.");
+        }
+
+        if (amount > HeldBalance)
+        {
+            throw new InvalidOperationException("Cannot debit more than the held balance.");
+        }
+
+        HeldBalance -= amount;
     }
 
     public void ApplyRefundDebit(decimal amount)

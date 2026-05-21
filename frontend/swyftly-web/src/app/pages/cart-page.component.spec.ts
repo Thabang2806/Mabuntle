@@ -36,6 +36,9 @@ describe('CartPageComponent', () => {
     expect(compiled.textContent).toContain('Summer Dress');
     expect(compiled.textContent).toContain('Seller Store');
     expect(compiled.textContent).toContain('Checkout');
+    expect(compiled.textContent).toContain('Single-seller checkout');
+    expect(compiled.textContent).toContain('Stock checked at checkout');
+    expect(compiled.querySelector('.cart-item-media')?.textContent?.trim()).toBe('S');
   });
 
   it('updates item quantity', async () => {

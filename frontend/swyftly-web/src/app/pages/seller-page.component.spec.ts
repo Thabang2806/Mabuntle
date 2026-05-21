@@ -42,8 +42,40 @@ describe('SellerPageComponent', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('PendingVerification');
     expect(compiled.textContent).toContain('0 of 4 setup sections complete');
+    expect(compiled.querySelector('a[href="/seller/orders"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/seller/returns"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/seller/payouts"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/seller/support"]')).not.toBeNull();
     expect(compiled.querySelector('a[href="/seller/ads"]')).not.toBeNull();
     expect(compiled.querySelector('a[href="/seller/analytics"]')).not.toBeNull();
+  });
+
+  it('shows the verified seller dashboard instead of onboarding steps', async () => {
+    onboardingService.getOnboarding.and.resolveTo(createOnboardingResponse({
+      verificationStatus: 'Verified',
+      isProfileComplete: true,
+      isStorefrontComplete: true,
+      isAddressComplete: true,
+      isPayoutPlaceholderComplete: true,
+      storefront: {
+        storeName: 'Verified Store',
+        slug: 'verified-store',
+        description: null,
+        logoUrl: null,
+        bannerUrl: null,
+        isPublished: true
+      }
+    }));
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Seller dashboard');
+    expect(compiled.textContent).toContain('Verified Store');
+    expect(compiled.textContent).toContain('Orders');
+    expect(compiled.textContent).not.toContain('Basic seller details');
   });
 
   it('does not save profile when required fields are missing', async () => {

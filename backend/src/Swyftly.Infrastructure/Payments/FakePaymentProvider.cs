@@ -12,12 +12,13 @@ public sealed class FakePaymentProvider(
     IOptions<PaymentProviderOptions> options,
     TimeProvider timeProvider) : IPaymentProvider
 {
+    public const string Name = "Fake";
     public const string MetadataOutcomeKey = "fakePaymentOutcome";
     public const string HeaderSignatureKey = "X-Swyftly-Fake-Signature";
 
     private readonly PaymentProviderOptions _options = options.Value;
 
-    public string ProviderName => _options.ProviderName;
+    public string ProviderName => Name;
 
     public Task<Result<PaymentInitiationResult>> InitializePaymentAsync(
         PaymentInitiationRequest request,
@@ -98,6 +99,8 @@ public sealed class FakePaymentProvider(
             var providerReference = GetString(root, "providerReference") ?? string.Empty;
             var status = GetString(root, "status") ?? "Paid";
             var occurredAtUtc = GetDateTimeOffset(root, "occurredAtUtc") ?? timeProvider.GetUtcNow();
+            var amount = GetDecimal(root, "amount");
+            var currency = GetString(root, "currency");
 
             if (string.IsNullOrWhiteSpace(providerReference))
             {
@@ -114,7 +117,9 @@ public sealed class FakePaymentProvider(
                 providerReference,
                 status,
                 occurredAtUtc,
-                request.Payload)));
+                request.Payload,
+                amount,
+                currency)));
         }
         catch (JsonException)
         {
@@ -151,9 +156,17 @@ public sealed class FakePaymentProvider(
                 Error.Failure("Payments.FakeRefundFailed", "The fake payment provider refund was configured to fail.")));
         }
 
+        if (string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            return Task.FromResult(Result<PaymentRefundResult>.Failure(
+                Error.Validation([
+                    new("idempotencyKey", "Refund idempotency key is required.")
+                ])));
+        }
+
         var result = new PaymentRefundResult(
             ProviderName,
-            $"fake_refund_{Guid.NewGuid():N}",
+            $"fake_refund_{request.IdempotencyKey.Trim().ToLowerInvariant()}",
             "Refunded",
             request.Amount,
             request.Currency,
@@ -200,6 +213,21 @@ public sealed class FakePaymentProvider(
     {
         var value = GetString(root, propertyName);
         return DateTimeOffset.TryParse(value, out var parsed) ? parsed : null;
+    }
+
+    private static decimal? GetDecimal(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.Number when property.TryGetDecimal(out var decimalValue) => decimalValue,
+            JsonValueKind.String when decimal.TryParse(property.GetString(), out var parsed) => parsed,
+            _ => null
+        };
     }
 
     private static string ComputeSignature(string payload, string secret)

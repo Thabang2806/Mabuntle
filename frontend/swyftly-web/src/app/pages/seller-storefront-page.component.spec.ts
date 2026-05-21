@@ -50,4 +50,16 @@ describe('SellerStorefrontPageComponent', () => {
     expect(compiled.textContent).toContain('Curated dresses.');
     expect(compiled.textContent).toContain('Summer Dress');
   });
+
+  it('renders storefront trust details and fallback logo initial', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Verified marketplace seller');
+    expect(compiled.querySelector('.storefront-trust-grid strong')?.textContent).toContain('1');
+    expect(compiled.textContent).toContain('published product');
+    expect(compiled.querySelector('.seller-storefront-logo')?.textContent?.trim()).toBe('S');
+  });
 });

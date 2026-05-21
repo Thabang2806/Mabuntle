@@ -15,6 +15,10 @@ public interface IOrderFulfillmentService
     Task<Result<OrderResult>> MarkShippedAsync(
         OrderFulfillmentRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<Result<OrderResult>> MarkDeliveredAsync(
+        OrderFulfillmentRequest request,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record OrderFulfillmentRequest(

@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Swyftly.Api.Authentication;
 using Swyftly.Api.Support;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Notifications;
 using Swyftly.Infrastructure.Identity;
 using Swyftly.Infrastructure.Persistence;
 
@@ -68,6 +69,11 @@ public sealed class SupportTicketTests
         Assert.NotNull(buyerView);
         Assert.DoesNotContain(buyerView!.Messages, message => message.IsInternal);
         Assert.Contains(buyerView.Messages, message => message.Message == "Please upload a photo of the damage.");
+
+        using var notificationsResponse = await buyerClient.GetAsync("/api/buyer/notifications");
+        notificationsResponse.EnsureSuccessStatusCode();
+        var notifications = await notificationsResponse.Content.ReadFromJsonAsync<NotificationResult[]>();
+        Assert.Contains(notifications!, notification => notification.Type == "SupportReply" && notification.RelatedEntityId == created.SupportTicketId);
     }
 
     [Fact]

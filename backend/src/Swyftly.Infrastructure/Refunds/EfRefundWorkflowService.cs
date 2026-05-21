@@ -11,6 +11,7 @@ using Swyftly.Domain.Orders;
 using Swyftly.Domain.Payments;
 using Swyftly.Domain.Refunds;
 using Swyftly.Domain.Returns;
+using Swyftly.Infrastructure.Payments;
 using Swyftly.Infrastructure.Persistence;
 
 namespace Swyftly.Infrastructure.Refunds;
@@ -93,6 +94,8 @@ public sealed class EfRefundWorkflowService(
             request.Amount,
             payment.Currency,
             request.Reason,
+            request.ActorUserId,
+            request.ActorRole,
             request.RequestedAtUtc);
 
         dbContext.Refunds.Add(refund);
@@ -122,6 +125,20 @@ public sealed class EfRefundWorkflowService(
             return Result<RefundResult>.Success(Map(refund));
         }
 
+        if (refund.Status == RefundStatus.Processing)
+        {
+            return Result<RefundResult>.Failure(Error.Conflict(
+                "Refunds.AlreadyProcessing",
+                "Refund processing has already started. Manual reconciliation is required before retrying approval."));
+        }
+
+        if (refund.RequestedByUserId == request.ActorUserId)
+        {
+            return Result<RefundResult>.Failure(Error.Forbidden(
+                "Refunds.DualControlRequired",
+                "The user who created a refund request cannot approve the same refund."));
+        }
+
         var order = await dbContext.Orders
             .Include(existing => existing.StatusHistory)
             .SingleAsync(existing => existing.Id == refund.OrderId, cancellationToken);
@@ -142,6 +159,17 @@ public sealed class EfRefundWorkflowService(
             return Validation("refund", exception.Message);
         }
 
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result<RefundResult>.Failure(Error.Conflict(
+                "Refunds.ConcurrentApproval",
+                "Refund approval was already changed by another process."));
+        }
+
         if (string.IsNullOrWhiteSpace(payment.ProviderReference))
         {
             refund.MarkFailed("Payment provider reference is missing.", request.ApprovedAtUtc);
@@ -156,6 +184,7 @@ public sealed class EfRefundWorkflowService(
                 refund.Amount,
                 refund.Currency,
                 request.Reason,
+                refund.Id.ToString("N"),
                 new Dictionary<string, string>
                 {
                     ["refundId"] = refund.Id.ToString(),
@@ -165,6 +194,35 @@ public sealed class EfRefundWorkflowService(
 
         if (providerResult.IsFailure)
         {
+            if (providerResult.Error.Code == PayFastPaymentProvider.ManualRefundRequiredCode)
+            {
+                try
+                {
+                    refund.MarkProviderActionRequired(providerResult.Error.Description, request.ApprovedAtUtc);
+                    TrackLatestRefundEvent(refund);
+                }
+                catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+                {
+                    return Validation("refund", exception.Message);
+                }
+
+                await auditLogService.RecordAsync(
+                    new CreateAuditLogEntry(
+                        request.ActorUserId.ToString(),
+                        request.ActorRole,
+                        "RefundProviderActionRequired",
+                        "Refund",
+                        refund.Id.ToString(),
+                        JsonSerializer.Serialize(new { status = RefundStatus.Requested.ToString() }),
+                        JsonSerializer.Serialize(new { status = RefundStatus.Processing.ToString(), amount = refund.Amount, provider = payment.Provider }),
+                        request.Reason,
+                        request.IpAddress),
+                    cancellationToken);
+
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return Result<RefundResult>.Success(Map(refund));
+            }
+
             refund.MarkFailed(providerResult.Error.Description, request.ApprovedAtUtc);
             TrackLatestRefundEvent(refund);
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -172,27 +230,17 @@ public sealed class EfRefundWorkflowService(
         }
 
         var providerRefund = providerResult.Value;
-        try
+        var completionResult = await CompleteRefundAccountingAsync(
+            refund,
+            payment,
+            order,
+            returnRequest,
+            providerRefund.ProviderRefundReference,
+            providerRefund.RefundedAtUtc,
+            cancellationToken);
+        if (completionResult.IsFailure)
         {
-            refund.MarkRefunded(providerRefund.ProviderRefundReference, providerRefund.RefundedAtUtc);
-            TrackLatestRefundEvent(refund);
-            await CreateLedgerReversalsAndAdjustBalancesAsync(refund, payment, order, providerRefund.RefundedAtUtc, cancellationToken);
-            var totalRefunded = await TotalRefundedOrPendingAsync(payment.Id, refund.Id, cancellationToken) + refund.Amount;
-            payment.ApplyRefund(totalRefunded, providerRefund.RefundedAtUtc);
-            if (payment.Status == PaymentStatus.Refunded)
-            {
-                order.ChangeStatus(OrderStatus.Refunded, providerRefund.RefundedAtUtc, "RefundApproved");
-                TrackLatestOrderStatusHistory(order);
-            }
-
-            if (returnRequest is not null)
-            {
-                returnRequest.MarkRefunded(providerRefund.RefundedAtUtc);
-            }
-        }
-        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException or ArgumentOutOfRangeException)
-        {
-            return Validation("refund", exception.Message);
+            return completionResult;
         }
 
         await auditLogService.RecordAsync(
@@ -209,6 +257,109 @@ public sealed class EfRefundWorkflowService(
             cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        return Result<RefundResult>.Success(Map(refund));
+    }
+
+    public async Task<Result<RefundResult>> ConfirmManualProviderRefundAsync(
+        ConfirmManualProviderRefundWorkflowRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var validation = ValidateManualProviderConfirmationRequest(request);
+        if (validation.Count > 0)
+        {
+            return Result<RefundResult>.Failure(Error.Validation(validation));
+        }
+
+        var refund = await dbContext.Refunds
+            .Include(existing => existing.Events)
+            .SingleOrDefaultAsync(existing => existing.Id == request.RefundId, cancellationToken);
+        if (refund is null)
+        {
+            return Result<RefundResult>.Failure(Error.NotFound("Refunds.NotFound", "Refund was not found."));
+        }
+
+        if (refund.Status == RefundStatus.Refunded)
+        {
+            return Result<RefundResult>.Success(Map(refund));
+        }
+
+        if (refund.Status != RefundStatus.Processing)
+        {
+            return Result<RefundResult>.Failure(Error.Conflict(
+                "Refunds.NotAwaitingManualProviderConfirmation",
+                "Only processing refunds can be manually confirmed after a provider refund."));
+        }
+
+        var order = await dbContext.Orders
+            .Include(existing => existing.StatusHistory)
+            .SingleAsync(existing => existing.Id == refund.OrderId, cancellationToken);
+        var payment = await dbContext.Payments.SingleAsync(existing => existing.Id == refund.PaymentId, cancellationToken);
+        var returnRequest = refund.ReturnRequestId.HasValue
+            ? await dbContext.ReturnRequests.SingleOrDefaultAsync(existing => existing.Id == refund.ReturnRequestId.Value, cancellationToken)
+            : null;
+
+        var completionResult = await CompleteRefundAccountingAsync(
+            refund,
+            payment,
+            order,
+            returnRequest,
+            request.ProviderRefundReference,
+            request.ConfirmedAtUtc,
+            cancellationToken);
+        if (completionResult.IsFailure)
+        {
+            return completionResult;
+        }
+
+        await auditLogService.RecordAsync(
+            new CreateAuditLogEntry(
+                request.ActorUserId.ToString(),
+                request.ActorRole,
+                "ManualProviderRefundConfirmed",
+                "Refund",
+                refund.Id.ToString(),
+                JsonSerializer.Serialize(new { status = RefundStatus.Processing.ToString() }),
+                JsonSerializer.Serialize(new { status = RefundStatus.Refunded.ToString(), amount = refund.Amount, providerRefundReference = request.ProviderRefundReference }),
+                request.Reason,
+                request.IpAddress),
+            cancellationToken);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Result<RefundResult>.Success(Map(refund));
+    }
+
+    private async Task<Result<RefundResult>> CompleteRefundAccountingAsync(
+        Refund refund,
+        Payment payment,
+        Order order,
+        ReturnRequest? returnRequest,
+        string providerRefundReference,
+        DateTimeOffset refundedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            refund.MarkRefunded(providerRefundReference, refundedAtUtc);
+            TrackLatestRefundEvent(refund);
+            await CreateLedgerReversalsAndAdjustBalancesAsync(refund, payment, order, refundedAtUtc, cancellationToken);
+            var totalRefunded = await TotalRefundedOrPendingAsync(payment.Id, refund.Id, cancellationToken) + refund.Amount;
+            payment.ApplyRefund(totalRefunded, refundedAtUtc);
+            if (payment.Status == PaymentStatus.Refunded)
+            {
+                order.ChangeStatus(OrderStatus.Refunded, refundedAtUtc, "RefundApproved");
+                TrackLatestOrderStatusHistory(order);
+            }
+
+            if (returnRequest is not null)
+            {
+                returnRequest.MarkRefunded(refundedAtUtc);
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException or ArgumentOutOfRangeException)
+        {
+            return Validation("refund", exception.Message);
+        }
+
         return Result<RefundResult>.Success(Map(refund));
     }
 
@@ -236,55 +387,60 @@ public sealed class EfRefundWorkflowService(
         var platformDebit = RoundMoney(platformOriginal * ratio);
         var providerFeeCredit = RoundMoney(providerFeeOriginal * ratio);
 
+        var refundIssuedEntry = new LedgerEntry(
+            order.Id,
+            null,
+            order.SellerId,
+            order.BuyerId,
+            payment.Id,
+            LedgerEntryType.RefundIssued,
+            refund.Amount,
+            refund.Currency,
+            LedgerDirection.Debit,
+            $"Refund issued for refund {refund.Id}.",
+            createdAtUtc);
+        var sellerRefundReversalEntry = new LedgerEntry(
+            order.Id,
+            null,
+            order.SellerId,
+            order.BuyerId,
+            payment.Id,
+            LedgerEntryType.RefundReversal,
+            sellerDebit,
+            refund.Currency,
+            LedgerDirection.Debit,
+            "Seller balance refund reversal.",
+            createdAtUtc);
+        var platformRefundReversalEntry = new LedgerEntry(
+            order.Id,
+            null,
+            order.SellerId,
+            order.BuyerId,
+            payment.Id,
+            LedgerEntryType.RefundReversal,
+            platformDebit,
+            refund.Currency,
+            LedgerDirection.Debit,
+            "Platform commission refund reversal.",
+            createdAtUtc);
+        var providerFeeRefundReversalEntry = new LedgerEntry(
+            order.Id,
+            null,
+            order.SellerId,
+            order.BuyerId,
+            payment.Id,
+            LedgerEntryType.RefundReversal,
+            providerFeeCredit,
+            refund.Currency,
+            LedgerDirection.Credit,
+            "Payment provider fee refund reversal.",
+            createdAtUtc);
+
         dbContext.LedgerEntries.AddRange(
-            new LedgerEntry(
-                order.Id,
-                null,
-                order.SellerId,
-                order.BuyerId,
-                payment.Id,
-                LedgerEntryType.RefundIssued,
-                refund.Amount,
-                refund.Currency,
-                LedgerDirection.Debit,
-                $"Refund issued for refund {refund.Id}.",
-                createdAtUtc),
-            new LedgerEntry(
-                order.Id,
-                null,
-                order.SellerId,
-                order.BuyerId,
-                payment.Id,
-                LedgerEntryType.RefundReversal,
-                sellerDebit,
-                refund.Currency,
-                LedgerDirection.Debit,
-                "Seller balance refund reversal.",
-                createdAtUtc),
-            new LedgerEntry(
-                order.Id,
-                null,
-                order.SellerId,
-                order.BuyerId,
-                payment.Id,
-                LedgerEntryType.RefundReversal,
-                platformDebit,
-                refund.Currency,
-                LedgerDirection.Debit,
-                "Platform commission refund reversal.",
-                createdAtUtc),
-            new LedgerEntry(
-                order.Id,
-                null,
-                order.SellerId,
-                order.BuyerId,
-                payment.Id,
-                LedgerEntryType.RefundReversal,
-                providerFeeCredit,
-                refund.Currency,
-                LedgerDirection.Credit,
-                "Payment provider fee refund reversal.",
-                createdAtUtc));
+            refundIssuedEntry,
+            sellerRefundReversalEntry,
+            platformRefundReversalEntry,
+            providerFeeRefundReversalEntry);
 
         var balance = await dbContext.SellerBalances.SingleOrDefaultAsync(
             existing => existing.SellerId == order.SellerId && existing.Currency == refund.Currency,
@@ -297,7 +453,139 @@ public sealed class EfRefundWorkflowService(
 
         if (sellerDebit > 0)
         {
-            balance.ApplyRefundDebit(sellerDebit);
+            var unappliedDebit = await AdjustPayoutsForRefundAsync(
+                refund,
+                payment,
+                order,
+                sellerRefundReversalEntry.Id,
+                balance,
+                sellerDebit,
+                createdAtUtc,
+                cancellationToken);
+
+            if (unappliedDebit > 0)
+            {
+                balance.ApplyRefundDebit(unappliedDebit);
+            }
+        }
+    }
+
+    private async Task<decimal> AdjustPayoutsForRefundAsync(
+        Refund refund,
+        Payment payment,
+        Order order,
+        Guid sellerRefundReversalEntryId,
+        SellerBalance balance,
+        decimal sellerDebit,
+        DateTimeOffset createdAtUtc,
+        CancellationToken cancellationToken)
+    {
+        var remaining = sellerDebit;
+        var adjustableStatuses = new[]
+        {
+            SellerPayoutStatus.Pending,
+            SellerPayoutStatus.OnHold,
+            SellerPayoutStatus.Available
+        };
+
+        var payouts = await dbContext.SellerPayouts
+            .Include(payout => payout.Items)
+            .Where(payout => payout.SellerId == order.SellerId
+                && payout.Currency == refund.Currency
+                && adjustableStatuses.Contains(payout.Status)
+                && payout.Items.Any(item => item.PaymentId == payment.Id || item.OrderId == order.Id))
+            .OrderBy(payout => payout.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        foreach (var payout in payouts)
+        {
+            if (remaining <= 0)
+            {
+                break;
+            }
+
+            foreach (var item in payout.Items
+                .Where(item => (item.PaymentId == payment.Id || item.OrderId == order.Id) && item.NetAmount > 0)
+                .OrderBy(item => item.CreatedAtUtc))
+            {
+                if (remaining <= 0)
+                {
+                    break;
+                }
+
+                var adjustmentAmount = RoundMoney(Math.Min(item.NetAmount, remaining));
+                if (adjustmentAmount <= 0)
+                {
+                    continue;
+                }
+
+                var payoutStatus = payout.Status;
+                item.ApplyAdjustment(adjustmentAmount);
+                payout.ApplyAdjustment(adjustmentAmount, createdAtUtc);
+                DebitBalanceForPayoutStatus(balance, payoutStatus, adjustmentAmount);
+
+                dbContext.SellerPayoutAdjustments.Add(new SellerPayoutAdjustment(
+                    payout.Id,
+                    item.Id,
+                    refund.Id,
+                    sellerRefundReversalEntryId,
+                    adjustmentAmount,
+                    refund.Currency,
+                    "RefundPayoutReduction",
+                    createdAtUtc,
+                    $"Refund {refund.Id} reduced unpaid payout item {item.Id}."));
+
+                remaining = RoundMoney(remaining - adjustmentAmount);
+            }
+        }
+
+        if (remaining <= 0)
+        {
+            return 0m;
+        }
+
+        var terminalPayout = await dbContext.SellerPayouts
+            .Include(payout => payout.Items)
+            .Where(payout => payout.SellerId == order.SellerId
+                && payout.Currency == refund.Currency
+                && (payout.Status == SellerPayoutStatus.Processing || payout.Status == SellerPayoutStatus.PaidOut)
+                && payout.Items.Any(item => item.PaymentId == payment.Id || item.OrderId == order.Id))
+            .OrderByDescending(payout => payout.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (terminalPayout is not null)
+        {
+            dbContext.SellerPayoutAdjustments.Add(new SellerPayoutAdjustment(
+                terminalPayout.Id,
+                null,
+                refund.Id,
+                sellerRefundReversalEntryId,
+                remaining,
+                refund.Currency,
+                "RecoveryRequired",
+                createdAtUtc,
+                $"Refund {refund.Id} occurred after payout {terminalPayout.Id} reached {terminalPayout.Status}."));
+        }
+
+        return remaining;
+    }
+
+    private static void DebitBalanceForPayoutStatus(
+        SellerBalance balance,
+        SellerPayoutStatus payoutStatus,
+        decimal amount)
+    {
+        if (payoutStatus == SellerPayoutStatus.Available)
+        {
+            balance.DebitAvailable(amount);
+        }
+        else if (payoutStatus == SellerPayoutStatus.OnHold)
+        {
+            balance.DebitHeld(amount);
+        }
+        else
+        {
+            balance.DebitPending(amount);
         }
     }
 
@@ -356,6 +644,33 @@ public sealed class EfRefundWorkflowService(
         if (request.ActorUserId == Guid.Empty)
         {
             failures.Add(new ValidationFailure("actorUserId", "Actor user id is required."));
+        }
+
+        return failures;
+    }
+
+    private static List<ValidationFailure> ValidateManualProviderConfirmationRequest(
+        ConfirmManualProviderRefundWorkflowRequest request)
+    {
+        var failures = new List<ValidationFailure>();
+        if (request.RefundId == Guid.Empty)
+        {
+            failures.Add(new ValidationFailure("refundId", "Refund id is required."));
+        }
+
+        if (request.ActorUserId == Guid.Empty)
+        {
+            failures.Add(new ValidationFailure("actorUserId", "Actor user id is required."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ProviderRefundReference))
+        {
+            failures.Add(new ValidationFailure("providerRefundReference", "Provider refund reference is required."));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            failures.Add(new ValidationFailure("reason", "Manual refund confirmation reason is required."));
         }
 
         return failures;

@@ -1,11 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using Swyftly.Application.Advertising;
 using Swyftly.Application.Common.Errors;
 using Swyftly.Application.Common.Results;
 using Swyftly.Application.Common.Validation;
 using Swyftly.Application.Ledger;
 using Swyftly.Application.Payments;
+using Swyftly.Domain.Carts;
 using Swyftly.Domain.Inventory;
 using Swyftly.Domain.Orders;
 using Swyftly.Domain.Payments;
@@ -51,6 +53,12 @@ public sealed class EfPaymentService(
                 Error.Conflict("Payments.OrderNotPendingPayment", "Only pending-payment orders can start payment."));
         }
 
+        var existingActivePayment = await FindActivePaymentAsync(order.Id, cancellationToken);
+        if (existingActivePayment is not null)
+        {
+            return Result<PaymentInitiationResponse>.Success(Map(existingActivePayment));
+        }
+
         var now = timeProvider.GetUtcNow();
         var payment = new Payment(
             order.Id,
@@ -60,7 +68,22 @@ public sealed class EfPaymentService(
             _paymentOptions.DefaultCurrency,
             now);
         dbContext.Payments.Add(payment);
-        await dbContext.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            dbContext.Entry(payment).State = EntityState.Detached;
+                existingActivePayment = await FindActivePaymentAsync(order.Id, cancellationToken);
+                if (existingActivePayment is not null)
+                {
+                    return Result<PaymentInitiationResponse>.Success(Map(existingActivePayment));
+                }
+
+            throw;
+        }
 
         var providerResult = await paymentProvider.InitializePaymentAsync(
             new PaymentInitiationRequest(
@@ -69,8 +92,8 @@ public sealed class EfPaymentService(
                 order.TotalAmount,
                 _paymentOptions.DefaultCurrency,
                 $"Swyftly order {order.Id}",
-                new Uri(_paymentOptions.SuccessRedirectUrl),
-                new Uri(_paymentOptions.FailureRedirectUrl),
+                AppendQueryParameter(new Uri(_paymentOptions.SuccessRedirectUrl), "orderId", order.Id.ToString()),
+                AppendQueryParameter(new Uri(_paymentOptions.FailureRedirectUrl), "orderId", order.Id.ToString()),
                 new Dictionary<string, string>
                 {
                     ["orderId"] = order.Id.ToString(),
@@ -86,8 +109,9 @@ public sealed class EfPaymentService(
         }
 
         payment.SetProviderReference(providerResult.Value.ProviderReference, timeProvider.GetUtcNow());
+        payment.SetCheckoutUrl(providerResult.Value.CheckoutUrl, timeProvider.GetUtcNow());
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Result<PaymentInitiationResponse>.Success(Map(payment, providerResult.Value.CheckoutUrl));
+        return Result<PaymentInitiationResponse>.Success(Map(payment));
     }
 
     public async Task<Result<PaymentWebhookProcessingResult>> ProcessWebhookAsync(
@@ -144,15 +168,24 @@ public sealed class EfPaymentService(
             parsedEvent.Provider,
             parsedEvent.EventId,
             parsedEvent.EventType,
-            parsedEvent.Payload,
+            PaymentWebhookPayloadSanitizer.Sanitize(parsedEvent.Provider, parsedEvent.Payload),
             now);
         dbContext.PaymentEvents.Add(paymentEvent);
 
         if (payment is null)
         {
             paymentEvent.MarkFailed("Payment was not found for provider reference.", now);
-            await dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            try
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch (DbUpdateException exception) when (IsDuplicatePaymentEventViolation(exception))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return await ReturnExistingPaymentEventResultAsync(parsedEvent, cancellationToken);
+            }
+
             return Result<PaymentWebhookProcessingResult>.Failure(
                 Error.NotFound("Payments.PaymentNotFound", "Payment was not found for provider reference."));
         }
@@ -161,18 +194,62 @@ public sealed class EfPaymentService(
             .Include(order => order.Items)
             .SingleAsync(order => order.Id == payment.OrderId, cancellationToken);
 
-        if (IsPaidStatus(parsedEvent.Status))
+        var providerPayloadMismatch = GetProviderPayloadMismatch(payment, parsedEvent);
+        if (providerPayloadMismatch is not null)
         {
-            await ProcessSuccessfulPaymentAsync(payment, order, now, cancellationToken);
+            paymentEvent.MarkFailed(providerPayloadMismatch, now);
+        }
+        else if (IsPaidStatus(parsedEvent.Status))
+        {
+            if (payment.Status is PaymentStatus.Failed or PaymentStatus.Cancelled || order.Status == OrderStatus.Cancelled)
+            {
+                paymentEvent.MarkFailed("Paid webhook ignored because payment or order is already terminal.", now);
+            }
+            else
+            {
+                await ProcessSuccessfulPaymentAsync(payment, order, now, cancellationToken);
+                paymentEvent.MarkProcessed(payment.Id, now);
+            }
+        }
+        else if (IsAuthorizedStatus(parsedEvent.Status))
+        {
+            if (payment.Status is PaymentStatus.Pending or PaymentStatus.Authorized)
+            {
+                payment.MarkAuthorized(now);
+                paymentEvent.MarkProcessed(payment.Id, now);
+            }
+            else
+            {
+                paymentEvent.MarkFailed("Authorized webhook ignored because payment is already terminal.", now);
+            }
         }
         else if (IsFailedStatus(parsedEvent.Status))
         {
-            await ProcessFailedPaymentAsync(payment, order, now, cancellationToken);
+            if (payment.Status is PaymentStatus.Paid or PaymentStatus.Refunded or PaymentStatus.PartiallyRefunded || order.Status is OrderStatus.Paid or OrderStatus.Processing or OrderStatus.ReadyToShip or OrderStatus.Shipped or OrderStatus.Delivered or OrderStatus.Completed or OrderStatus.Refunded)
+            {
+                paymentEvent.MarkFailed("Failed webhook ignored because payment or order is already settled.", now);
+            }
+            else
+            {
+                await ProcessFailedPaymentAsync(payment, order, now, cancellationToken);
+                paymentEvent.MarkProcessed(payment.Id, now);
+            }
+        }
+        else
+        {
+            paymentEvent.MarkProcessed(payment.Id, now);
         }
 
-        paymentEvent.MarkProcessed(payment.Id, now);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (IsDuplicatePaymentEventViolation(exception))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return await ReturnExistingPaymentEventResultAsync(parsedEvent, cancellationToken);
+        }
 
         return Result<PaymentWebhookProcessingResult>.Success(new PaymentWebhookProcessingResult(
             paymentEvent.Id,
@@ -217,6 +294,13 @@ public sealed class EfPaymentService(
         }
 
         await adTrackingService.AttributeOrderConversionsAsync(order.Id, cancellationToken);
+
+        var cart = await dbContext.Carts
+            .Include(cart => cart.Items)
+            .SingleOrDefaultAsync(
+                cart => cart.Id == order.CartId && cart.Status == CartStatus.Active,
+                cancellationToken);
+        cart?.Clear();
     }
 
     private async Task ProcessFailedPaymentAsync(
@@ -246,7 +330,7 @@ public sealed class EfPaymentService(
         }
     }
 
-    private static PaymentInitiationResponse Map(Payment payment, Uri? checkoutUrl) =>
+    private static PaymentInitiationResponse Map(Payment payment) =>
         new(
             payment.Id,
             payment.OrderId,
@@ -255,7 +339,44 @@ public sealed class EfPaymentService(
             payment.Amount,
             payment.Currency,
             payment.Status.ToString(),
-            checkoutUrl);
+            TryCreateUri(payment.CheckoutUrl));
+
+    private async Task<Payment?> FindActivePaymentAsync(
+        Guid orderId,
+        CancellationToken cancellationToken) =>
+        await dbContext.Payments
+            .Where(payment => payment.OrderId == orderId
+                && payment.Status != PaymentStatus.Failed
+                && payment.Status != PaymentStatus.Cancelled)
+            .OrderByDescending(payment => payment.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private async Task<Result<PaymentWebhookProcessingResult>> ReturnExistingPaymentEventResultAsync(
+        PaymentWebhookEvent parsedEvent,
+        CancellationToken cancellationToken)
+    {
+        dbContext.ChangeTracker.Clear();
+
+        var existingEvent = await dbContext.PaymentEvents
+            .AsNoTracking()
+            .SingleAsync(
+                paymentEvent => paymentEvent.Provider == parsedEvent.Provider
+                    && paymentEvent.ProviderEventId == parsedEvent.EventId,
+                cancellationToken);
+
+        return Result<PaymentWebhookProcessingResult>.Success(new PaymentWebhookProcessingResult(
+            existingEvent.Id,
+            existingEvent.PaymentId,
+            existingEvent.ProviderEventId,
+            existingEvent.ProcessingStatus.ToString(),
+            "Unchanged",
+            null));
+    }
+
+    private static bool IsDuplicatePaymentEventViolation(DbUpdateException exception) =>
+        exception.InnerException is PostgresException postgresException
+        && postgresException.SqlState == PostgresErrorCodes.UniqueViolation
+        && exception.Entries.Any(entry => entry.Entity is PaymentEvent);
 
     private void TrackLatestOrderStatusHistory(Order order)
     {
@@ -268,9 +389,48 @@ public sealed class EfPaymentService(
 
     private static bool IsPaidStatus(string status) =>
         string.Equals(status, "Paid", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(status, "Authorized", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(status, "Captured", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, "Succeeded", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, "Complete", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAuthorizedStatus(string status) =>
+        string.Equals(status, "Authorized", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsFailedStatus(string status) =>
         string.Equals(status, "Failed", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(status, "Cancelled", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(status, "Cancelled", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, "Canceled", StringComparison.OrdinalIgnoreCase);
+
+    private static string? GetProviderPayloadMismatch(Payment payment, PaymentWebhookEvent parsedEvent)
+    {
+        if (!string.Equals(payment.ProviderReference, parsedEvent.ProviderReference, StringComparison.Ordinal))
+        {
+            return "Webhook provider reference does not match the local payment.";
+        }
+
+        if (parsedEvent.Amount.HasValue
+            && decimal.Round(parsedEvent.Amount.Value, 2) != decimal.Round(payment.Amount, 2))
+        {
+            return "Webhook amount does not match the local payment amount.";
+        }
+
+        if (!string.IsNullOrWhiteSpace(parsedEvent.Currency)
+            && !string.Equals(parsedEvent.Currency, payment.Currency, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Webhook currency does not match the local payment currency.";
+        }
+
+        return null;
+    }
+
+    private static Uri? TryCreateUri(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            ? uri
+            : null;
+
+    private static Uri AppendQueryParameter(Uri uri, string name, string value)
+    {
+        var separator = string.IsNullOrEmpty(uri.Query) ? "?" : "&";
+        return new Uri($"{uri}{separator}{Uri.EscapeDataString(name)}={Uri.EscapeDataString(value)}");
+    }
 }

@@ -5,34 +5,75 @@ import { getApiErrorMessage } from '../auth/api-error';
 import { ProductCardComponent } from '../shop/product-card.component';
 import { ProductSearchItemResponse, PublicCategoryResponse } from '../shop/public-catalog.models';
 import { PublicCatalogService } from '../shop/public-catalog.service';
+import { EmptyStateComponent } from '../shared/ui/empty-state.component';
+import { PageHeaderComponent } from '../shared/ui/page-header.component';
+import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
+import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
 @Component({
   selector: 'app-category-page',
-  imports: [MatButtonModule, ProductCardComponent, RouterLink],
+  imports: [
+    EmptyStateComponent,
+    MatButtonModule,
+    PageHeaderComponent,
+    ProductCardComponent,
+    RouterLink,
+    StatusBadgeComponent,
+    UiAlertComponent
+  ],
   template: `
     <section class="page shop-surface">
       <a class="admin-back-link" routerLink="/shop">Back to shop</a>
 
-      <div class="page-header">
-        <span class="eyebrow">Category</span>
-        <h1>{{ category()?.name ?? 'Category' }}</h1>
-        <p>{{ categoryPath() }}</p>
-      </div>
+      <section class="category-hero">
+        <div>
+          <app-page-header
+            eyebrow="Category edit"
+            [heading]="category()?.name ?? 'Category'"
+            [description]="categoryHeroCopy()"
+          />
+          <div class="category-hero-meta">
+            <app-status-badge [label]="categoryPath()" tone="accent" />
+            <app-status-badge [label]="products().length + ' listed here'" />
+          </div>
+        </div>
+      </section>
+
+      @if (childCategories().length > 0) {
+        <section class="subcategory-strip" aria-label="Subcategories">
+          <span>Explore within {{ category()?.name }}</span>
+          <div>
+            @for (child of childCategories(); track child.categoryId) {
+              <a mat-stroked-button [routerLink]="['/category', child.slug]">{{ child.name }}</a>
+            }
+          </div>
+        </section>
+      }
 
       @if (isLoading()) {
         <div class="route-card">Loading category products...</div>
       } @else {
         @if (errorMessage()) {
-          <p class="auth-alert error" role="alert">{{ errorMessage() }}</p>
+          <app-ui-alert tone="error">{{ errorMessage() }}</app-ui-alert>
         }
 
         @if (products().length === 0 && !errorMessage()) {
-          <div class="route-card">
-            <span class="status-pill">Empty</span>
-            <h2>No products in this category</h2>
-            <p>New published products will appear here after review.</p>
-          </div>
+          <app-empty-state
+            eyebrow="No products"
+            heading="No products in this category"
+            message="Published products will appear here when verified sellers list items in this edit."
+          >
+            <a mat-flat-button routerLink="/shop">Browse all products</a>
+          </app-empty-state>
         } @else {
+          <div class="category-product-header">
+            <div>
+              <h2>Products in this edit</h2>
+              <p>Listings are shown with seller, stock, and price context.</p>
+            </div>
+            <a mat-stroked-button routerLink="/shop">Adjust filters</a>
+          </div>
+
           <div class="product-grid">
             @for (product of products(); track product.productId) {
               <app-product-card [product]="product"></app-product-card>
@@ -55,18 +96,20 @@ export class CategoryPageComponent implements OnInit {
   protected readonly categoryPath = computed(() => {
     const selected = this.category();
     if (!selected) {
-      return 'Published products by category.';
+      return 'Published products by category';
     }
 
-    const byId = new Map(this.categories().map(category => [category.categoryId, category]));
-    const names: string[] = [];
-    let current: PublicCategoryResponse | undefined = selected;
-    while (current) {
-      names.unshift(current.name);
-      current = current.parentCategoryId ? byId.get(current.parentCategoryId) : undefined;
+    return this.pathForCategory(selected);
+  });
+  protected readonly childCategories = computed(() => {
+    const selected = this.category();
+    if (!selected) {
+      return [];
     }
 
-    return names.join(' > ');
+    return this.categories()
+      .filter(category => category.parentCategoryId === selected.categoryId)
+      .sort((left, right) => left.displayOrder - right.displayOrder || left.name.localeCompare(right.name));
   });
 
   async ngOnInit(): Promise<void> {
@@ -95,5 +138,26 @@ export class CategoryPageComponent implements OnInit {
     } finally {
       this.isLoading.set(false);
     }
+  }
+
+  protected categoryHeroCopy(): string {
+    const selected = this.category();
+    if (!selected) {
+      return 'Explore marketplace products grouped by category, seller, price, and stock signals.';
+    }
+
+    return `Browse ${selected.name.toLowerCase()} with seller and stock details visible before checkout.`;
+  }
+
+  private pathForCategory(selected: PublicCategoryResponse): string {
+    const byId = new Map(this.categories().map(category => [category.categoryId, category]));
+    const names: string[] = [];
+    let current: PublicCategoryResponse | undefined = selected;
+    while (current) {
+      names.unshift(current.name);
+      current = current.parentCategoryId ? byId.get(current.parentCategoryId) : undefined;
+    }
+
+    return names.join(' > ');
   }
 }

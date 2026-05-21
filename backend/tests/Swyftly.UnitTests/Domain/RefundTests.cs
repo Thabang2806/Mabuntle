@@ -50,6 +50,23 @@ public class RefundTests
     }
 
     [Fact]
+    public void Payment_MarkPaid_RejectsFailedCancelledAndRefundedStates()
+    {
+        var failed = new Payment(Guid.NewGuid(), Guid.NewGuid(), "Fake", 1000m, "ZAR", DateTimeOffset.UtcNow);
+        failed.MarkFailed(DateTimeOffset.UtcNow);
+        Assert.Throws<InvalidOperationException>(() => failed.MarkPaid(DateTimeOffset.UtcNow));
+
+        var cancelled = new Payment(Guid.NewGuid(), Guid.NewGuid(), "Fake", 1000m, "ZAR", DateTimeOffset.UtcNow);
+        cancelled.MarkCancelled(DateTimeOffset.UtcNow);
+        Assert.Throws<InvalidOperationException>(() => cancelled.MarkPaid(DateTimeOffset.UtcNow));
+
+        var refunded = new Payment(Guid.NewGuid(), Guid.NewGuid(), "Fake", 1000m, "ZAR", DateTimeOffset.UtcNow);
+        refunded.MarkPaid(DateTimeOffset.UtcNow);
+        refunded.ApplyRefund(1000m, DateTimeOffset.UtcNow);
+        Assert.Throws<InvalidOperationException>(() => refunded.MarkPaid(DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
     public void SellerBalance_ApplyRefundDebit_ConsumesHeldThenPendingAndCanGoNegative()
     {
         var balance = new SellerBalance(Guid.NewGuid(), "ZAR");

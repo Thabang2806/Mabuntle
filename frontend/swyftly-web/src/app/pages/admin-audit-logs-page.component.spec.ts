@@ -56,6 +56,30 @@ describe('AdminAuditLogsPageComponent', () => {
       pageSize: 50
     }));
   });
+
+  it('clears filters and reloads audit logs', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const actionInput = (fixture.nativeElement as HTMLElement).querySelector('input[formControlName="actionType"]') as HTMLInputElement;
+    actionInput.value = 'SellerApproved';
+    actionInput.dispatchEvent(new Event('input'));
+
+    const clearButton = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Clear'));
+    clearButton?.dispatchEvent(new Event('click'));
+
+    await fixture.whenStable();
+
+    expect(auditLogService.search.calls.mostRecent().args[0]).toEqual(jasmine.objectContaining({
+      actionType: '',
+      entityType: '',
+      entityId: '',
+      actorUserId: '',
+      pageSize: 50
+    }));
+  });
 });
 
 function createSearchResponse(): AdminAuditLogSearchResponse {

@@ -13,6 +13,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { RouterLink } from '@angular/router';
 import { getApiErrorMessage } from '../auth/api-error';
+import { SellerWorkspaceNavComponent } from '../seller/seller-workspace-nav.component';
 import {
   SellerOnboardingResponse,
   UpdateSellerAddressRequest,
@@ -21,27 +22,38 @@ import {
   UpdateSellerStorefrontRequest
 } from '../seller/seller-onboarding.models';
 import { SellerOnboardingService } from '../seller/seller-onboarding.service';
+import { DashboardCardComponent } from '../shared/ui/dashboard-card.component';
+import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
 
 type WizardStep = 0 | 1 | 2 | 3 | 4;
 
 @Component({
   selector: 'app-seller-page',
   imports: [
+    DashboardCardComponent,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
     ReactiveFormsModule,
-    RouterLink
+    RouterLink,
+    SellerWorkspaceNavComponent,
+    StatusBadgeComponent
   ],
   template: `
     <section class="page seller-onboarding">
+      <app-seller-workspace-nav />
+
       <div class="page-header">
-        <span class="eyebrow">Seller onboarding</span>
+        <span class="eyebrow">{{ isVerified() ? 'Seller dashboard' : 'Seller onboarding' }}</span>
         <h1>Seller workspace</h1>
-        <p>Complete the required setup details before submitting your seller profile for review.</p>
+        <p>{{ isVerified() ? 'Manage store operations, products, payouts, support, ads, and analytics.' : 'Complete the required setup details before submitting your seller profile for review.' }}</p>
         <div class="auth-actions">
           <a mat-stroked-button routerLink="/seller/products">Products</a>
+          <a mat-stroked-button routerLink="/seller/orders">Orders</a>
+          <a mat-stroked-button routerLink="/seller/returns">Returns</a>
+          <a mat-stroked-button routerLink="/seller/payouts">Payouts</a>
+          <a mat-stroked-button routerLink="/seller/support">Support</a>
           <a mat-stroked-button routerLink="/seller/ads">Ads</a>
           <a mat-stroked-button routerLink="/seller/analytics">Analytics</a>
         </div>
@@ -56,6 +68,32 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
 
       @if (isLoading()) {
         <div class="route-card">Loading seller onboarding...</div>
+      } @else if (isVerified()) {
+        <div class="seller-dashboard">
+          @if (errorMessage()) {
+            <p class="auth-alert error" role="alert">{{ errorMessage() }}</p>
+          }
+
+          <section class="seller-dashboard-hero">
+            <div>
+              <app-status-badge label="Verified seller" tone="success" />
+              <h2>{{ onboarding()?.storefront?.storeName ?? onboarding()?.profile?.displayName ?? 'Seller store' }}</h2>
+              <p>Use this workspace for daily store operations. Payout actions are read-only for sellers; admin finance controls stay in the admin area.</p>
+            </div>
+            <div class="seller-dashboard-status">
+              <strong>{{ completionLabel() }}</strong>
+              <span>{{ onboarding()?.storefront?.isPublished ? 'Storefront published' : 'Storefront not published' }}</span>
+            </div>
+          </section>
+
+          <div class="seller-dashboard-grid">
+            @for (card of dashboardCards; track card.route) {
+              <app-dashboard-card [eyebrow]="card.eyebrow" [heading]="card.heading" [description]="card.description">
+                <a mat-stroked-button [routerLink]="card.route">{{ card.action }}</a>
+              </app-dashboard-card>
+            }
+          </div>
+        </div>
       } @else {
         @if (errorMessage()) {
           <p class="auth-alert error" role="alert">{{ errorMessage() }}</p>
@@ -228,8 +266,8 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
               }
               @case (3) {
                 <form [formGroup]="payoutForm" (ngSubmit)="savePayout()" class="wizard-form" novalidate>
-                  <h2>Payout placeholder</h2>
-                  <p>No bank details are stored here. Use a provider reference or placeholder token for now.</p>
+                  <h2>Payout setup</h2>
+                  <p>No bank details are stored here. Use a provider reference or setup token for now.</p>
                   <mat-form-field appearance="outline">
                     <mat-label>Payout provider reference</mat-label>
                     <input matInput formControlName="payoutProviderReference" />
@@ -293,6 +331,59 @@ export class SellerPageComponent implements OnInit {
     { index: 3, label: 'Payout' },
     { index: 4, label: 'Review' }
   ];
+
+  protected readonly dashboardCards: readonly {
+    eyebrow: string;
+    heading: string;
+    description: string;
+    route: string;
+    action: string;
+  }[] = [
+    {
+      eyebrow: 'Catalog',
+      heading: 'Products',
+      description: 'Manage drafts, review submissions, images, variants, stock, and listing quality.',
+      route: '/seller/products',
+      action: 'Manage products'
+    },
+    {
+      eyebrow: 'Fulfilment',
+      heading: 'Orders',
+      description: 'Review seller orders, add tracking, and move orders through manual fulfilment.',
+      route: '/seller/orders',
+      action: 'View orders'
+    },
+    {
+      eyebrow: 'After-sales',
+      heading: 'Returns',
+      description: 'Respond to return requests and keep buyer-facing return decisions clear.',
+      route: '/seller/returns',
+      action: 'Review returns'
+    },
+    {
+      eyebrow: 'Finance',
+      heading: 'Payouts',
+      description: 'Read seller balances and payout history without exposing admin finance controls.',
+      route: '/seller/payouts',
+      action: 'View payouts'
+    },
+    {
+      eyebrow: 'Support',
+      heading: 'Support',
+      description: 'Create and follow seller support tickets linked to orders, products, or operations.',
+      route: '/seller/support',
+      action: 'Open support'
+    },
+    {
+      eyebrow: 'Growth',
+      heading: 'Ads and analytics',
+      description: 'Access existing advertising and aggregate analytics tools after core operations.',
+      route: '/seller/analytics',
+      action: 'View analytics'
+    }
+  ];
+
+  protected readonly isVerified = computed(() => this.onboarding()?.verificationStatus === 'Verified');
 
   protected readonly completionLabel = computed(() => {
     const onboarding = this.onboarding();
@@ -452,7 +543,7 @@ export class SellerPageComponent implements OnInit {
       {
         label: 'Payout',
         complete: onboarding?.isPayoutPlaceholderComplete ?? false,
-        summary: onboarding?.payout?.payoutProviderReference ?? 'A provider reference placeholder is required.'
+        summary: onboarding?.payout?.payoutProviderReference ?? 'A provider reference is required.'
       }
     ];
   }

@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using System.Security.Claims;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Swyftly.Api.Security;
 using Swyftly.Application.Advertising;
@@ -21,6 +23,7 @@ public static class AdTrackingEndpoints
         publicGroup.MapPost("/impressions", RecordImpressionAsync)
             .WithName("RecordAdImpression")
             .WithSummary("Records an ad impression when a promoted product is rendered.")
+            .RequireRateLimiting(SwyftlyRateLimitPolicies.AdImpression)
             .Produces<AdTrackingResult>(StatusCodes.Status202Accepted);
 
         publicGroup.MapPost("/clicks", RecordClickAsync)
@@ -42,6 +45,7 @@ public static class AdTrackingEndpoints
 
     private static async Task<IResult> RecordImpressionAsync(
         TrackAdImpressionApiRequest request,
+        HttpContext httpContext,
         IAdTrackingService adTrackingService,
         CancellationToken cancellationToken)
     {
@@ -50,7 +54,7 @@ public static class AdTrackingEndpoints
                 request.AdCampaignId,
                 request.ProductId,
                 request.Placement,
-                request.AnonymousVisitorId),
+                ResolveVisitorId(request.AnonymousVisitorId, httpContext)),
             cancellationToken);
 
         return HttpResults.Accepted(value: result);
@@ -59,6 +63,7 @@ public static class AdTrackingEndpoints
     private static async Task<IResult> RecordClickAsync(
         TrackAdClickApiRequest request,
         ClaimsPrincipal principal,
+        HttpContext httpContext,
         SwyftlyDbContext dbContext,
         IAdTrackingService adTrackingService,
         CancellationToken cancellationToken)
@@ -72,7 +77,7 @@ public static class AdTrackingEndpoints
                 request.AdCampaignId,
                 request.ProductId,
                 buyer?.Id,
-                request.AnonymousVisitorId),
+                ResolveVisitorId(request.AnonymousVisitorId, httpContext)),
             cancellationToken);
 
         return HttpResults.Accepted(value: result);
@@ -128,6 +133,26 @@ public static class AdTrackingEndpoints
             title: "AdTracking.CampaignNotFound",
             detail: "Ad campaign was not found.",
             statusCode: StatusCodes.Status404NotFound);
+
+    private static string? ResolveVisitorId(string? suppliedVisitorId, HttpContext httpContext)
+    {
+        var trimmed = suppliedVisitorId?.Trim();
+        if (!string.IsNullOrWhiteSpace(trimmed))
+        {
+            return trimmed.Length > 128 ? trimmed[..128] : trimmed;
+        }
+
+        var remoteAddress = httpContext.Connection.RemoteIpAddress?.ToString();
+        var userAgent = httpContext.Request.Headers.UserAgent.ToString();
+        if (string.IsNullOrWhiteSpace(remoteAddress) && string.IsNullOrWhiteSpace(userAgent))
+        {
+            return null;
+        }
+
+        var fingerprintSource = $"{remoteAddress}|{userAgent}";
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(fingerprintSource));
+        return $"fp_{Convert.ToHexString(hash)[..32].ToLowerInvariant()}";
+    }
 }
 
 public sealed record TrackAdImpressionApiRequest(

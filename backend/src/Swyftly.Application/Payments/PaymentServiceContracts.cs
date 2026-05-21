@@ -13,6 +13,13 @@ public interface IPaymentService
         CancellationToken cancellationToken = default);
 }
 
+public interface IPaymentWebhookPayloadRetentionService
+{
+    Task<PaymentWebhookPayloadRetentionResult> RedactExpiredPayloadsAsync(
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default);
+}
+
 public sealed record InitiatePaymentRequest(
     Guid BuyerId,
     Guid OrderId);
@@ -39,3 +46,7 @@ public sealed record PaymentWebhookProcessingResult(
     string ProcessingStatus,
     string PaymentStatus,
     string? OrderStatus);
+
+public sealed record PaymentWebhookPayloadRetentionResult(
+    int RedactedCount,
+    DateTimeOffset CutoffUtc);

@@ -37,6 +37,7 @@ public sealed class SellerPayoutItem : Entity
         OrderId = orderId == Guid.Empty ? null : orderId;
         PaymentId = paymentId == Guid.Empty ? null : paymentId;
         Amount = amount;
+        AdjustedAmount = 0m;
         Currency = Required(currency, nameof(currency)).ToUpperInvariant();
         CreatedAtUtc = createdAtUtc;
     }
@@ -51,9 +52,28 @@ public sealed class SellerPayoutItem : Entity
 
     public decimal Amount { get; private set; }
 
+    public decimal AdjustedAmount { get; private set; }
+
+    public decimal NetAmount => Amount - AdjustedAmount;
+
     public string Currency { get; private set; } = string.Empty;
 
     public DateTimeOffset CreatedAtUtc { get; private set; }
+
+    public void ApplyAdjustment(decimal amount)
+    {
+        if (amount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount), "Amount must be positive.");
+        }
+
+        if (amount > NetAmount)
+        {
+            throw new InvalidOperationException("Adjustment cannot exceed the payout item net amount.");
+        }
+
+        AdjustedAmount += amount;
+    }
 
     private static string Required(string? value, string parameterName)
     {

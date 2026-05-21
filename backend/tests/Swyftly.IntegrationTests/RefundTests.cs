@@ -32,7 +32,7 @@ public sealed class RefundTests
         var seed = await SeedPaidOrderAsync(factory, amount: 1000m);
         adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
-            await CreateAndLoginAdminAsync(factory, adminClient));
+            await CreateAndLoginFinanceUserAsync(factory, adminClient, SwyftlyRoles.FinanceOperator));
 
         using var createResponse = await adminClient.PostAsJsonAsync(
             $"/api/admin/orders/{seed.OrderId}/refunds",
@@ -42,6 +42,9 @@ public sealed class RefundTests
         Assert.NotNull(requested);
         Assert.Equal("Requested", requested!.Status);
 
+        adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            await CreateAndLoginFinanceUserAsync(factory, adminClient, SwyftlyRoles.FinanceApprover));
         using var approveResponse = await adminClient.PostAsJsonAsync(
             $"/api/admin/refunds/{requested.RefundId}/approve",
             new ApproveRefundApiRequest("Return approved by admin."));
@@ -55,12 +58,16 @@ public sealed class RefundTests
         var payment = await dbContext.Payments.SingleAsync(payment => payment.Id == seed.PaymentId);
         var order = await dbContext.Orders.SingleAsync(order => order.Id == seed.OrderId);
         var balance = await dbContext.SellerBalances.SingleAsync(balance => balance.SellerId == seed.SellerId);
+        var payout = await dbContext.SellerPayouts.SingleAsync(payout => payout.SellerId == seed.SellerId);
         var refundReversals = await dbContext.LedgerEntries
             .Where(entry => entry.PaymentId == seed.PaymentId && entry.Type == LedgerEntryType.RefundReversal)
             .ToListAsync();
         Assert.Equal(PaymentStatus.Refunded, payment.Status);
         Assert.Equal(OrderStatus.Refunded, order.Status);
         Assert.Equal(0m, balance.PendingBalance);
+        Assert.Equal(0m, payout.Amount);
+        Assert.Equal(SellerPayoutStatus.Reversed, payout.Status);
+        Assert.Equal(1, await dbContext.SellerPayoutAdjustments.CountAsync(adjustment => adjustment.RefundId == approved.RefundId));
         Assert.Contains(refundReversals, entry => entry.Amount == 875m && entry.Direction == LedgerDirection.Debit);
         Assert.Equal(1, await dbContext.AuditLogs.CountAsync(auditLog => auditLog.ActionType == "RefundApproved"));
     }
@@ -73,7 +80,7 @@ public sealed class RefundTests
         var seed = await SeedPaidOrderAsync(factory, amount: 1000m);
         adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
-            await CreateAndLoginAdminAsync(factory, adminClient));
+            await CreateAndLoginFinanceUserAsync(factory, adminClient, SwyftlyRoles.FinanceOperator));
 
         using var createResponse = await adminClient.PostAsJsonAsync(
             $"/api/admin/orders/{seed.OrderId}/refunds",
@@ -82,6 +89,9 @@ public sealed class RefundTests
         var requested = await createResponse.Content.ReadFromJsonAsync<RefundResult>();
         Assert.NotNull(requested);
 
+        adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            await CreateAndLoginFinanceUserAsync(factory, adminClient, SwyftlyRoles.FinanceApprover));
         using var approveResponse = await adminClient.PostAsJsonAsync(
             $"/api/admin/refunds/{requested!.RefundId}/approve",
             new ApproveRefundApiRequest("Partial refund approved by admin."));
@@ -92,15 +102,59 @@ public sealed class RefundTests
         var payment = await dbContext.Payments.SingleAsync(payment => payment.Id == seed.PaymentId);
         var order = await dbContext.Orders.SingleAsync(order => order.Id == seed.OrderId);
         var balance = await dbContext.SellerBalances.SingleAsync(balance => balance.SellerId == seed.SellerId);
+        var payout = await dbContext.SellerPayouts.Include(payout => payout.Items).SingleAsync(payout => payout.SellerId == seed.SellerId);
         Assert.Equal(PaymentStatus.PartiallyRefunded, payment.Status);
         Assert.Equal(OrderStatus.Delivered, order.Status);
         Assert.Equal(437.50m, balance.PendingBalance);
+        Assert.Equal(437.50m, payout.Amount);
+        Assert.Equal(437.50m, payout.Items.Single().AdjustedAmount);
         Assert.Equal(437.50m, await dbContext.LedgerEntries
             .Where(entry => entry.PaymentId == seed.PaymentId
                 && entry.Type == LedgerEntryType.RefundReversal
                 && entry.Description == "Seller balance refund reversal.")
             .Select(entry => entry.Amount)
             .SingleAsync());
+    }
+
+    [Fact]
+    public async Task AdminDuplicateRefundApproval_ReturnsExistingRefundWithoutDuplicateLedgerOrAudit()
+    {
+        await using var factory = new RefundTestFactory();
+        using var adminClient = factory.CreateClient();
+        var seed = await SeedPaidOrderAsync(factory, amount: 1000m);
+        adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            await CreateAndLoginFinanceUserAsync(factory, adminClient, SwyftlyRoles.FinanceOperator));
+        using var createResponse = await adminClient.PostAsJsonAsync(
+            $"/api/admin/orders/{seed.OrderId}/refunds",
+            new CreateRefundApiRequest(500m, "Approved duplicate-check refund."));
+        createResponse.EnsureSuccessStatusCode();
+        var requested = await createResponse.Content.ReadFromJsonAsync<RefundResult>();
+        Assert.NotNull(requested);
+
+        adminClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            await CreateAndLoginFinanceUserAsync(factory, adminClient, SwyftlyRoles.FinanceApprover));
+        using var firstApproveResponse = await adminClient.PostAsJsonAsync(
+            $"/api/admin/refunds/{requested!.RefundId}/approve",
+            new ApproveRefundApiRequest("First approval."));
+        using var secondApproveResponse = await adminClient.PostAsJsonAsync(
+            $"/api/admin/refunds/{requested.RefundId}/approve",
+            new ApproveRefundApiRequest("Duplicate approval."));
+
+        firstApproveResponse.EnsureSuccessStatusCode();
+        secondApproveResponse.EnsureSuccessStatusCode();
+        var first = await firstApproveResponse.Content.ReadFromJsonAsync<RefundResult>();
+        var second = await secondApproveResponse.Content.ReadFromJsonAsync<RefundResult>();
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.Equal(first!.ProviderRefundReference, second!.ProviderRefundReference);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        Assert.Equal(1, await dbContext.LedgerEntries.CountAsync(entry => entry.PaymentId == seed.PaymentId && entry.Type == LedgerEntryType.RefundIssued));
+        Assert.Equal(3, await dbContext.LedgerEntries.CountAsync(entry => entry.PaymentId == seed.PaymentId && entry.Type == LedgerEntryType.RefundReversal));
+        Assert.Equal(1, await dbContext.AuditLogs.CountAsync(auditLog => auditLog.ActionType == "RefundApproved" && auditLog.EntityId == requested.RefundId.ToString()));
     }
 
     private static async Task<SeededRefundOrder> SeedPaidOrderAsync(RefundTestFactory factory, decimal amount)
@@ -121,22 +175,29 @@ public sealed class RefundTests
         var sellerPending = 875m;
         var balance = new SellerBalance(sellerId, "ZAR");
         balance.CreditPending(sellerPending);
+        var buyerPaymentEntry = new LedgerEntry(order.Id, null, sellerId, buyerId, payment.Id, LedgerEntryType.BuyerPaymentReceived, 1000m, "ZAR", LedgerDirection.Credit, "Buyer payment received.", now);
+        var platformCommissionEntry = new LedgerEntry(order.Id, null, sellerId, buyerId, payment.Id, LedgerEntryType.PlatformCommissionRecorded, 100m, "ZAR", LedgerDirection.Credit, "Platform commission recorded.", now);
+        var providerFeeEntry = new LedgerEntry(order.Id, null, sellerId, buyerId, payment.Id, LedgerEntryType.PaymentProviderFeeRecorded, 25m, "ZAR", LedgerDirection.Debit, "Payment provider fee recorded.", now);
+        var sellerPendingEntry = new LedgerEntry(order.Id, null, sellerId, buyerId, payment.Id, LedgerEntryType.SellerPendingBalanceCredited, sellerPending, "ZAR", LedgerDirection.Credit, "Seller pending balance credited.", now);
+        var payout = new SellerPayout(sellerId, sellerPending, "ZAR", now);
+        payout.AddItem(sellerPendingEntry.Id, order.Id, payment.Id, sellerPending, now);
 
         dbContext.Orders.Add(order);
         dbContext.Payments.Add(payment);
         dbContext.SellerBalances.Add(balance);
         dbContext.LedgerEntries.AddRange(
-            new LedgerEntry(order.Id, null, sellerId, buyerId, payment.Id, LedgerEntryType.BuyerPaymentReceived, 1000m, "ZAR", LedgerDirection.Credit, "Buyer payment received.", now),
-            new LedgerEntry(order.Id, null, sellerId, buyerId, payment.Id, LedgerEntryType.PlatformCommissionRecorded, 100m, "ZAR", LedgerDirection.Credit, "Platform commission recorded.", now),
-            new LedgerEntry(order.Id, null, sellerId, buyerId, payment.Id, LedgerEntryType.PaymentProviderFeeRecorded, 25m, "ZAR", LedgerDirection.Debit, "Payment provider fee recorded.", now),
-            new LedgerEntry(order.Id, null, sellerId, buyerId, payment.Id, LedgerEntryType.SellerPendingBalanceCredited, sellerPending, "ZAR", LedgerDirection.Credit, "Seller pending balance credited.", now));
+            buyerPaymentEntry,
+            platformCommissionEntry,
+            providerFeeEntry,
+            sellerPendingEntry);
+        dbContext.SellerPayouts.Add(payout);
         await dbContext.SaveChangesAsync();
         return new SeededRefundOrder(order.Id, payment.Id, sellerId);
     }
 
-    private static async Task<string> CreateAndLoginAdminAsync(RefundTestFactory factory, HttpClient client)
+    private static async Task<string> CreateAndLoginFinanceUserAsync(RefundTestFactory factory, HttpClient client, string role)
     {
-        var email = $"admin-refund-{Guid.NewGuid():N}@example.test";
+        var email = $"finance-refund-{Guid.NewGuid():N}@example.test";
         using (var scope = factory.Services.CreateScope())
         {
             var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
@@ -149,7 +210,7 @@ public sealed class RefundTests
             };
             var createResult = await userManager.CreateAsync(admin, TestPassword);
             Assert.True(createResult.Succeeded, string.Join("; ", createResult.Errors.Select(error => error.Description)));
-            var roleResult = await userManager.AddToRoleAsync(admin, SwyftlyRoles.Admin);
+            var roleResult = await userManager.AddToRoleAsync(admin, role);
             Assert.True(roleResult.Succeeded, string.Join("; ", roleResult.Errors.Select(error => error.Description)));
         }
 

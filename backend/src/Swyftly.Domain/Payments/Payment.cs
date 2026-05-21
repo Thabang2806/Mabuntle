@@ -49,6 +49,8 @@ public sealed class Payment : AuditableEntity
 
     public string? ProviderReference { get; private set; }
 
+    public string? CheckoutUrl { get; private set; }
+
     public decimal Amount { get; private set; }
 
     public string Currency { get; private set; } = string.Empty;
@@ -65,6 +67,12 @@ public sealed class Payment : AuditableEntity
         UpdatedAtUtc = updatedAtUtc;
     }
 
+    public void SetCheckoutUrl(Uri? checkoutUrl, DateTimeOffset updatedAtUtc)
+    {
+        CheckoutUrl = checkoutUrl?.ToString();
+        UpdatedAtUtc = updatedAtUtc;
+    }
+
     public void MarkPaid(DateTimeOffset paidAtUtc)
     {
         if (Status == PaymentStatus.Paid)
@@ -72,7 +80,7 @@ public sealed class Payment : AuditableEntity
             return;
         }
 
-        if (Status is PaymentStatus.Cancelled or PaymentStatus.Refunded or PaymentStatus.PartiallyRefunded)
+        if (Status is PaymentStatus.Failed or PaymentStatus.Cancelled or PaymentStatus.Refunded or PaymentStatus.PartiallyRefunded or PaymentStatus.Disputed)
         {
             throw new InvalidOperationException("Payment cannot be marked paid from its current status.");
         }
@@ -82,6 +90,22 @@ public sealed class Payment : AuditableEntity
         UpdatedAtUtc = paidAtUtc;
     }
 
+    public void MarkAuthorized(DateTimeOffset authorizedAtUtc)
+    {
+        if (Status == PaymentStatus.Authorized)
+        {
+            return;
+        }
+
+        if (Status != PaymentStatus.Pending)
+        {
+            throw new InvalidOperationException("Only pending payments can be marked authorized.");
+        }
+
+        Status = PaymentStatus.Authorized;
+        UpdatedAtUtc = authorizedAtUtc;
+    }
+
     public void MarkFailed(DateTimeOffset failedAtUtc)
     {
         if (Status == PaymentStatus.Failed)
@@ -89,14 +113,30 @@ public sealed class Payment : AuditableEntity
             return;
         }
 
-        if (Status == PaymentStatus.Paid)
+        if (Status is PaymentStatus.Paid or PaymentStatus.Refunded or PaymentStatus.PartiallyRefunded or PaymentStatus.Disputed)
         {
-            throw new InvalidOperationException("Paid payment cannot be marked failed.");
+            throw new InvalidOperationException("Payment cannot be marked failed from its current status.");
         }
 
         Status = PaymentStatus.Failed;
         FailedAtUtc = failedAtUtc;
         UpdatedAtUtc = failedAtUtc;
+    }
+
+    public void MarkCancelled(DateTimeOffset cancelledAtUtc)
+    {
+        if (Status == PaymentStatus.Cancelled)
+        {
+            return;
+        }
+
+        if (Status is PaymentStatus.Paid or PaymentStatus.Refunded or PaymentStatus.PartiallyRefunded or PaymentStatus.Disputed)
+        {
+            throw new InvalidOperationException("Payment cannot be cancelled from its current status.");
+        }
+
+        Status = PaymentStatus.Cancelled;
+        UpdatedAtUtc = cancelledAtUtc;
     }
 
     public void ApplyRefund(decimal totalRefundedAmount, DateTimeOffset refundedAtUtc)

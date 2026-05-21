@@ -1,6 +1,7 @@
 namespace Swyftly.Worker;
 
 using Swyftly.Application.Inventory;
+using Swyftly.Application.Payments;
 
 public class Worker(
     ILogger<Worker> logger,
@@ -19,6 +20,7 @@ public class Worker(
             }
 
             await ExpireReservationsAsync(stoppingToken);
+            await RedactExpiredPaymentWebhookPayloadsAsync(stoppingToken);
             await Task.Delay(IdleDelay, stoppingToken);
         }
     }
@@ -42,6 +44,31 @@ public class Worker(
         catch (Exception exception)
         {
             logger.LogError(exception, "Inventory reservation expiry placeholder failed.");
+        }
+    }
+
+    private async Task RedactExpiredPaymentWebhookPayloadsAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            using var scope = serviceScopeFactory.CreateScope();
+            var retentionService = scope.ServiceProvider.GetRequiredService<IPaymentWebhookPayloadRetentionService>();
+            var result = await retentionService.RedactExpiredPayloadsAsync(timeProvider.GetUtcNow(), stoppingToken);
+
+            if (result.RedactedCount > 0)
+            {
+                logger.LogInformation(
+                    "Redacted {Count} expired payment webhook payloads older than {CutoffUtc}.",
+                    result.RedactedCount,
+                    result.CutoffUtc);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Payment webhook payload retention cleanup failed.");
         }
     }
 }

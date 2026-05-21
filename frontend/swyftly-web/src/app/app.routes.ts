@@ -3,6 +3,10 @@ import { requireRoleGuard } from './auth/auth.guard';
 import { AccountPageComponent } from './pages/account-page.component';
 import { HomePageComponent } from './pages/home-page.component';
 
+export const ADMIN_ROLES = ['Admin', 'SuperAdmin'] as const;
+export const FINANCE_READ_ROLES = ['Admin', 'SuperAdmin', 'FinanceOperator', 'FinanceApprover'] as const;
+export const SUPPORT_ROLES = ['Admin', 'SuperAdmin', 'SupportAgent'] as const;
+
 export const routes: Routes = [
   { path: '', component: HomePageComponent, title: 'Swyftly' },
   {
@@ -26,6 +30,48 @@ export const routes: Routes = [
     path: 'seller/products/:id/edit',
     loadComponent: () => import('./pages/seller-product-form-page.component').then(component => component.SellerProductFormPageComponent),
     title: 'Edit product | Swyftly',
+    canActivate: [requireRoleGuard(['Seller'])]
+  },
+  {
+    path: 'seller/orders',
+    loadComponent: () => import('./pages/seller-orders-page.component').then(component => component.SellerOrdersPageComponent),
+    title: 'Seller orders | Swyftly',
+    canActivate: [requireRoleGuard(['Seller'])]
+  },
+  {
+    path: 'seller/orders/:orderId',
+    loadComponent: () => import('./pages/seller-order-detail-page.component').then(component => component.SellerOrderDetailPageComponent),
+    title: 'Seller order | Swyftly',
+    canActivate: [requireRoleGuard(['Seller'])]
+  },
+  {
+    path: 'seller/returns',
+    loadComponent: () => import('./pages/seller-returns-page.component').then(component => component.SellerReturnsPageComponent),
+    title: 'Seller returns | Swyftly',
+    canActivate: [requireRoleGuard(['Seller'])]
+  },
+  {
+    path: 'seller/returns/:returnRequestId',
+    loadComponent: () => import('./pages/seller-return-detail-page.component').then(component => component.SellerReturnDetailPageComponent),
+    title: 'Seller return | Swyftly',
+    canActivate: [requireRoleGuard(['Seller'])]
+  },
+  {
+    path: 'seller/payouts',
+    loadComponent: () => import('./pages/seller-payouts-page.component').then(component => component.SellerPayoutsPageComponent),
+    title: 'Seller payouts | Swyftly',
+    canActivate: [requireRoleGuard(['Seller'])]
+  },
+  {
+    path: 'seller/support',
+    loadComponent: () => import('./pages/seller-support-page.component').then(component => component.SellerSupportPageComponent),
+    title: 'Seller support | Swyftly',
+    canActivate: [requireRoleGuard(['Seller'])]
+  },
+  {
+    path: 'seller/support/:ticketId',
+    loadComponent: () => import('./pages/seller-support-detail-page.component').then(component => component.SellerSupportDetailPageComponent),
+    title: 'Seller support ticket | Swyftly',
     canActivate: [requireRoleGuard(['Seller'])]
   },
   {
@@ -62,101 +108,192 @@ export const routes: Routes = [
     path: 'admin',
     loadComponent: () => import('./pages/admin-page.component').then(component => component.AdminPageComponent),
     title: 'Admin | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])]
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
   },
   {
     path: 'admin/sellers',
     loadComponent: () => import('./pages/admin-sellers-page.component').then(component => component.AdminSellersPageComponent),
     title: 'Seller approvals | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])]
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
   },
   {
     path: 'admin/sellers/:sellerId',
     loadComponent: () => import('./pages/admin-seller-detail-page.component').then(component => component.AdminSellerDetailPageComponent),
     title: 'Seller review | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])]
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
   },
   {
     path: 'admin/products',
     loadComponent: () => import('./pages/admin-products-page.component').then(component => component.AdminProductsPageComponent),
     title: 'Product review queue | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])]
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
   },
   {
     path: 'admin/products/:productId',
     loadComponent: () => import('./pages/admin-product-detail-page.component').then(component => component.AdminProductDetailPageComponent),
     title: 'Product review | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])]
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
+  },
+  {
+    path: 'admin/reviews',
+    loadComponent: () => import('./pages/admin-reviews-page.component').then(component => component.AdminReviewsPageComponent),
+    title: 'Buyer review moderation | Swyftly',
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
   },
   {
     path: 'admin/audit-logs',
     loadComponent: () => import('./pages/admin-audit-logs-page.component').then(component => component.AdminAuditLogsPageComponent),
     title: 'Audit logs | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])]
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
   },
   {
     path: 'admin/reports',
     loadComponent: () => import('./pages/admin-marketplace-reports-page.component').then(component => component.AdminMarketplaceReportsPageComponent),
     title: 'Marketplace reports | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])]
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
   },
   {
     path: 'admin/ai-usage',
     loadComponent: () => import('./pages/admin-ai-usage-analytics-page.component').then(component => component.AdminAiUsageAnalyticsPageComponent),
     title: 'AI usage analytics | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])]
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
   },
   {
     path: 'admin/orders',
-    loadComponent: () => import('./pages/admin-placeholder-page.component').then(component => component.AdminPlaceholderPageComponent),
+    loadComponent: () => import('./pages/admin-orders-page.component').then(component => component.AdminOrdersPageComponent),
     title: 'Admin orders | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])],
-    data: { title: 'Orders', description: 'Order operations summary and queue navigation.' }
+    canActivate: [requireRoleGuard(FINANCE_READ_ROLES)]
+  },
+  {
+    path: 'admin/orders/:orderId',
+    loadComponent: () => import('./pages/admin-order-detail-page.component').then(component => component.AdminOrderDetailPageComponent),
+    title: 'Admin order | Swyftly',
+    canActivate: [requireRoleGuard(FINANCE_READ_ROLES)]
   },
   {
     path: 'admin/payments',
-    loadComponent: () => import('./pages/admin-placeholder-page.component').then(component => component.AdminPlaceholderPageComponent),
+    loadComponent: () => import('./pages/admin-payments-page.component').then(component => component.AdminPaymentsPageComponent),
     title: 'Admin payments | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])],
-    data: { title: 'Payments', description: 'Payment operations summary and queue navigation.' }
+    canActivate: [requireRoleGuard(FINANCE_READ_ROLES)]
+  },
+  {
+    path: 'admin/payments/:paymentId',
+    loadComponent: () => import('./pages/admin-payment-detail-page.component').then(component => component.AdminPaymentDetailPageComponent),
+    title: 'Admin payment | Swyftly',
+    canActivate: [requireRoleGuard(FINANCE_READ_ROLES)]
   },
   {
     path: 'admin/refunds',
-    loadComponent: () => import('./pages/admin-placeholder-page.component').then(component => component.AdminPlaceholderPageComponent),
+    loadComponent: () => import('./pages/admin-refunds-page.component').then(component => component.AdminRefundsPageComponent),
     title: 'Admin refunds | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])],
-    data: { title: 'Refunds', description: 'Refund operations summary and queue navigation.' }
+    canActivate: [requireRoleGuard(FINANCE_READ_ROLES)]
   },
   {
     path: 'admin/disputes',
-    loadComponent: () => import('./pages/admin-placeholder-page.component').then(component => component.AdminPlaceholderPageComponent),
+    loadComponent: () => import('./pages/admin-disputes-page.component').then(component => component.AdminDisputesPageComponent),
     title: 'Admin disputes | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])],
-    data: { title: 'Disputes', description: 'Dispute operations summary and queue navigation.' }
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
   },
   {
     path: 'admin/payouts',
-    loadComponent: () => import('./pages/admin-placeholder-page.component').then(component => component.AdminPlaceholderPageComponent),
+    loadComponent: () => import('./pages/admin-payouts-page.component').then(component => component.AdminPayoutsPageComponent),
     title: 'Admin payouts | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])],
-    data: { title: 'Payouts', description: 'Payout operations summary and queue navigation.' }
+    canActivate: [requireRoleGuard(FINANCE_READ_ROLES)]
+  },
+  {
+    path: 'admin/support',
+    loadComponent: () => import('./pages/admin-support-page.component').then(component => component.AdminSupportPageComponent),
+    title: 'Support tickets | Swyftly',
+    canActivate: [requireRoleGuard(SUPPORT_ROLES)]
+  },
+  {
+    path: 'admin/support/:ticketId',
+    loadComponent: () => import('./pages/admin-support-detail-page.component').then(component => component.AdminSupportDetailPageComponent),
+    title: 'Support ticket | Swyftly',
+    canActivate: [requireRoleGuard(SUPPORT_ROLES)]
+  },
+  {
+    path: 'admin/categories',
+    loadComponent: () => import('./pages/admin-categories-page.component').then(component => component.AdminCategoriesPageComponent),
+    title: 'Catalog categories | Swyftly',
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
   },
   {
     path: 'admin/ads',
     loadComponent: () => import('./pages/admin-ad-campaigns-page.component').then(component => component.AdminAdCampaignsPageComponent),
     title: 'Ad campaign review queue | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])],
+    canActivate: [requireRoleGuard(ADMIN_ROLES)],
   },
   {
     path: 'admin/ads/:id',
     loadComponent: () => import('./pages/admin-ad-campaign-detail-page.component').then(component => component.AdminAdCampaignDetailPageComponent),
     title: 'Ad campaign review | Swyftly',
-    canActivate: [requireRoleGuard(['Admin', 'SuperAdmin'])]
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
   },
   {
     path: 'account',
     component: AccountPageComponent,
     title: 'Account | Swyftly',
+    canActivate: [requireRoleGuard(['Buyer'])]
+  },
+  {
+    path: 'account/orders',
+    loadComponent: () => import('./pages/buyer-orders-page.component').then(component => component.BuyerOrdersPageComponent),
+    title: 'Account orders | Swyftly',
+    canActivate: [requireRoleGuard(['Buyer'])]
+  },
+  {
+    path: 'account/orders/:orderId',
+    loadComponent: () => import('./pages/buyer-order-detail-page.component').then(component => component.BuyerOrderDetailPageComponent),
+    title: 'Account order | Swyftly',
+    canActivate: [requireRoleGuard(['Buyer'])]
+  },
+  {
+    path: 'account/returns',
+    loadComponent: () => import('./pages/buyer-returns-page.component').then(component => component.BuyerReturnsPageComponent),
+    title: 'Account returns | Swyftly',
+    canActivate: [requireRoleGuard(['Buyer'])]
+  },
+  {
+    path: 'account/returns/:returnRequestId',
+    loadComponent: () => import('./pages/buyer-return-detail-page.component').then(component => component.BuyerReturnDetailPageComponent),
+    title: 'Account return | Swyftly',
+    canActivate: [requireRoleGuard(['Buyer'])]
+  },
+  {
+    path: 'account/wishlist',
+    loadComponent: () => import('./pages/buyer-wishlist-page.component').then(component => component.BuyerWishlistPageComponent),
+    title: 'Wishlist | Swyftly',
+    canActivate: [requireRoleGuard(['Buyer'])]
+  },
+  {
+    path: 'account/reviews',
+    loadComponent: () => import('./pages/buyer-reviews-page.component').then(component => component.BuyerReviewsPageComponent),
+    title: 'Product reviews | Swyftly',
+    canActivate: [requireRoleGuard(['Buyer'])]
+  },
+  {
+    path: 'account/notifications',
+    loadComponent: () => import('./pages/buyer-notifications-page.component').then(component => component.BuyerNotificationsPageComponent),
+    title: 'Notifications | Swyftly',
+    canActivate: [requireRoleGuard(['Buyer'])]
+  },
+  {
+    path: 'account/disputes',
+    loadComponent: () => import('./pages/buyer-disputes-page.component').then(component => component.BuyerDisputesPageComponent),
+    title: 'Account disputes | Swyftly',
+    canActivate: [requireRoleGuard(['Buyer'])]
+  },
+  {
+    path: 'account/support',
+    loadComponent: () => import('./pages/buyer-support-page.component').then(component => component.BuyerSupportPageComponent),
+    title: 'Account support | Swyftly',
+    canActivate: [requireRoleGuard(['Buyer'])]
+  },
+  {
+    path: 'account/support/:ticketId',
+    loadComponent: () => import('./pages/buyer-support-detail-page.component').then(component => component.BuyerSupportDetailPageComponent),
+    title: 'Account support ticket | Swyftly',
     canActivate: [requireRoleGuard(['Buyer'])]
   },
   {

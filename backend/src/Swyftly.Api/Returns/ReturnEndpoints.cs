@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Swyftly.Api.Notifications;
 using Swyftly.Api.Results;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Notifications;
 using Swyftly.Application.Returns;
 using Swyftly.Domain.Buyers;
 using Swyftly.Domain.Returns;
@@ -251,7 +253,9 @@ public static class ReturnEndpoints
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
         IReturnWorkflowService returnWorkflowService,
+        INotificationService notificationService,
         TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         var seller = await GetCurrentSellerAsync(principal, dbContext, cancellationToken);
@@ -274,6 +278,22 @@ public static class ReturnEndpoints
                 timeProvider.GetUtcNow()),
             cancellationToken);
 
+        if (result.IsSuccess)
+        {
+            await BuyerNotificationDispatcher.NotifyBuyerAsync(
+                result.Value.BuyerId,
+                "ReturnApproved",
+                "Your return was approved",
+                "The seller approved your return request.",
+                "ReturnRequest",
+                result.Value.ReturnRequestId,
+                timeProvider.GetUtcNow(),
+                dbContext,
+                notificationService,
+                loggerFactory.CreateLogger(nameof(ReturnEndpoints)),
+                cancellationToken);
+        }
+
         return result.ToHttpResult(HttpResults.Ok);
     }
 
@@ -283,7 +303,9 @@ public static class ReturnEndpoints
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
         IReturnWorkflowService returnWorkflowService,
+        INotificationService notificationService,
         TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         var seller = await GetCurrentSellerAsync(principal, dbContext, cancellationToken);
@@ -305,6 +327,22 @@ public static class ReturnEndpoints
                 request.Message,
                 timeProvider.GetUtcNow()),
             cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            await BuyerNotificationDispatcher.NotifyBuyerAsync(
+                result.Value.BuyerId,
+                "ReturnRejected",
+                "Your return was rejected",
+                "The seller rejected your return request. You can review the seller response in your account.",
+                "ReturnRequest",
+                result.Value.ReturnRequestId,
+                timeProvider.GetUtcNow(),
+                dbContext,
+                notificationService,
+                loggerFactory.CreateLogger(nameof(ReturnEndpoints)),
+                cancellationToken);
+        }
 
         return result.ToHttpResult(HttpResults.Ok);
     }

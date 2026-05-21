@@ -5,29 +5,42 @@ import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
 import { AdminAuditLogDetailResponse } from '../admin/admin-audit-log.models';
 import { AdminAuditLogService } from '../admin/admin-audit-log.service';
 import { getApiErrorMessage } from '../auth/api-error';
+import { EmptyStateComponent } from '../shared/ui/empty-state.component';
+import { PageHeaderComponent } from '../shared/ui/page-header.component';
+import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
 @Component({
   selector: 'app-admin-audit-logs-page',
   imports: [
+    AdminWorkspaceNavComponent,
     DatePipe,
+    EmptyStateComponent,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
+    PageHeaderComponent,
     ReactiveFormsModule,
-    RouterLink
+    RouterLink,
+    UiAlertComponent
   ],
   template: `
     <section class="page admin-review">
-      <a class="admin-back-link" routerLink="/admin">Back to admin</a>
+      <app-admin-workspace-nav />
 
-      <div class="page-header">
-        <span class="eyebrow">Admin audit</span>
-        <h1>Audit logs</h1>
-        <p>Review sensitive admin actions across sellers, products, and future finance workflows.</p>
-      </div>
+      <app-page-header
+        eyebrow="Admin audit"
+        heading="Audit logs"
+        description="Review sensitive admin actions across sellers, products, finance, support, and moderation workflows."
+      >
+        <div pageHeaderActions>
+          <a mat-stroked-button routerLink="/admin/sellers">Seller queue</a>
+          <a mat-stroked-button routerLink="/admin/products">Product queue</a>
+        </div>
+      </app-page-header>
 
       <form [formGroup]="filtersForm" (ngSubmit)="search()" class="route-card admin-audit-filters" novalidate>
         <mat-form-field appearance="outline">
@@ -60,15 +73,15 @@ import { getApiErrorMessage } from '../auth/api-error';
         <div class="route-card">Loading audit logs...</div>
       } @else {
         @if (errorMessage()) {
-          <p class="auth-alert error" role="alert">{{ errorMessage() }}</p>
+          <app-ui-alert tone="error">{{ errorMessage() }}</app-ui-alert>
         }
 
         @if (auditLogs().length === 0 && !errorMessage()) {
-          <div class="route-card">
-            <span class="status-pill">Empty</span>
-            <h2>No audit logs found</h2>
-            <p>Sensitive admin actions will appear here after they are recorded.</p>
-          </div>
+          <app-empty-state
+            eyebrow="Empty"
+            heading="No audit logs found"
+            message="Sensitive admin actions will appear here after they are recorded."
+          />
         } @else {
           <div class="admin-table audit-table" role="table" aria-label="Admin audit logs">
             <div class="admin-table-row heading" role="row">

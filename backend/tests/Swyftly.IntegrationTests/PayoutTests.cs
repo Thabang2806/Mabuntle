@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -39,11 +40,19 @@ public sealed class PayoutTests
         balanceResponse.EnsureSuccessStatusCode();
         payoutsResponse.EnsureSuccessStatusCode();
         var balance = await balanceResponse.Content.ReadFromJsonAsync<SellerBalanceResponse>();
-        var payouts = await payoutsResponse.Content.ReadFromJsonAsync<SellerPayoutResponse[]>();
+        var payoutsJson = await payoutsResponse.Content.ReadAsStringAsync();
+        var payouts = JsonSerializer.Deserialize<SellerPayoutResponse[]>(
+            payoutsJson,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.NotNull(balance);
         Assert.Equal(875m, Assert.Single(balance!.Balances).PendingBalance);
         Assert.NotNull(payouts);
-        Assert.Equal("Pending", Assert.Single(payouts!).Status);
+        var payout = Assert.Single(payouts!);
+        Assert.Equal("Pending", payout.Status);
+        Assert.Equal("Ledger", Assert.Single(payout.Items).SourceType);
+        Assert.DoesNotContain("ledgerEntryId", payoutsJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("orderId", payoutsJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("paymentId", payoutsJson, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -56,7 +65,7 @@ public sealed class PayoutTests
         var payoutId = await SeedPayoutAsync(factory, sellerId, 875m);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
-            await CreateAndLoginAdminAsync(factory, client));
+            await CreateAndLoginFinanceUserAsync(factory, client, SwyftlyRoles.FinanceOperator));
 
         using var holdResponse = await client.PostAsJsonAsync(
             $"/api/admin/payouts/{payoutId}/hold",
@@ -66,6 +75,9 @@ public sealed class PayoutTests
         Assert.NotNull(held);
         Assert.Equal("OnHold", held!.Status);
 
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            await CreateAndLoginFinanceUserAsync(factory, client, SwyftlyRoles.FinanceApprover));
         using var releaseResponse = await client.PostAsJsonAsync(
             $"/api/admin/payouts/{payoutId}/release",
             new PayoutReasonRequest("Review complete."));
@@ -80,6 +92,50 @@ public sealed class PayoutTests
         Assert.Equal(875m, balance.PendingBalance);
         Assert.Equal(0m, balance.HeldBalance);
         Assert.Equal(2, await dbContext.AuditLogs.CountAsync(auditLog => auditLog.EntityType == "SellerPayout"));
+    }
+
+    [Fact]
+    public async Task FinanceLifecycle_MakeAvailableAndProcess_UpdatesBalancesAndEnforcesDualControl()
+    {
+        await using var factory = new PayoutTestFactory();
+        using var client = factory.CreateClient();
+        var sellerUserId = await CreateSellerUserAsync(factory, client, "seller-lifecycle-payout@example.test");
+        var sellerId = await GetSellerIdAsync(factory, sellerUserId);
+        var payoutId = await SeedPayoutAsync(factory, sellerId, 875m);
+        var operatorToken = await CreateAndLoginFinanceUserAsync(factory, client, SwyftlyRoles.FinanceOperator);
+        var approverToken = await CreateAndLoginFinanceUserAsync(factory, client, SwyftlyRoles.FinanceApprover);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", operatorToken);
+        using var makeAvailableResponse = await client.PostAsJsonAsync(
+            $"/api/admin/payouts/{payoutId}/make-available",
+            new PayoutReasonRequest("Settlement window reached."));
+        makeAvailableResponse.EnsureSuccessStatusCode();
+        var available = await makeAvailableResponse.Content.ReadFromJsonAsync<SellerPayoutResult>();
+        Assert.NotNull(available);
+        Assert.Equal("Available", available!.Status);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", operatorToken);
+        using var blockedProcessResponse = await client.PostAsJsonAsync(
+            $"/api/admin/payouts/{payoutId}/process",
+            new PayoutReasonRequest("Attempted by same operator."));
+        Assert.Equal(System.Net.HttpStatusCode.Forbidden, blockedProcessResponse.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", approverToken);
+        using var processResponse = await client.PostAsJsonAsync(
+            $"/api/admin/payouts/{payoutId}/process",
+            new PayoutReasonRequest("Approved for payout."));
+        processResponse.EnsureSuccessStatusCode();
+        var processed = await processResponse.Content.ReadFromJsonAsync<SellerPayoutResult>();
+        Assert.NotNull(processed);
+        Assert.Equal("PaidOut", processed!.Status);
+        Assert.False(string.IsNullOrWhiteSpace(processed.ProviderPayoutReference));
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        var balance = await dbContext.SellerBalances.SingleAsync(balance => balance.SellerId == sellerId);
+        Assert.Equal(0m, balance.PendingBalance);
+        Assert.Equal(0m, balance.AvailableBalance);
+        Assert.Equal(0m, balance.HeldBalance);
     }
 
     private static async Task<Guid> CreateSellerUserAsync(PayoutTestFactory factory, HttpClient client, string email)
@@ -136,9 +192,9 @@ public sealed class PayoutTests
         return payout.Id;
     }
 
-    private static async Task<string> CreateAndLoginAdminAsync(PayoutTestFactory factory, HttpClient client)
+    private static async Task<string> CreateAndLoginFinanceUserAsync(PayoutTestFactory factory, HttpClient client, string role)
     {
-        var email = $"admin-payout-{Guid.NewGuid():N}@example.test";
+        var email = $"finance-payout-{Guid.NewGuid():N}@example.test";
         using (var scope = factory.Services.CreateScope())
         {
             var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
@@ -151,7 +207,7 @@ public sealed class PayoutTests
             };
             var createResult = await userManager.CreateAsync(admin, "Password123!");
             Assert.True(createResult.Succeeded, string.Join("; ", createResult.Errors.Select(error => error.Description)));
-            var roleResult = await userManager.AddToRoleAsync(admin, SwyftlyRoles.Admin);
+            var roleResult = await userManager.AddToRoleAsync(admin, role);
             Assert.True(roleResult.Succeeded, string.Join("; ", roleResult.Errors.Select(error => error.Description)));
         }
 

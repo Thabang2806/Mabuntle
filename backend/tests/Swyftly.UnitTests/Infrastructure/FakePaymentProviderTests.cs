@@ -89,6 +89,27 @@ public class FakePaymentProviderTests
         Assert.Equal("Payments.WebhookSigningSecretNotConfigured", result.Error.Code);
     }
 
+    [Fact]
+    public async Task RefundPaymentAsync_UsesIdempotencyKeyForDeterministicProviderReference()
+    {
+        var provider = CreateProvider(new PaymentProviderOptions());
+        var request = new PaymentRefundRequest(
+            "fake_reference",
+            100m,
+            "ZAR",
+            "Approved refund.",
+            "refund-idempotency-key",
+            new Dictionary<string, string>());
+
+        var first = await provider.RefundPaymentAsync(request);
+        var second = await provider.RefundPaymentAsync(request);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.Equal(first.Value.ProviderRefundReference, second.Value.ProviderRefundReference);
+        Assert.Equal("fake_refund_refund-idempotency-key", first.Value.ProviderRefundReference);
+    }
+
     private static PaymentInitiationRequest CreateRequest(IReadOnlyDictionary<string, string> metadata) =>
         new(
             Guid.NewGuid(),

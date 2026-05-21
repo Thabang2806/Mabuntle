@@ -9,7 +9,11 @@ describe('ShopPageComponent', () => {
   let publicCatalogService: jasmine.SpyObj<PublicCatalogService>;
 
   beforeEach(async () => {
-    publicCatalogService = jasmine.createSpyObj<PublicCatalogService>('PublicCatalogService', ['searchProducts']);
+    publicCatalogService = jasmine.createSpyObj<PublicCatalogService>('PublicCatalogService', ['getCategories', 'searchProducts']);
+    publicCatalogService.getCategories.and.resolveTo([
+      { categoryId: 'parent-id', parentCategoryId: null, name: 'Women', slug: 'women', displayOrder: 10 },
+      { categoryId: 'category-id', parentCategoryId: 'parent-id', name: 'Dresses', slug: 'women-dresses', displayOrder: 20 }
+    ]);
     publicCatalogService.searchProducts.and.resolveTo({
       items: [createProduct()],
       page: 1,
@@ -30,15 +34,17 @@ describe('ShopPageComponent', () => {
     fixture = TestBed.createComponent(ShopPageComponent);
   });
 
-  it('loads and displays published products', async () => {
+  it('loads categories and displays published products', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;
+    expect(publicCatalogService.getCategories).toHaveBeenCalled();
     expect(compiled.textContent).toContain('Summer Dress');
     expect(compiled.textContent).toContain('Seller Store');
     expect(compiled.textContent).toContain('1 result');
+    expect(compiled.textContent).toContain('Dresses');
   });
 
   it('submits filters to product search', async () => {
@@ -58,6 +64,27 @@ describe('ShopPageComponent', () => {
       query: 'dress',
       page: 1,
       pageSize: 24
+    }));
+  });
+
+  it('sends category and availability filters to product search', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const component = fixture.componentInstance as unknown as {
+      filtersForm: { patchValue: (value: object) => void };
+      search: (page: number) => Promise<void>;
+    };
+    component.filtersForm.patchValue({
+      categorySlug: 'women-dresses',
+      availability: 'in_stock'
+    });
+    await component.search(1);
+
+    expect(publicCatalogService.searchProducts).toHaveBeenCalledWith(jasmine.objectContaining({
+      categorySlug: 'women-dresses',
+      inStock: true,
+      page: 1
     }));
   });
 });

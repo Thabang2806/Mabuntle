@@ -43,7 +43,7 @@ Response when healthy:
 }
 ```
 
-The readiness endpoint returns HTTP `503` with the same response shape when PostgreSQL is unavailable. It also includes provider placeholder checks for search, storage, and payment dependencies until real external providers are selected.
+The readiness endpoint returns HTTP `503` with the same response shape when PostgreSQL or a required dependency check is unavailable. It includes placeholder checks for search/storage and a real `payment-provider` configuration check. The payment check is healthy for the local fake provider and validates required PayFast configuration when `PaymentProvider__ProviderName=PayFast`.
 
 ## Authentication
 
@@ -90,7 +90,7 @@ POST /api/auth/logout
 GET /api/auth/me
 ```
 
-Login and refresh return a JWT access token plus refresh token:
+Login and refresh return a JWT access token and user role data. Refresh tokens are not returned in JSON; the API sets `swyftly_rt` as an HttpOnly cookie scoped to `/api/auth`, plus a non-HttpOnly `swyftly_csrf` cookie for refresh/logout CSRF validation. Cookie path/domain/SameSite/Secure attributes are controlled by the `AuthCookies` configuration section; production validation requires secure cookies, `SameSite=Lax` or `Strict`, and a refresh-token path scoped to `/api/auth`.
 
 ```json
 {
@@ -98,13 +98,11 @@ Login and refresh return a JWT access token plus refresh token:
   "email": "buyer@example.com",
   "roles": ["Buyer"],
   "accessToken": "<jwt>",
-  "accessTokenExpiresAtUtc": "2026-05-18T10:30:00+00:00",
-  "refreshToken": "<refresh-token>",
-  "refreshTokenExpiresAtUtc": "2026-06-01T10:00:00+00:00"
+  "accessTokenExpiresAtUtc": "2026-05-18T10:30:00+00:00"
 }
 ```
 
-The API never returns password hashes. Refresh tokens are stored server-side as hashes.
+The API never returns password hashes. Refresh tokens are stored server-side as hashes with a token-family id. Refresh rotation keeps the same family id; replaying an already-revoked refresh token revokes any active replacement token in that family and returns `401`. `POST /api/auth/refresh` and `POST /api/auth/logout` read the refresh token from the cookie and require `X-Swyftly-CSRF` to match the `swyftly_csrf` cookie. Angular stores the access token in memory only and calls refresh with credentials on startup.
 
 Scaffold-only policy check endpoints exist for test coverage:
 
@@ -152,6 +150,8 @@ POST /api/admin/sellers/{sellerId}/suspend
 
 Admin actions write audit-log entries and seller detail responses include `auditTrail`.
 
+Angular admin seller routes `/admin/sellers` and `/admin/sellers/{sellerId}` use these endpoints unchanged. The queue applies client-side search/status/storefront filters over the loaded pending-seller response, while the detail screen presents profile, storefront, address, payout setup, completeness indicators, review actions, and audit trail without changing request payloads.
+
 ## Admin Audit Logs
 
 Admin audit-log endpoints require an `Admin` or `SuperAdmin` JWT role.
@@ -197,6 +197,8 @@ Response:
 ```
 
 Seller approval/rejection/suspension, product approval/rejection/change-request, payout hold/release, refund approval, dispute resolution, and ad-campaign approval/rejection workflows write audit logs through the shared audit logging service. Future role-change and sensitive admin actions should use the same service.
+
+Angular admin route `/admin/audit-logs` keeps the same query filters and API usage. The UI now uses shared admin navigation, page header, empty/error states, filter submission, and clear behavior.
 
 ## Admin Dashboard
 
@@ -409,6 +411,8 @@ Angular buyer route:
 /assistant
 ```
 
+Angular status: Phase 6B keeps this route buyer-guarded and uses the same request/response contract. The screen now shows example prompt chips, extracted intent details, clarification/safety messages, loading/error/empty states, and product result cards without adding wishlist, review, checkout, or ordering behavior.
+
 ## Buyer AI Visual Search
 
 Visual search requires a `Buyer` JWT role. The MVP accepts either an image reference or base64 image data from an upload. Uploaded image data is processed only for the request and is not persisted by the API.
@@ -471,6 +475,8 @@ Angular buyer route:
 /visual-search
 ```
 
+Angular status: Phase 6B keeps this route buyer-guarded and uses the same request/response contract. The screen now validates supported image uploads client-side, shows selected image preview/filename, extracted visual attributes, confidence, warnings, retention notes, loading/error/empty states, and product result cards without changing API payloads.
+
 The admin dashboard landing page returns aggregate operational counts only. It intentionally does not expose buyer or seller detail records on the landing page. Dedicated finance and AI analytics are exposed through the admin reports routes above.
 
 Angular admin routes now include:
@@ -480,17 +486,46 @@ Angular admin routes now include:
 /admin/sellers
 /admin/products
 /admin/orders
+/admin/orders/{orderId}
 /admin/payments
+/admin/payments/{paymentId}
 /admin/reports
 /admin/ai-usage
 /admin/refunds
 /admin/disputes
 /admin/payouts
+/admin/support
+/admin/support/{ticketId}
+/admin/categories
 /admin/ads
 /admin/ads/:id
 ```
 
-Routes without a dedicated workflow page yet use protected foundation placeholders.
+Some admin routes are intentionally read-only where backend write workflows are not exposed yet.
+
+Admin finance UI status: `/admin/orders`, `/admin/orders/{orderId}`, `/admin/payments`, `/admin/payments/{paymentId}`, `/admin/refunds`, `/admin/payouts`, and `/admin/disputes` are API-backed frontend screens. Order/payment screens are read-only investigation surfaces; payment mutation remains with buyer payment initiation, provider webhooks, refund workflows, and finance payout/refund actions.
+
+Admin support UI status: `/admin/support` and `/admin/support/{ticketId}` are API-backed frontend screens for support agents, admins, and super admins. Admin catalog UI status: `/admin/categories` is a read-only category and attribute reference because category/attribute write APIs are not exposed yet.
+
+Admin moderation UI status: `/admin/sellers`, `/admin/sellers/{sellerId}`, `/admin/products`, `/admin/products/{productId}`, and `/admin/audit-logs` are API-backed frontend screens using existing contracts unchanged. Phase 5C added shared admin workspace navigation, client-side queue filters, denser triage rows, seller completeness indicators, product image review/fallbacks, AI risk display polish, and shared loading/empty/error states.
+
+## Admin Order And Payment Reads
+
+Admin order/payment read endpoints require `FinanceRead` (`Admin`, `SuperAdmin`, `FinanceOperator`, or `FinanceApprover`). They are read-only endpoints for support, finance, refund, dispute, and webhook investigation. They do not expose order mutation, payment capture, manual settlement, or provider-dashboard replacement workflows.
+
+```http
+GET /api/admin/orders?status=Paid
+GET /api/admin/orders/{orderId}
+GET /api/admin/payments?status=Paid&orderId={orderId}
+GET /api/admin/payments/reconciliation-candidates?olderThanMinutes=30
+GET /api/admin/payments/{paymentId}
+```
+
+Order summaries include order ids, buyer/seller ids, seller display name when available, item count, totals, latest payment status, latest shipment status, and created/updated timestamps. Order detail adds items, status history, shipments with shipment events, and related payment summaries.
+
+Payment summaries include payment id, order id, buyer id, provider, provider reference, amount, currency, status, paid/failed timestamps, and created/updated timestamps. Payment detail adds a compact related-order summary and webhook event metadata. Raw webhook payloads are intentionally not returned.
+
+`GET /api/admin/payments/reconciliation-candidates` is a read-only finance operations queue. It returns stale `Pending`/`Authorized` payments and payments with failed webhook events so finance can check the provider dashboard or support logs. It does not call PayFast/PayU, reconcile provider state, mark payments paid/failed, or mutate orders.
 
 ## Admin Categories
 
@@ -527,6 +562,8 @@ The response is a flat category list with parent ids and attribute definitions:
 ]
 ```
 
+Angular admin route `/admin/categories` renders this metadata as a read-only category/attribute reference. Create, edit, reorder, deactivate, and attribute-management actions remain intentionally absent until backend write endpoints exist.
+
 ## Public Catalog And Product Search
 
 Public catalog endpoints do not require authentication.
@@ -534,6 +571,8 @@ Public catalog endpoints do not require authentication.
 ```http
 GET /api/products/search
 GET /api/products/{slug}
+GET /api/products/{slug}/reviews
+GET /api/products/{slug}/review-summary
 GET /api/categories
 GET /api/sellers/{storeSlug}
 ```
@@ -587,15 +626,19 @@ Response:
 }
 ```
 
-Out-of-stock handling is explicit through `inStock`: by default, published products can appear even if all active variants are unavailable; `inStock=true` restricts results to products with at least one active variant where stock exceeds reserved quantity.
+Out-of-stock handling is explicit through `inStock`: by default, published products can appear even if all active variants are unavailable; `inStock=true` restricts results to products with at least one active variant where stock exceeds reserved quantity. Public product search and detail only expose products whose seller is verified and whose storefront is published.
 
-`GET /api/products/{slug}` returns public product detail with images, variants, attributes, and the product card payload. Current product slugs are seller-scoped in persistence, so duplicate public slugs are still a known future routing issue.
+`GET /api/products/{slug}` returns public product detail with images, variants, attributes, and the product card payload. It returns `404` for products from unverified, suspended, rejected, pending, or unpublished-storefront sellers. Current product slugs are seller-scoped in persistence, so duplicate public slugs are still a known future routing issue.
+
+`GET /api/products/{slug}/reviews` and `GET /api/products/{slug}/review-summary` return only published verified-buyer reviews. They do not require authentication and do not change the existing product detail/search response shapes.
+
+`GET /api/sellers/{storeSlug}` returns `404` unless the storefront is published and the seller is verified.
 
 Search indexing is prepared behind `ISearchIndexService` and `IProductSearchIndexer`. Published products are indexed after admin approval into the current local in-memory placeholder. If the search index has no usable data, public search falls back to PostgreSQL.
 
 Product embeddings are prepared behind `IAiEmbeddingService` and `IProductEmbeddingGenerator`. Published products generate or replace a private `product_embeddings` row after admin approval using the current fake embedding provider. No public semantic-search API exists yet.
 
-Inventory reservation support is prepared behind `IInventoryReservationService`. Order creation calls this service when checkout starts. The service creates active reservations from cart items, increments variant reserved quantities inside a database transaction, expires reservations after the configured duration, and releases stock on expiry. No public standalone reservation endpoint exists.
+Inventory reservation support is prepared behind `IInventoryReservationService`. Order creation calls this service when checkout starts. The service creates active reservations from cart items, increments variant reserved quantities inside a database transaction, expires reservations after the configured duration, and releases stock on expiry. PostgreSQL updates are conditional so reserved quantity cannot exceed stock or fall below zero under concurrent reservation/release attempts. No public standalone reservation endpoint exists.
 
 Angular public routes using these endpoints:
 
@@ -668,6 +711,73 @@ Angular buyer cart route:
 
 The cart page shows cart items, quantities, seller name, single-seller checkout notice, subtotal, quantity update, remove item, and checkout navigation.
 
+## Buyer Wishlist, Reviews, And Notifications
+
+Buyer engagement endpoints require a `Buyer` JWT role except the public product review reads documented in the catalog section.
+
+```http
+GET /api/buyer/wishlist
+POST /api/buyer/wishlist/{productId}
+DELETE /api/buyer/wishlist/{productId}
+GET /api/buyer/reviews
+POST /api/buyer/orders/{orderId}/items/{orderItemId}/review
+PUT /api/buyer/reviews/{reviewId}
+DELETE /api/buyer/reviews/{reviewId}
+GET /api/buyer/notifications
+POST /api/buyer/notifications/{notificationId}/read
+POST /api/buyer/notifications/read-all
+```
+
+Wishlist actions are idempotent per buyer/product and only accept products that are publicly visible: published product, verified seller, published storefront, and sellable active variant data.
+
+Review creation is verified-purchase only. The buyer must own the order, the order must be `Delivered`, and the order item can have only one review. Review ratings must be `1` through `5`. Updating or deleting a review is restricted to the owning buyer; delete marks the review removed so it no longer appears in public reads.
+
+New or edited verified-purchase reviews enter `PendingReview` until an admin approves them. Buyer review responses include moderation status plus rejection reason/timestamp metadata where applicable. Public product review reads continue to expose only `Published` reviews.
+
+Notifications are persisted in-app records created through backend workflows via `INotificationService`. Buyer notification APIs only list records and update read state; there is no email, SMS, push, SignalR, or provider integration. Current workflow notifications cover review approval/rejection, seller return approval/rejection, support public replies, order tracking updates, and shipped orders.
+
+Angular buyer routes using these endpoints:
+
+```http
+/account/wishlist
+/account/reviews
+/account/notifications
+```
+
+Product listing cards and product detail pages can save products to the buyer wishlist. Product detail pages show public review summary/list data. Delivered buyer order detail pages can create verified-purchase reviews for order items, and `/account/reviews` manages existing buyer reviews.
+
+## Admin Review Moderation
+
+Admin review moderation endpoints require an `Admin` or `SuperAdmin` JWT role.
+
+```http
+GET /api/admin/reviews/pending
+GET /api/admin/reviews/{reviewId}
+POST /api/admin/reviews/{reviewId}/approve
+POST /api/admin/reviews/{reviewId}/reject
+POST /api/admin/reviews/{reviewId}/remove
+```
+
+`GET /pending` returns buyer reviews waiting for moderation with product, seller, buyer, and order context. Detail responses also include review audit-log history.
+
+Reject and remove requests require a reason:
+
+```json
+{
+  "reason": "Review contains unsupported claims."
+}
+```
+
+Approve, reject, and remove write admin audit-log entries. Approve and reject also create buyer in-app notifications. Removed reviews and rejected reviews remain hidden from public product review reads.
+
+Angular admin route:
+
+```http
+/admin/reviews
+```
+
+The screen uses the shared admin workspace navigation, client-side search/status filters, evidence panels, and approve/reject/remove actions without changing backend payloads.
+
 ## Orders
 
 Order endpoints use JWT roles. Buyer endpoints operate only on the authenticated buyer's orders. Seller endpoints operate only on orders for the authenticated seller.
@@ -683,9 +793,10 @@ GET /api/seller/orders/{orderId}
 POST /api/seller/orders/{orderId}/mark-processing
 POST /api/seller/orders/{orderId}/tracking
 POST /api/seller/orders/{orderId}/mark-shipped
+POST /api/seller/orders/{orderId}/mark-delivered
 ```
 
-`POST /api/orders/from-cart` creates a `PendingPayment` order from the authenticated buyer's active cart and reserves inventory for the cart items. Repeating the request for the same active cart returns the existing pending-payment order instead of creating a duplicate. The cart is not cleared during this prompt because payment confirmation and reservation confirmation are still future work.
+`POST /api/orders/from-cart` creates a `PendingPayment` order from the authenticated buyer's active cart and reserves inventory for the cart items. Repeating the request for the same active cart returns the existing pending-payment order instead of creating a duplicate. The cart stays active until a paid webhook confirms payment; successful payment clears the active cart after reservations and ledger processing complete.
 
 Request:
 
@@ -773,9 +884,19 @@ Manual fulfilment starts after payment has moved the order to `Paid`. `POST /mar
 }
 ```
 
-Tracking can be added to paid or fulfilment orders and always writes a shipment event. `POST /mark-shipped` changes the order to `Shipped`, moves the current shipment to `InTransit`, and writes a shipment event. `GET /api/buyer/orders` and `GET /api/buyer/orders/{orderId}` are buyer-specific aliases for the existing buyer order reads.
+Tracking can be added to paid or fulfilment orders and always writes a shipment event. `POST /mark-shipped` changes the order to `Shipped`, moves the current shipment to `InTransit`, and writes a shipment event. `POST /mark-delivered` is seller-owned and marks a shipped order plus its current in-transit shipment as `Delivered`; repeating it for an already delivered order returns the current order. Other statuses return conflict. Delivery confirmation creates an in-app buyer notification and unlocks existing delivered-order return/review flows. It does not automatically make seller payouts available.
 
-`Delivered` exists in the order and shipment status model, but no delivered endpoint is exposed yet. That is intentional because delivery confirmation, return eligibility windows, and payout availability need to be designed together in the next prompts.
+`GET /api/buyer/orders` and `GET /api/buyer/orders/{orderId}` are buyer-specific aliases for the existing buyer order reads.
+
+Angular buyer account routes using these order reads:
+
+```http
+/account
+/account/orders
+/account/orders/{orderId}
+```
+
+`/account/orders/{orderId}` also starts delivered-order return requests through the existing return endpoint below. Pending-payment orders expose a buyer payment retry action through `POST /api/payments/initiate`; cancelled payment-failed orders tell the buyer to restart checkout from the cart instead of reopening the cancelled order.
 
 ## Returns
 
@@ -850,6 +971,15 @@ Reject requires a message. Buyers can dispute only rejected returns:
 }
 ```
 
+Angular buyer return routes:
+
+```http
+/account/returns
+/account/returns/{returnRequestId}
+```
+
+The buyer return detail UI uses `POST /api/buyer/returns/{returnRequestId}/dispute` for rejected-return escalation. Backend return eligibility remains authoritative.
+
 Disputing a rejected return changes the return to `Disputed` and the order to `Disputed`. The standalone dispute workflow below should be used when messages, evidence, and admin final decisions are needed.
 
 ## Disputes
@@ -868,6 +998,14 @@ POST /api/seller/disputes/{disputeId}/evidence
 GET /api/admin/disputes
 POST /api/admin/disputes/{disputeId}/resolve
 ```
+
+Angular buyer dispute route:
+
+```http
+/account/disputes
+```
+
+The buyer disputes UI lists disputes inline because there is no single-dispute buyer read endpoint. It supports buyer messages and evidence on the selected dispute using the existing endpoints.
 
 Open dispute request:
 
@@ -911,7 +1049,9 @@ Resolve request:
 }
 ```
 
-Supported resolution outcomes are `BuyerFavoured` and `SellerFavoured`. Opening an active dispute changes the order to `Disputed` and holds linked pending/available seller payouts. Seller-favoured resolution releases linked held payouts back to pending. Buyer-favoured resolution keeps payout funds held so a refund/manual recovery workflow can complete.
+Supported resolution outcomes are `BuyerFavoured` and `SellerFavoured`. Opening an active dispute changes the order to `Disputed` and holds linked pending/available seller payouts. Seller-favoured resolution releases linked held payouts back to pending. Buyer-favoured resolution keeps payout funds held and creates a requested refund for the remaining refundable payment amount. The refund still requires the normal finance approval/provider flow; PayFast refunds remain manual-provider-confirmed.
+
+Angular admin route `/admin/disputes` lists disputes, shows messages and evidence inline, and resolves disputes with a supported outcome and reason. It remains limited to `Admin` and `SuperAdmin` in the frontend route configuration.
 
 Dispute response:
 
@@ -1012,6 +1152,10 @@ Ticket response:
 ```
 
 Internal notes are included only on `/api/support/tickets` responses. Buyer and seller ticket responses filter out messages where `isInternal` is `true`. Linked order/payment records are ownership-checked for buyer and seller creation; linked product/seller ids are stored as references only and no linked object details are exposed in the support response.
+
+Angular buyer support routes `/account/support` and `/account/support/{ticketId}` use the buyer support-ticket endpoints for list/create/detail/message flows. Internal notes remain hidden from buyer responses.
+
+Angular admin routes `/admin/support` and `/admin/support/{ticketId}` list tickets, show public and internal messages, add public replies, add internal notes, resolve tickets, and close tickets. The frontend role list includes `SupportAgent`, `Admin`, and `SuperAdmin` to match the backend support policy.
 
 ## Seller Ad Campaigns
 
@@ -1126,7 +1270,7 @@ Angular admin routes:
 
 ## Ad Tracking And Campaign Metrics
 
-Public ad tracking endpoints are anonymous and return `202 Accepted` whether an event is stored or ignored. This avoids making the buyer flow depend on ad-tracking success.
+Public ad tracking endpoints are anonymous and return `202 Accepted` whether an event is stored or ignored. This avoids making the buyer flow depend on ad-tracking success. Impressions and clicks use separate rate-limit policies.
 
 ```http
 POST /api/ads/impressions
@@ -1165,7 +1309,7 @@ Response:
 }
 ```
 
-The tracking service records events only for active campaigns within their flight window, campaign-linked published products, and products with sellable stock. Repeated impressions are de-duplicated over a short visitor window; repeated clicks are de-duplicated over a shorter buyer/visitor window. Clicks create ad charges using the campaign max CPC and respect daily and total campaign budget limits.
+The tracking service records events only for active campaigns within their flight window, campaign-linked published products, and products with sellable stock. Repeated impressions are de-duplicated over a short visitor window; repeated clicks are de-duplicated over a shorter buyer/visitor window. When an anonymous tracking request omits `anonymousVisitorId`, the API derives a short hashed request fingerprint from connection metadata so repeated anonymous impressions do not create unlimited writes. Clicks create ad charges using the campaign max CPC and respect daily and total campaign budget limits.
 
 Successful payment webhook processing runs backend-only conversion attribution. It attributes paid order items to the latest buyer ad click for the same product inside the attribution window and stores conversions without exposing buyer personal data in reports.
 
@@ -1271,13 +1415,14 @@ Angular seller analytics route:
 
 ## Refunds
 
-Refund endpoints require `Admin` or `SuperAdmin`.
+Refund endpoints use finance policies. Reads require `FinanceRead` (`Admin`, `SuperAdmin`, `FinanceOperator`, or `FinanceApprover`). Creating refund requests requires `FinanceOperate` (`FinanceOperator` or `SuperAdmin`). Approving provider refunds and confirming manual provider refunds require `FinanceApprove` (`FinanceApprover` or `SuperAdmin`). Dual control applies to every role, including `SuperAdmin`: the actor who created a refund request cannot approve the same refund.
 
 ```http
 POST /api/admin/orders/{orderId}/refunds
 POST /api/admin/returns/{returnRequestId}/refunds
 GET /api/admin/refunds
 POST /api/admin/refunds/{refundId}/approve
+POST /api/admin/refunds/{refundId}/confirm-manual-provider-refund
 ```
 
 Create refund request:
@@ -1294,6 +1439,15 @@ Approve refund request:
 ```json
 {
   "reason": "Return approved by admin."
+}
+```
+
+Manual provider refund confirmation request:
+
+```json
+{
+  "providerRefundReference": "payfast_dashboard_refund_reference",
+  "reason": "Refund completed in provider dashboard."
 }
 ```
 
@@ -1320,7 +1474,9 @@ Refund response:
 }
 ```
 
-Approving a refund calls the configured payment-provider abstraction, marks the payment `PartiallyRefunded` or `Refunded`, writes `RefundIssued` and `RefundReversal` ledger entries, adjusts seller balances proportionally to the original seller-pending amount, and writes a `RefundApproved` audit log. If seller balances are already insufficient, the pending balance can go negative as an explicit manual-recovery signal. Full refunds mark the order `Refunded`; partial refunds leave the order in its current status.
+Approving a refund calls the configured payment-provider abstraction. Fake-provider refunds complete immediately. PayFast refunds are manual in this phase: approval moves the refund to `Processing` and records a provider-action-required event; finance then uses `POST /api/admin/refunds/{refundId}/confirm-manual-provider-refund` after completing the dashboard refund. Completed refunds mark the payment `PartiallyRefunded` or `Refunded`, write `RefundIssued` and `RefundReversal` ledger entries, adjust seller balances proportionally to the original seller-pending amount, and write audit logs. If an unpaid payout item is tied to the refunded order/payment, the payout item `AdjustedAmount` and payout net amount are reduced; zero-net unpaid payouts become `Reversed`. Refunds against `Processing` or `PaidOut` payouts create a recovery-required payout adjustment instead of mutating the provider payout record. If seller balances are already insufficient, the pending balance can go negative as an explicit manual-recovery signal. Full refunds mark the order `Refunded`; partial refunds leave the order in its current status.
+
+Angular admin route `/admin/refunds` lists refund records, creates order or return refund requests, and approves selected refunds. The UI exposes read/operate/approve eligibility, but backend finance policies and dual-control checks remain authoritative.
 
 ## Angular Checkout
 
@@ -1332,7 +1488,7 @@ Angular checkout routes:
 /checkout/failed
 ```
 
-The checkout page displays the current cart summary, collects a non-persisted shipping address placeholder, and starts checkout by calling `POST /api/orders/from-cart`. It does not call a payment provider directly.
+The checkout page displays the current cart summary, collects a non-persisted shipping address placeholder, starts checkout by calling `POST /api/orders/from-cart`, then calls `POST /api/payments/initiate` for the pending-payment order. If the API returns `checkoutUrl`, Angular redirects the buyer to that provider URL. `/checkout/success`, `/checkout/failed`, and `/account/orders/{orderId}` can retry payment while the order remains `PendingPayment`.
 
 ## Payment Provider Abstraction
 
@@ -1347,7 +1503,7 @@ Payment provider integration is prepared behind Application-layer contracts:
 - `PaymentWebhookEvent`
 - `PaymentProviderOptions`
 
-The current Infrastructure implementation is `FakePaymentProvider`. It can initialize a fake checkout session, verify a fake provider reference, parse a fake webhook payload, process a fake refund, and verify an HMAC webhook signature. Prompt 38 added the abstraction only; Prompts 39-41 added the local payment, webhook, and ledger persistence described below.
+Runtime payment providers are selected with `PaymentProvider__ProviderName`. `FakePaymentProvider` remains the default outside explicit provider configuration. Phase 8C adds `PayFastPaymentProvider` as the first real adapter foundation behind the same abstraction. It returns a Swyftly-hosted checkout bridge URL, renders a signed PayFast hosted-checkout form server-side, verifies PayFast ITN signatures, optionally performs PayFast remote ITN validation, and keeps PayFast refunds as manual provider actions until an automatic refund API is verified.
 
 Configuration keys:
 
@@ -1358,9 +1514,38 @@ PaymentProvider__SuccessRedirectUrl
 PaymentProvider__FailureRedirectUrl
 PaymentProvider__WebhookSigningSecret
 PaymentProvider__FakeOutcome
+PaymentWebhookPayloadRetention__Enabled
+PaymentWebhookPayloadRetention__RetentionDays
+PaymentWebhookPayloadRetention__BatchSize
 ```
 
-`PaymentProvider__FakeOutcome` supports `Success` or `Failure` for development/test simulation.
+`PaymentProvider__WebhookSigningSecret` is used only by the fake provider. `PaymentProvider__FakeOutcome` supports `Success` or `Failure` for development/test simulation. `PaymentWebhookPayloadRetention` controls worker-side redaction of stored raw webhook payload JSON; event metadata remains for reconciliation.
+
+PayFast configuration keys:
+
+```text
+PayFast__MerchantId
+PayFast__MerchantKey
+PayFast__Passphrase
+PayFast__ProcessUrl
+PayFast__ValidateUrl
+PayFast__NotifyUrl
+PayFast__CheckoutBridgeBaseUrl
+PayFast__RequireRemoteValidation
+```
+
+PayU remains deferred until merchant technical docs and sandbox credentials are available:
+
+```text
+PayU__Region
+PayU__Username
+PayU__Password
+PayU__Safekey
+PayU__PaymentPageUrl
+PayU__WebhookSigningKey
+```
+
+Provider comparison and implementation notes live in `docs/payment-provider-comparison.md` and `docs/payment-provider-implementation-notes.md`. No provider SDK or payment-provider database migration is active. Production startup rejects `PaymentProvider__ProviderName=Fake` and requires external HTTPS PayFast URLs plus remote validation when `PaymentProvider__ProviderName=PayFast`.
 
 ## Payments And Webhooks
 
@@ -1389,13 +1574,21 @@ Response:
   "amount": 999.98,
   "currency": "ZAR",
   "status": "Pending",
-  "checkoutUrl": "http://localhost:4200/checkout/success?providerReference=fake_reference"
+  "checkoutUrl": "http://localhost:4200/checkout/success?orderId=00000000-0000-0000-0000-000000000000&providerReference=fake_reference"
 }
 ```
 
-Payment initiation creates a local `Payment` row before calling the configured provider abstraction. If the fake provider is configured to fail, the local payment is marked `Failed`.
+Payment initiation creates a local `Payment` row before calling the configured provider abstraction. The provider checkout URL is stored on the payment and returned on duplicate active-payment initiation. If the fake provider is configured to fail, the local payment is marked `Failed`; retrying the same pending-payment order creates a new local payment. Cancelled payment-failed orders are not reopened.
 
-Payment webhooks are anonymous because provider callbacks cannot carry buyer JWTs. They still verify the provider route and require provider signature verification before parsing or persisting any webhook event. The fake provider expects the `X-Swyftly-Fake-Signature` header to contain the lowercase hex HMAC-SHA256 of the raw request body using `PaymentProvider__WebhookSigningSecret`.
+PayFast payment initiation uses the local payment id as `m_payment_id`/provider reference and returns a backend checkout bridge URL:
+
+```http
+GET /api/payments/payfast/checkout/{providerReference}
+```
+
+The checkout bridge is anonymous and returns `text/html` with an auto-submit form posting to `PayFast__ProcessUrl`. It only serves pending local PayFast payments and includes signed PayFast fields, `notify_url`, return/cancel URLs, order id, payment id, amount, and item summary.
+
+Payment webhooks are anonymous because provider callbacks cannot carry buyer JWTs. They are protected with the `Webhook` rate-limit policy, reject payloads larger than 64 KB, verify the provider route, and require provider signature verification before parsing or persisting any webhook event. The fake provider requires `application/json` or `application/*+json` and expects the `X-Swyftly-Fake-Signature` header to contain the lowercase hex HMAC-SHA256 of the raw request body using `PaymentProvider__WebhookSigningSecret`. PayFast requires `application/x-www-form-urlencoded` at `/api/payments/webhook/payfast`.
 
 ```http
 POST /api/payments/webhook/{provider}
@@ -1413,9 +1606,9 @@ Fake webhook payload:
 }
 ```
 
-Webhook handling stores the raw event payload in `payment_events` and uses `(Provider, ProviderEventId)` to avoid duplicate processing. A successful payment webhook marks the payment and order as paid, confirms active cart reservations, creates successful-payment ledger entries, and credits seller pending balance. A failed payment webhook marks payment failed, cancels the order, cancels active reservations, and releases reserved stock.
+Webhook handling stores a sanitized JSON representation of the provider event in `payment_events` and uses `(Provider, ProviderEventId)` to avoid duplicate processing. JSON webhooks are wrapped as `payloadType=json`; PayFast form ITNs are wrapped as `payloadType=form`. Sensitive fields such as signatures, tokens, secrets, passwords, passphrases, card fields, and CVV/CVC values are redacted before persistence. A worker-side retention cleanup later replaces expired raw payload JSON with a `payloadType=redacted` marker and sets `raw_payload_redacted_at_utc`, while preserving provider event id, event type, received/processed timestamps, processing status, and payment linkage. A successful payment webhook marks the payment and order as paid, confirms active cart reservations, creates successful-payment ledger entries, credits seller pending balance, and clears the buyer's active cart. A failed payment webhook marks payment failed, cancels the order, cancels active reservations, and releases reserved stock without clearing the cart. Authorized, failed, cancelled, or unknown webhook statuses do not clear the cart. Concurrent duplicate webhooks that race on the unique index are treated as idempotent success by reloading the existing event result.
 
-Invalid signatures return `401` and do not create `payment_events` rows. Duplicate provider event ids return the existing processing result and do not create duplicate ledger entries. Webhook processing is wrapped in a database transaction before storing the event and applying payment/order/ledger changes.
+PayFast ITN handling maps `COMPLETE` to paid, maps failed/cancelled statuses only for eligible pending payments, and stores unknown/intermediate statuses without settlement. PayFast paid settlement is rejected when `m_payment_id`, amount, or currency does not match the local payment. Invalid content type returns `415`, oversized payloads return `413`, and invalid signatures or failed remote validation return `401`. These failures do not create `payment_events` rows. Duplicate provider event ids return the existing processing result and do not create duplicate ledger entries. Webhook processing is wrapped in a database transaction before storing the event and applying payment/order/ledger changes.
 
 Current successful-payment ledger entries:
 
@@ -1432,11 +1625,11 @@ Ledger__PaymentProviderFeeRatePercent
 Ledger__PaymentProviderFixedFee
 ```
 
-Real payment provider SDKs, production webhook signatures, external payout release, and detailed finance admin UI are still future work.
+Provider status-query reconciliation, automatic PayFast refunds, PayU South Africa, and real payout provider integrations remain future work.
 
 ## Seller Balances And Payouts
 
-Seller balance and payout endpoints use JWT roles. Sellers can read only their own balances and payouts. Admin payout endpoints require `Admin` or `SuperAdmin`.
+Seller balance and payout endpoints use JWT roles. Sellers can read only their own balances and payouts. Admin payout reads require `FinanceRead`; hold and make-available require `FinanceOperate`; release, process, and reconcile require `FinanceApprove`. Dual control applies to every role, including `SuperAdmin`.
 
 ```http
 GET /api/seller/balance
@@ -1444,6 +1637,9 @@ GET /api/seller/payouts
 GET /api/admin/payouts/pending
 POST /api/admin/payouts/{id}/hold
 POST /api/admin/payouts/{id}/release
+POST /api/admin/payouts/{id}/make-available
+POST /api/admin/payouts/{id}/process
+POST /api/admin/payouts/{id}/reconcile
 ```
 
 `GET /api/seller/balance` returns pending, available, and held balances per currency:
@@ -1462,9 +1658,20 @@ POST /api/admin/payouts/{id}/release
 }
 ```
 
-Successful payment ledger processing creates a `Pending` seller payout and a payout item linked to the seller-pending ledger entry. Payouts do not become externally payable yet because delivery, returns, disputes, and payout provider processing are future prompts.
+Successful payment ledger processing creates a `Pending` seller payout and a payout item linked to the seller-pending ledger entry. Seller payout history intentionally hides internal ledger, order, and payment identifiers; it returns payout totals plus item source type and amount only. Admin finance payout reads retain item, ledger, order, and payment identifiers for reconciliation.
 
-Admin hold/release request:
+Seller payout item response shape:
+
+```json
+{
+  "amount": 875.00,
+  "currency": "ZAR",
+  "createdAtUtc": "2026-05-19T10:00:00Z",
+  "sourceType": "Order"
+}
+```
+
+Admin payout action request:
 
 ```json
 {
@@ -1472,7 +1679,20 @@ Admin hold/release request:
 }
 ```
 
-Holding a payout changes it to `OnHold`, moves the payout amount from pending balance to held balance, and writes a `PayoutHeld` audit log. Releasing a held payout changes it back to `Pending`, moves the amount back from held to pending balance, and writes a `PayoutReleased` audit log. Releasing to `Available`, processing provider payouts, and paid-out settlement are intentionally left for later fulfilment/payout prompts.
+Holding a payout changes it to `OnHold`, preserves whether it was held from `Pending` or `Available`, moves the payout amount into held balance, and writes a `PayoutHeld` audit log. Releasing a held payout returns it to the held-from status and writes a `PayoutReleased` audit log.
+
+`POST /make-available` moves a `Pending` payout into `Available` and moves seller balance from pending to available. `POST /process` starts provider payout processing, moves the payout amount out of available balance, calls the configured payout provider with the payout id as the idempotency key, and marks the payout `PaidOut`, `Processing`, or `Failed` based on provider status. Failed payouts restore available balance for retry. `POST /reconcile` refreshes a `Processing` payout from the provider and finalizes paid/failed status.
+
+Payout provider configuration keys:
+
+```text
+PayoutProvider__ProviderName
+PayoutProvider__FakeOutcome
+```
+
+The current implementation is `FakePayoutProvider`; no real payout provider SDK or bank integration is present.
+
+Angular admin route `/admin/payouts` lists pending/on-hold payouts and calls the hold, release, make-available, process, and reconcile endpoints with required reason input. The UI shows operate/approve eligibility, but backend finance policies and dual-control checks remain authoritative.
 
 ## Admin Product Review
 
@@ -1505,6 +1725,8 @@ POST /api/admin/products/{productId}/request-changes
 ```
 
 Rejecting moves the product to `Rejected`; requesting changes moves it to `ChangesRequested`, which remains seller-editable so the seller can fix and resubmit the listing. Every approval, rejection, and change request writes an audit-log entry.
+
+Angular admin product routes `/admin/products` and `/admin/products/{productId}` use these endpoints unchanged. The queue applies client-side search/status/seller/risk filters over the pending-review response. The detail screen presents seller context, listing data, image review with thumbnail selection and fallback, attributes, variants, AI moderation flags, unchanged review-action payloads, and audit trail.
 
 ## Seller Product Drafts
 
@@ -1615,7 +1837,7 @@ Supported `fieldsToApply` values are `title`, `shortDescription`, `fullDescripti
 
 ## Current Scope
 
-Health/readiness, identity foundation, seller onboarding, admin seller approval, admin product review, admin dashboard summary, admin category metadata, admin marketplace finance reports, public product search, buyer-facing shop/category/product/seller/cart/checkout/assistant/visual-search pages, seller product draft endpoints, buyer cart endpoints, inventory reservation services, order creation from cart, payment provider abstractions with a fake provider, local payment persistence, idempotent payment webhook handling, successful-payment ledger entries, seller balance/payout read APIs, admin payout hold/release, manual seller fulfilment/tracking, return requests with seller response and payout holds, refund workflow with ledger reversals, dispute workflow with evidence/messages/admin resolution, support ticket workflow with private internal notes, seller ad campaign draft/submission API and Angular dashboard, seller analytics dashboard, admin ad campaign review, ad event tracking and seller campaign metrics, product moderation, AI suggestion persistence/DTOs, the backend AI listing assistant service abstraction, seller AI suggestion generation/apply endpoints, the Angular seller AI assistant UI, buyer AI shopping intent extraction/recommendations, buyer visual search with a fake vision provider, and private product embedding generation exist. Real payment provider integration, external payout processing, delivery-confirmation workflow, production vision AI, and full finance operations UI are intentionally not implemented yet.
+Health/readiness, identity foundation with HttpOnly refresh cookies, seller onboarding, admin seller approval and Angular moderation polish, admin product review and Angular moderation polish, admin buyer-review moderation, admin audit-log UI polish, admin dashboard summary, admin category metadata and Angular read-only category reference, admin marketplace finance reports, admin order/payment read APIs and Angular read screens, public product search, public verified-buyer product review reads, buyer-facing shop/category/product/seller/cart/checkout/assistant/visual-search pages, buyer account order/return/dispute/support/wishlist/review/notification Angular routes, seller product draft endpoints, buyer cart endpoints, buyer wishlist/review/notification backend APIs, inventory reservation services, order creation from cart, payment provider abstractions with fake and PayFast providers, local payment persistence with retryable checkout URLs, idempotent payment webhook handling including duplicate race fallback and paid-cart cleanup, seller delivery confirmation, successful-payment ledger entries, seller balance/payout read APIs, admin payout hold/release/make-available/process/reconcile with a fake payout provider, refund workflow with ledger reversals, payout adjustments, and manual PayFast refund confirmation, finance dual-control policies, dispute workflow with evidence/messages/admin resolution, admin finance Angular routes for refunds/payouts/disputes, support ticket workflow with private internal notes and Angular support queue/detail routes, seller ad campaign draft/submission API and Angular dashboard, seller analytics dashboard, admin ad campaign review, ad event tracking and seller campaign metrics, product moderation, AI suggestion persistence/DTOs, the backend AI listing assistant service abstraction, seller AI suggestion generation/apply endpoints, the Angular seller AI assistant UI, buyer AI shopping intent extraction/recommendations, buyer visual search with a fake vision provider, and private product embedding generation exist. PayFast sandbox verification, payment-provider status reconciliation, automatic PayFast refunds, real payout provider integration, carrier integration, production vision AI, buyer-favoured dispute money movement, admin order/payment mutation workflows, email/SMS/push notification delivery, and category/attribute write APIs are intentionally not implemented yet.
 
 ## API Rules
 
@@ -1630,10 +1852,12 @@ Swyftly uses ASP.NET Core fixed-window rate limiting with named policies configu
 
 Current policies:
 
-- `Auth`: login and public registration.
+- `Auth`: login, public registration, refresh, and logout.
 - `Ai`: seller AI listing suggestion generation, stricter than normal browsing.
 - `ProductWrite`: seller product creation.
 - `Payment`: buyer payment initiation.
+- `Webhook`: anonymous payment webhooks.
+- `AdImpression`: anonymous ad impression tracking.
 - `AdClick`: anonymous ad click tracking.
 - `Search`: public product search.
 
@@ -1647,4 +1871,4 @@ When a policy is exceeded, the API returns HTTP `429` with a small ProblemDetail
 }
 ```
 
-Development settings keep limits relaxed enough for local work. Tests verify the `Search` policy returns `429` when its configured limit is exceeded.
+Development settings keep limits relaxed enough for local work. Tests verify the `Search` and `AdImpression` policies return `429` when their configured limits are exceeded.

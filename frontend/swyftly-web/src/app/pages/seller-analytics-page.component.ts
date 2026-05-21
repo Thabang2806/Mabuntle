@@ -126,7 +126,7 @@ import { getApiErrorMessage } from '../auth/api-error';
             </div>
 
             <div class="route-card admin-action-card">
-              <h2>Placeholders</h2>
+              <h2>Conversion signals</h2>
               <dl class="admin-facts">
                 <div><dt>Conversion rate</dt><dd>{{ summary()!.conversionRatePlaceholder | percent:'1.0-2' }}</dd></div>
                 <div><dt>Total refunded</dt><dd>{{ summary()!.totalRefunded | currency:'ZAR':'symbol-narrow' }}</dd></div>

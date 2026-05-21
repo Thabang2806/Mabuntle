@@ -40,6 +40,8 @@ public sealed class PaymentEvent : Entity
 
     public string RawPayloadJson { get; private set; } = string.Empty;
 
+    public DateTimeOffset? RawPayloadRedactedAtUtc { get; private set; }
+
     public DateTimeOffset ReceivedAtUtc { get; private set; }
 
     public DateTimeOffset? ProcessedAtUtc { get; private set; }
@@ -72,6 +74,18 @@ public sealed class PaymentEvent : Entity
         ProcessingStatus = PaymentEventProcessingStatus.Failed;
         ProcessedAtUtc = processedAtUtc;
         ErrorMessage = Required(errorMessage, nameof(errorMessage));
+    }
+
+    public bool RedactRawPayload(string redactedPayloadJson, DateTimeOffset redactedAtUtc)
+    {
+        if (RawPayloadRedactedAtUtc is not null)
+        {
+            return false;
+        }
+
+        RawPayloadJson = Required(redactedPayloadJson, nameof(redactedPayloadJson));
+        RawPayloadRedactedAtUtc = redactedAtUtc;
+        return true;
     }
 
     private static string Required(string? value, string parameterName)

@@ -7,6 +7,8 @@ public static class SwyftlyRoles
     public const string Admin = "Admin";
     public const string SuperAdmin = "SuperAdmin";
     public const string SupportAgent = "SupportAgent";
+    public const string FinanceOperator = "FinanceOperator";
+    public const string FinanceApprover = "FinanceApprover";
 
     public static readonly IReadOnlySet<string> PublicRegistrationRoles = new HashSet<string>(
         [Buyer, Seller],
@@ -18,6 +20,8 @@ public static class SwyftlyRoles
         Seller,
         Admin,
         SuperAdmin,
-        SupportAgent
+        SupportAgent,
+        FinanceOperator,
+        FinanceApprover
     ];
 }

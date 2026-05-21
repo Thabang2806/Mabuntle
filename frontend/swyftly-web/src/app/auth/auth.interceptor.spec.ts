@@ -1,35 +1,25 @@
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { environment } from '../../environments/environment';
 import { authTokenInterceptor } from './auth.interceptor';
-
-const AUTH_SESSION_KEY = 'swyftly.auth.session';
+import { AuthService } from './auth.service';
 
 describe('authTokenInterceptor', () => {
   let httpClient: HttpClient;
   let httpTestingController: HttpTestingController;
 
   beforeEach(() => {
-    sessionStorage.clear();
-    sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
-      currentUser: {
-        userId: '8df688c9-4bdd-40cc-b6f6-7bd3b7fba019',
-        email: 'buyer@example.test',
-        roles: ['Buyer']
-      },
-      tokens: {
-        accessToken: 'access-token',
-        accessTokenExpiresAtUtc: '2026-05-18T12:30:00+00:00',
-        refreshToken: 'refresh-token',
-        refreshTokenExpiresAtUtc: '2026-06-01T12:00:00+00:00'
-      }
-    }));
-
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(withInterceptors([authTokenInterceptor])),
-        provideHttpClientTesting()
+        provideHttpClientTesting(),
+        {
+          provide: AuthService,
+          useValue: {
+            accessToken: 'access-token'
+          }
+        }
       ]
     });
 
@@ -39,14 +29,23 @@ describe('authTokenInterceptor', () => {
 
   afterEach(() => {
     httpTestingController.verify();
-    sessionStorage.clear();
   });
 
-  it('adds the bearer token header when an access token exists', () => {
-    httpClient.get('/api/example').subscribe();
+  it('adds the bearer token header only for the Swyftly API origin', () => {
+    httpClient.get(`${environment.apiBaseUrl}/api/example`).subscribe();
+    httpClient.get('https://payments.example.test/session').subscribe();
+    httpClient.get(`${environment.apiBaseUrl}.evil.test/api/example`).subscribe();
 
-    const request = httpTestingController.expectOne('/api/example');
-    expect(request.request.headers.get('Authorization')).toBe('Bearer access-token');
-    request.flush({});
+    const apiRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/example`);
+    expect(apiRequest.request.headers.get('Authorization')).toBe('Bearer access-token');
+    apiRequest.flush({});
+
+    const externalRequest = httpTestingController.expectOne('https://payments.example.test/session');
+    expect(externalRequest.request.headers.has('Authorization')).toBeFalse();
+    externalRequest.flush({});
+
+    const deceptivePrefixRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}.evil.test/api/example`);
+    expect(deceptivePrefixRequest.request.headers.has('Authorization')).toBeFalse();
+    deceptivePrefixRequest.flush({});
   });
 });

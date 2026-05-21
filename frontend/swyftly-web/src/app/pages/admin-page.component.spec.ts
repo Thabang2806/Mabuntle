@@ -46,6 +46,7 @@ describe('AdminPageComponent', () => {
       .map(link => link.getAttribute('href'));
     expect(links).toContain('/admin/sellers');
     expect(links).toContain('/admin/products');
+    expect(links).toContain('/admin/reviews');
     expect(links).toContain('/admin/orders');
     expect(links).toContain('/admin/payments');
     expect(links).toContain('/admin/refunds');

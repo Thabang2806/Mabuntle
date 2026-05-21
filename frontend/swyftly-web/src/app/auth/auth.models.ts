@@ -1,21 +1,21 @@
-export type AuthRole = 'Buyer' | 'Seller' | 'Admin' | 'SuperAdmin';
+export type AuthRole =
+  'Buyer' |
+  'Seller' |
+  'Admin' |
+  'SuperAdmin' |
+  'SupportAgent' |
+  'FinanceOperator' |
+  'FinanceApprover';
 
 export interface AuthTokens {
   accessToken: string;
   accessTokenExpiresAtUtc: string;
-  refreshToken: string;
-  refreshTokenExpiresAtUtc: string;
 }
 
 export interface AuthUser {
   userId: string;
   email: string;
   roles: AuthRole[];
-}
-
-export interface AuthSession {
-  currentUser: AuthUser;
-  tokens: AuthTokens;
 }
 
 export interface AuthState {
@@ -42,14 +42,6 @@ export interface RegisterResponse {
 export interface LoginRequest {
   email: string;
   password: string;
-}
-
-export interface RefreshTokenRequest {
-  refreshToken: string;
-}
-
-export interface LogoutRequest {
-  refreshToken: string;
 }
 
 export interface AuthResponse extends AuthUser, AuthTokens {}

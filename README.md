@@ -58,7 +58,7 @@ POST /api/auth/logout
 GET  /api/auth/me
 ```
 
-Public registration is limited to `Buyer` and `Seller`. Admin roles are seeded as roles only and are not self-assignable.
+Public registration is limited to `Buyer` and `Seller`. Admin, support, and finance roles are seeded as roles only and are not self-assignable. Login and refresh return a short-lived access token; refresh tokens are set as HttpOnly cookies and refresh/logout require the `X-Swyftly-CSRF` header from the non-HttpOnly CSRF cookie.
 
 ## Frontend
 
@@ -74,6 +74,8 @@ Default local route:
 ```text
 http://localhost:4200
 ```
+
+Cookie-based refresh uses Secure, SameSite=Lax cookies by default. Cookie path/domain/SameSite/Secure settings live under `AuthCookies`; production startup rejects insecure cookie settings. For browser testing of session restore/logout cookies, run the Angular dev server over HTTPS or use a same-site HTTPS frontend origin.
 
 ## Database
 
@@ -112,7 +114,9 @@ Jwt__AccessTokenMinutes
 Jwt__RefreshTokenDays
 ```
 
-Use user-secrets or environment variables for real signing keys and database passwords. The committed appsettings values are development placeholders only.
+Use user-secrets or environment variables for real signing keys, webhook secrets, and database passwords. The root `appsettings.json` intentionally contains no usable production secrets. In `Production`, API startup fails when the JWT signing key, payment webhook signing secret, or PostgreSQL connection string is missing, weak, or a known local placeholder.
+
+Payment webhook payload retention is controlled by `PaymentWebhookPayloadRetention__Enabled`, `PaymentWebhookPayloadRetention__RetentionDays`, and `PaymentWebhookPayloadRetention__BatchSize`. The worker redacts expired raw webhook payload JSON while keeping event metadata for finance reconciliation.
 
 ## CI
 

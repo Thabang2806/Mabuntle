@@ -25,6 +25,14 @@ describe('AdminProductDetailPageComponent', () => {
         createdAtUtc: '2026-05-18T12:30:00Z'
       }]
     }));
+    adminProductService.requestChanges.and.resolveTo(createProductDetail({
+      status: 'ChangesRequested',
+      rejectionReason: 'Add material details.'
+    }));
+    adminProductService.rejectProduct.and.resolveTo(createProductDetail({
+      status: 'Rejected',
+      rejectionReason: 'Counterfeit risk was not resolved.'
+    }));
 
     await TestBed.configureTestingModule({
       imports: [AdminProductDetailPageComponent],
@@ -56,6 +64,18 @@ describe('AdminProductDetailPageComponent', () => {
     expect(compiled.textContent).toContain('Seller Store');
     expect(compiled.textContent).toContain('Black');
     expect(compiled.textContent).toContain('Potential counterfeit wording detected.');
+  });
+
+  it('renders a clear image fallback when a product has no images', async () => {
+    adminProductService.getProduct.and.resolveTo(createProductDetail({ images: [] }));
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('No images attached');
+    expect(compiled.querySelector('.admin-image-fallback')).toBeTruthy();
   });
 
   it('requires an override reason before approving a high-risk product', async () => {
@@ -91,6 +111,40 @@ describe('AdminProductDetailPageComponent', () => {
     expect(adminProductService.approveProduct).toHaveBeenCalledWith('product-id', { overrideReason: 'Manual review complete.' });
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Product approved.');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('ProductApproved');
+  });
+
+  it('requests product changes with the unchanged reason payload', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const reasonTextarea = ((fixture.nativeElement as HTMLElement).querySelectorAll('textarea[formControlName="reason"]')[0]) as HTMLTextAreaElement;
+    reasonTextarea.value = 'Add material details.';
+    reasonTextarea.dispatchEvent(new Event('input'));
+    reasonTextarea.closest('form')?.dispatchEvent(new Event('submit'));
+
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(adminProductService.requestChanges).toHaveBeenCalledWith('product-id', { reason: 'Add material details.' });
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Changes requested.');
+  });
+
+  it('rejects a product with the unchanged reason payload', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const reasonTextarea = ((fixture.nativeElement as HTMLElement).querySelectorAll('textarea[formControlName="reason"]')[1]) as HTMLTextAreaElement;
+    reasonTextarea.value = 'Counterfeit risk was not resolved.';
+    reasonTextarea.dispatchEvent(new Event('input'));
+    reasonTextarea.closest('form')?.dispatchEvent(new Event('submit'));
+
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(adminProductService.rejectProduct).toHaveBeenCalledWith('product-id', { reason: 'Counterfeit risk was not resolved.' });
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Product rejected.');
   });
 });
 

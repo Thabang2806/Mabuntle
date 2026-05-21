@@ -71,13 +71,16 @@ public sealed record PaymentWebhookEvent(
     string ProviderReference,
     string Status,
     DateTimeOffset OccurredAtUtc,
-    string Payload);
+    string Payload,
+    decimal? Amount = null,
+    string? Currency = null);
 
 public sealed record PaymentRefundRequest(
     string ProviderReference,
     decimal Amount,
     string Currency,
     string Reason,
+    string IdempotencyKey,
     IReadOnlyDictionary<string, string> Metadata);
 
 public sealed record PaymentRefundResult(

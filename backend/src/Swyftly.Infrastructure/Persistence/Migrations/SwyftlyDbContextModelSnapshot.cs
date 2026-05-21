@@ -891,6 +891,33 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                     b.ToTable("buyer_profiles", "swyftly");
                 });
 
+            modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerWishlistItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BuyerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("BuyerId", "ProductId")
+                        .IsUnique();
+
+                    b.ToTable("buyer_wishlist_items", "swyftly");
+                });
+
             modelBuilder.Entity("Swyftly.Domain.Carts.Cart", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1627,6 +1654,77 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                     b.ToTable("product_images", "swyftly");
                 });
 
+            modelBuilder.Entity("Swyftly.Domain.Catalog.ProductReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Body")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("BuyerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("ModeratedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ModeratedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ModerationReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrderItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BuyerId");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("OrderItemId")
+                        .IsUnique();
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("SellerId");
+
+                    b.HasIndex("ProductId", "Status", "CreatedAtUtc");
+
+                    b.ToTable("product_reviews", "swyftly");
+                });
+
             modelBuilder.Entity("Swyftly.Domain.Catalog.ProductVariant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1690,7 +1788,12 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                     b.HasIndex("ProductId", "Size", "Colour")
                         .IsUnique();
 
-                    b.ToTable("product_variants", "swyftly");
+                    b.ToTable("product_variants", "swyftly", t =>
+                        {
+                            t.HasCheckConstraint("CK_product_variants_reserved_quantity_non_negative", "\"ReservedQuantity\" >= 0");
+
+                            t.HasCheckConstraint("CK_product_variants_reserved_quantity_not_above_stock", "\"ReservedQuantity\" <= \"StockQuantity\"");
+                        });
                 });
 
             modelBuilder.Entity("Swyftly.Domain.Disputes.Dispute", b =>
@@ -2054,6 +2157,21 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<string>("AvailabilityReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("AvailableAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AvailableByUserId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2062,6 +2180,13 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("character varying(3)");
 
+                    b.Property<DateTimeOffset?>("FailedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<DateTimeOffset?>("HeldAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2069,9 +2194,39 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("HeldFromStatus")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("HoldReason")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("PaidOutAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("ProcessingAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProcessingByUserId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProcessingReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ProviderName")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProviderPayoutReference")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ProviderStatus")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("ReleaseReason")
                         .HasMaxLength(1000)
@@ -2106,11 +2261,69 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                     b.ToTable("seller_payouts", "swyftly");
                 });
 
+            modelBuilder.Entity("Swyftly.Domain.Ledger.SellerPayoutAdjustment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AdjustmentType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("RefundId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RefundLedgerEntryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SellerPayoutId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SellerPayoutItemId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("RefundId");
+
+                    b.HasIndex("RefundLedgerEntryId");
+
+                    b.HasIndex("SellerPayoutId");
+
+                    b.HasIndex("SellerPayoutItemId");
+
+                    b.ToTable("seller_payout_adjustments", "swyftly");
+                });
+
             modelBuilder.Entity("Swyftly.Domain.Ledger.SellerPayoutItem", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<decimal>("AdjustedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 2)
@@ -2148,6 +2361,52 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                     b.HasIndex("SellerPayoutId");
 
                     b.ToTable("seller_payout_items", "swyftly");
+                });
+
+            modelBuilder.Entity("Swyftly.Domain.Notifications.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("ReadAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RecipientUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("RelatedEntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RelatedEntityType")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecipientUserId", "CreatedAtUtc");
+
+                    b.HasIndex("RecipientUserId", "ReadAtUtc");
+
+                    b.ToTable("notifications", "swyftly");
                 });
 
             modelBuilder.Entity("Swyftly.Domain.Orders.Order", b =>
@@ -2412,6 +2671,11 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("BuyerId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CheckoutUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("checkout_url");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2452,7 +2716,9 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedAtUtc");
 
-                    b.HasIndex("OrderId");
+                    b.HasIndex("OrderId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" NOT IN ('Failed', 'Cancelled')");
 
                     b.HasIndex("ProviderReference");
 
@@ -2502,6 +2768,10 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("raw_payload_json");
 
+                    b.Property<DateTimeOffset?>("RawPayloadRedactedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("raw_payload_redacted_at_utc");
+
                     b.Property<DateTimeOffset>("ReceivedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2540,6 +2810,10 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("BuyerId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ConcurrencyVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -2572,6 +2846,14 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset>("RequestedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestedByRole")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("ReturnRequestId")
                         .HasColumnType("uuid");
@@ -3253,12 +3535,21 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("ExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid>("FamilyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("family_id");
+
                     b.Property<string>("ReplacedByTokenHash")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
                     b.Property<DateTimeOffset?>("RevokedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RevokedReason")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("revoked_reason");
 
                     b.Property<string>("TokenHash")
                         .IsRequired()
@@ -3274,6 +3565,8 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "FamilyId");
 
                     b.ToTable("refresh_tokens", "swyftly");
                 });
@@ -3506,6 +3799,21 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerWishlistItem", b =>
+                {
+                    b.HasOne("Swyftly.Domain.Buyers.BuyerProfile", null)
+                        .WithMany()
+                        .HasForeignKey("BuyerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Swyftly.Domain.Catalog.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Swyftly.Domain.Carts.Cart", b =>
                 {
                     b.HasOne("Swyftly.Domain.Buyers.BuyerProfile", null)
@@ -3587,6 +3895,39 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Swyftly.Domain.Catalog.ProductReview", b =>
+                {
+                    b.HasOne("Swyftly.Domain.Buyers.BuyerProfile", null)
+                        .WithMany()
+                        .HasForeignKey("BuyerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Swyftly.Domain.Orders.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Swyftly.Domain.Orders.OrderItem", null)
+                        .WithMany()
+                        .HasForeignKey("OrderItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Swyftly.Domain.Catalog.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Swyftly.Domain.Sellers.SellerProfile", null)
+                        .WithMany()
+                        .HasForeignKey("SellerId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
@@ -3710,6 +4051,32 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Swyftly.Domain.Ledger.SellerPayoutAdjustment", b =>
+                {
+                    b.HasOne("Swyftly.Domain.Refunds.Refund", null)
+                        .WithMany()
+                        .HasForeignKey("RefundId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Swyftly.Domain.Ledger.LedgerEntry", null)
+                        .WithMany()
+                        .HasForeignKey("RefundLedgerEntryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Swyftly.Domain.Ledger.SellerPayout", null)
+                        .WithMany()
+                        .HasForeignKey("SellerPayoutId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Swyftly.Domain.Ledger.SellerPayoutItem", null)
+                        .WithMany()
+                        .HasForeignKey("SellerPayoutItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("Swyftly.Domain.Ledger.SellerPayoutItem", b =>
                 {
                     b.HasOne("Swyftly.Domain.Ledger.LedgerEntry", null)
@@ -3731,6 +4098,15 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                     b.HasOne("Swyftly.Domain.Ledger.SellerPayout", null)
                         .WithMany("Items")
                         .HasForeignKey("SellerPayoutId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Swyftly.Domain.Notifications.Notification", b =>
+                {
+                    b.HasOne("Swyftly.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("RecipientUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

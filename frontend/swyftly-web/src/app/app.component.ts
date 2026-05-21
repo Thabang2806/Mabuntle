@@ -1,46 +1,86 @@
 import { Component, OnInit, computed, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatToolbarModule } from '@angular/material/toolbar';
 import { AuthService } from './auth/auth.service';
+
+type NavigationItem = {
+  label: string;
+  route: string;
+};
 
 @Component({
   selector: 'app-root',
-  imports: [MatButtonModule, MatToolbarModule, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss'
 })
 export class AppComponent implements OnInit {
   protected readonly authService = inject(AuthService);
   private readonly router = inject(Router);
-  protected readonly navigationItems = computed(() => {
-    const items = [{ label: 'Shop', route: '/shop' }];
 
+  protected readonly publicNavigationItems: NavigationItem[] = [
+    { label: 'Shop', route: '/shop' }
+  ];
+
+  protected readonly authNavigationItems = computed<NavigationItem[]>(() => {
     if (!this.authService.isAuthenticated()) {
       return [
-        ...items,
         { label: 'Sign in', route: '/login' },
         { label: 'Join', route: '/register/buyer' },
         { label: 'Sell', route: '/register/seller' }
       ];
     }
 
-    if (this.authService.hasAnyRole(['Buyer'])) {
-      items.push({ label: 'Assistant', route: '/assistant' });
-      items.push({ label: 'Visual search', route: '/visual-search' });
-      items.push({ label: 'Cart', route: '/cart' });
-      items.push({ label: 'Account', route: '/account' });
+    return [];
+  });
+
+  protected readonly buyerNavigationItems = computed<NavigationItem[]>(() => {
+    if (!this.authService.hasAnyRole(['Buyer'])) {
+      return [];
     }
 
-    if (this.authService.hasAnyRole(['Seller'])) {
-      items.push({ label: 'Seller', route: '/seller' });
+    return [
+      { label: 'Assistant', route: '/assistant' },
+      { label: 'Visual search', route: '/visual-search' },
+      { label: 'Cart', route: '/cart' },
+      { label: 'Wishlist', route: '/account/wishlist' },
+      { label: 'Account', route: '/account' }
+    ];
+  });
+
+  protected readonly sellerNavigationItems = computed<NavigationItem[]>(() => {
+    if (!this.authService.hasAnyRole(['Seller'])) {
+      return [];
     }
+
+    return [
+      { label: 'Seller', route: '/seller' }
+    ];
+  });
+
+  protected readonly adminNavigationItems = computed<NavigationItem[]>(() => {
+    const items: NavigationItem[] = [];
 
     if (this.authService.hasAnyRole(['Admin', 'SuperAdmin'])) {
       items.push({ label: 'Admin', route: '/admin' });
+      items.push({ label: 'Categories', route: '/admin/categories' });
+    }
+
+    if (this.authService.hasAnyRole(['Admin', 'SuperAdmin', 'SupportAgent'])) {
+      items.push({ label: 'Support', route: '/admin/support' });
+    }
+
+    if (this.authService.hasAnyRole(['Admin', 'SuperAdmin', 'FinanceOperator', 'FinanceApprover'])) {
+      items.push({ label: 'Refunds', route: '/admin/refunds' });
+      items.push({ label: 'Payouts', route: '/admin/payouts' });
     }
 
     return items;
+  });
+
+  protected readonly hasWorkspaceNavigation = computed(() => {
+    return this.buyerNavigationItems().length > 0 ||
+      this.sellerNavigationItems().length > 0 ||
+      this.adminNavigationItems().length > 0;
   });
 
   ngOnInit(): void {

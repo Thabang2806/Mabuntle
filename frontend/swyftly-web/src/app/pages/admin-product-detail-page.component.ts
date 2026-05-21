@@ -5,51 +5,67 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { AdminProductDetailResponse } from '../admin/admin-product.models';
+import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
+import { AdminProductDetailResponse, AdminProductImageResponse } from '../admin/admin-product.models';
 import { AdminProductService } from '../admin/admin-product.service';
 import { getApiErrorMessage } from '../auth/api-error';
+import { PageHeaderComponent } from '../shared/ui/page-header.component';
+import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge.component';
+import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
 @Component({
   selector: 'app-admin-product-detail-page',
   imports: [
+    AdminWorkspaceNavComponent,
     CurrencyPipe,
     DatePipe,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
+    PageHeaderComponent,
     ReactiveFormsModule,
-    RouterLink
+    RouterLink,
+    StatusBadgeComponent,
+    UiAlertComponent
   ],
   template: `
     <section class="page admin-review">
+      <app-admin-workspace-nav />
       <a class="admin-back-link" routerLink="/admin/products">Back to product queue</a>
 
       @if (isLoading()) {
         <div class="route-card">Loading product review...</div>
       } @else if (product()) {
-        <div class="page-header">
-          <span class="eyebrow">Product review</span>
-          <h1>{{ product()?.title ?? 'Untitled product' }}</h1>
-          <p>{{ product()?.categoryPath ?? 'No category' }}</p>
-        </div>
+        <app-page-header
+          eyebrow="Product review"
+          [heading]="product()?.title ?? 'Untitled product'"
+          [description]="product()?.categoryPath ?? 'No category'"
+        >
+          <div pageHeaderActions>
+            <app-status-badge [label]="product()!.status" [tone]="productStatusTone(product()!.status)" />
+          </div>
+        </app-page-header>
 
         @if (errorMessage()) {
-          <p class="auth-alert error" role="alert">{{ errorMessage() }}</p>
+          <app-ui-alert tone="error">{{ errorMessage() }}</app-ui-alert>
         }
 
         @if (successMessage()) {
-          <p class="auth-alert success" role="status">{{ successMessage() }}</p>
+          <app-ui-alert tone="success">{{ successMessage() }}</app-ui-alert>
         }
 
         <div class="admin-detail-layout">
           <div class="admin-detail-main">
             <article class="route-card admin-detail-card">
-              <span class="status-pill">{{ product()?.status }}</span>
+              <app-status-badge [label]="product()!.status" [tone]="productStatusTone(product()!.status)" />
               <h2>Listing</h2>
               <dl class="admin-facts">
                 <div><dt>Seller</dt><dd>{{ product()?.seller?.displayName ?? 'Unnamed seller' }}</dd></div>
+                <div><dt>Seller contact</dt><dd>{{ product()?.seller?.contactEmail ?? 'No contact email' }}</dd></div>
                 <div><dt>Seller status</dt><dd>{{ product()?.seller?.verificationStatus ?? 'Unknown' }}</dd></div>
                 <div><dt>Slug</dt><dd>{{ product()?.slug ?? 'Not provided' }}</dd></div>
+                <div><dt>Created</dt><dd>{{ product()?.createdAtUtc | date:'medium' }}</dd></div>
+                <div><dt>Updated</dt><dd>{{ product()?.updatedAtUtc | date:'medium' }}</dd></div>
                 <div><dt>Short description</dt><dd>{{ product()?.shortDescription ?? 'Not provided' }}</dd></div>
                 <div><dt>Full description</dt><dd>{{ product()?.fullDescription ?? 'Not provided' }}</dd></div>
                 <div><dt>Tags</dt><dd>{{ product()?.tags?.length ? product()?.tags?.join(', ') : 'None' }}</dd></div>
@@ -62,18 +78,31 @@ import { getApiErrorMessage } from '../auth/api-error';
             <article class="route-card admin-detail-card">
               <h2>Images</h2>
               @if ((product()?.images?.length ?? 0) === 0) {
-                <p>No images are attached to this product.</p>
+                <div class="admin-image-fallback">
+                  <strong>No images attached</strong>
+                  <span>Use listing text, attributes, and seller context for this review.</span>
+                </div>
               } @else {
-                <div class="admin-product-images">
-                  @for (image of product()?.images; track image.imageId) {
-                    <figure>
-                      <img [src]="image.url" [alt]="image.altText ?? 'Product image'" loading="lazy">
-                      <figcaption>
-                        <span class="status-pill">{{ image.isPrimary ? 'Primary' : 'Image' }}</span>
-                        <span>{{ image.altText ?? 'No alt text' }}</span>
-                      </figcaption>
-                    </figure>
-                  }
+                <div class="admin-image-review">
+                  <figure class="admin-primary-image">
+                    <img [src]="selectedImage()?.url" [alt]="selectedImage()?.altText ?? 'Product image'" loading="lazy">
+                    <figcaption>
+                      <app-status-badge [label]="selectedImage()?.isPrimary ? 'Primary' : 'Image'" tone="accent" />
+                      <span>{{ selectedImage()?.altText ?? 'No alt text' }}</span>
+                    </figcaption>
+                  </figure>
+
+                  <div class="admin-image-thumbnails" aria-label="Product image thumbnails">
+                    @for (image of product()?.images; track image.imageId) {
+                      <button
+                        type="button"
+                        [class.active]="selectedImage()?.imageId === image.imageId"
+                        (click)="selectImage(image)"
+                      >
+                        <img [src]="image.url" [alt]="image.altText ?? 'Product thumbnail'" loading="lazy">
+                      </button>
+                    }
+                  </div>
                 </div>
               }
             </article>
@@ -96,16 +125,22 @@ import { getApiErrorMessage } from '../auth/api-error';
 
             <article class="route-card admin-detail-card">
               <h2>Variants</h2>
+              <div class="admin-review-summary">
+                <div><span>Total stock</span><strong>{{ totalStockQuantity() }}</strong></div>
+                <div><span>Reserved</span><strong>{{ totalReservedQuantity() }}</strong></div>
+                <div><span>Available</span><strong>{{ totalAvailableQuantity() }}</strong></div>
+              </div>
               @if ((product()?.variants?.length ?? 0) === 0) {
                 <p>No variants were provided.</p>
               } @else {
                 <div class="admin-product-variants">
                   @for (variant of product()?.variants; track variant.variantId) {
                     <div>
-                      <span class="status-pill">{{ variant.status }}</span>
+                      <app-status-badge [label]="variant.status" [tone]="variant.status === 'Active' ? 'success' : 'neutral'" />
                       <strong>{{ variant.sku }}</strong>
                       <span>{{ variant.size }} / {{ variant.colour }}</span>
-                      <span>{{ variant.price | currency:'ZAR':'symbol-narrow' }} · {{ variant.availableQuantity }} available</span>
+                      <span>{{ variant.price | currency:'ZAR':'symbol-narrow' }} - {{ variant.availableQuantity }} available</span>
+                      <small>{{ variant.reservedQuantity }} reserved of {{ variant.stockQuantity }} stock</small>
                     </div>
                   }
                 </div>
@@ -120,9 +155,12 @@ import { getApiErrorMessage } from '../auth/api-error';
                 <div class="admin-product-risks">
                   @for (result of product()?.moderationResults; track result.moderationResultId) {
                     <div>
-                      <span class="status-pill">{{ result.riskLevel }}</span>
+                      <app-status-badge [label]="result.riskLevel" [tone]="riskTone(result.riskLevel)" />
                       <strong>{{ result.reason }}</strong>
-                      <span>{{ result.provider }} · {{ result.createdAtUtc | date:'medium' }}</span>
+                      <span>{{ result.provider }} - {{ result.createdAtUtc | date:'medium' }}</span>
+                      @if (result.needsAdminReview) {
+                        <small>Needs admin review</small>
+                      }
                       @if (result.flags.length > 0) {
                         <small>Flags: {{ result.flags.join(', ') }}</small>
                       }
@@ -199,7 +237,7 @@ import { getApiErrorMessage } from '../auth/api-error';
           </aside>
         </div>
       } @else {
-        <p class="auth-alert error" role="alert">{{ errorMessage() ?? 'Product was not found.' }}</p>
+        <app-ui-alert tone="error">{{ errorMessage() ?? 'Product was not found.' }}</app-ui-alert>
       }
     </section>
   `
@@ -210,6 +248,7 @@ export class AdminProductDetailPageComponent implements OnInit {
   private readonly adminProductService = inject(AdminProductService);
 
   protected readonly product = signal<AdminProductDetailResponse | null>(null);
+  protected readonly selectedImageId = signal<string | null>(null);
   protected readonly isLoading = signal(true);
   protected readonly isSaving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
@@ -220,6 +259,17 @@ export class AdminProductDetailPageComponent implements OnInit {
       key,
       value: this.formatAttributeValue(value)
     }));
+  });
+  protected readonly selectedImage = computed(() => {
+    const product = this.product();
+    if (!product || product.images.length === 0) {
+      return null;
+    }
+
+    const selectedImageId = this.selectedImageId();
+    return product.images.find(image => image.imageId === selectedImageId)
+      ?? product.images.find(image => image.isPrimary)
+      ?? product.images[0];
   });
 
   protected readonly approveForm = this.formBuilder.group({
@@ -240,6 +290,46 @@ export class AdminProductDetailPageComponent implements OnInit {
 
   protected hasHighRiskModeration(): boolean {
     return this.product()?.moderationResults.some(result => result.needsAdminReview && result.riskLevel === 'High') ?? false;
+  }
+
+  protected selectImage(image: AdminProductImageResponse): void {
+    this.selectedImageId.set(image.imageId);
+  }
+
+  protected totalStockQuantity(): number {
+    return this.product()?.variants.reduce((total, variant) => total + variant.stockQuantity, 0) ?? 0;
+  }
+
+  protected totalReservedQuantity(): number {
+    return this.product()?.variants.reduce((total, variant) => total + variant.reservedQuantity, 0) ?? 0;
+  }
+
+  protected totalAvailableQuantity(): number {
+    return this.product()?.variants.reduce((total, variant) => total + variant.availableQuantity, 0) ?? 0;
+  }
+
+  protected productStatusTone(status: string): StatusBadgeTone {
+    if (['Published', 'Approved'].includes(status)) {
+      return 'success';
+    }
+
+    if (['Rejected', 'NeedsAdminReview'].includes(status)) {
+      return 'danger';
+    }
+
+    return 'warning';
+  }
+
+  protected riskTone(riskLevel: string): StatusBadgeTone {
+    if (riskLevel === 'High') {
+      return 'danger';
+    }
+
+    if (riskLevel === 'Medium') {
+      return 'warning';
+    }
+
+    return 'neutral';
   }
 
   protected async approve(): Promise<void> {
@@ -308,7 +398,9 @@ export class AdminProductDetailPageComponent implements OnInit {
     this.errorMessage.set(null);
 
     try {
-      this.product.set(await this.adminProductService.getProduct(productId));
+      const product = await this.adminProductService.getProduct(productId);
+      this.product.set(product);
+      this.selectedImageId.set(product.images.find(image => image.isPrimary)?.imageId ?? product.images[0]?.imageId ?? null);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
       this.product.set(null);

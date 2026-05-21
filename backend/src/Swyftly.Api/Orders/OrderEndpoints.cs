@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Swyftly.Api.Notifications;
 using Swyftly.Api.Results;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Notifications;
 using Swyftly.Application.Orders;
 using Swyftly.Domain.Buyers;
 using Swyftly.Domain.Orders;
@@ -90,6 +92,14 @@ public static class OrderEndpoints
         sellerGroup.MapPost("/{orderId:guid}/mark-shipped", MarkShippedAsync)
             .WithName("MarkSellerOrderShipped")
             .WithSummary("Marks a seller order as shipped and moves the shipment in transit.")
+            .Produces<OrderResult>(StatusCodes.Status200OK)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        sellerGroup.MapPost("/{orderId:guid}/mark-delivered", MarkDeliveredAsync)
+            .WithName("MarkSellerOrderDelivered")
+            .WithSummary("Marks a seller order as delivered and records delivery on the current shipment.")
             .Produces<OrderResult>(StatusCodes.Status200OK)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)
@@ -234,7 +244,9 @@ public static class OrderEndpoints
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
         IOrderFulfillmentService fulfillmentService,
+        INotificationService notificationService,
         TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         var seller = await GetCurrentSellerAsync(principal, dbContext, cancellationToken);
@@ -254,6 +266,22 @@ public static class OrderEndpoints
                 timeProvider.GetUtcNow()),
             cancellationToken);
 
+        if (result.IsSuccess)
+        {
+            await BuyerNotificationDispatcher.NotifyBuyerAsync(
+                result.Value.BuyerId,
+                "OrderTrackingAdded",
+                "Tracking added to your order",
+                "The seller added tracking details to your order.",
+                "Order",
+                result.Value.OrderId,
+                timeProvider.GetUtcNow(),
+                dbContext,
+                notificationService,
+                loggerFactory.CreateLogger(nameof(OrderEndpoints)),
+                cancellationToken);
+        }
+
         return result.ToHttpResult(HttpResults.Ok);
     }
 
@@ -262,7 +290,9 @@ public static class OrderEndpoints
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
         IOrderFulfillmentService fulfillmentService,
+        INotificationService notificationService,
         TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         var seller = await GetCurrentSellerAsync(principal, dbContext, cancellationToken);
@@ -274,6 +304,65 @@ public static class OrderEndpoints
         var result = await fulfillmentService.MarkShippedAsync(
             new OrderFulfillmentRequest(seller.Id, orderId, timeProvider.GetUtcNow()),
             cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            await BuyerNotificationDispatcher.NotifyBuyerAsync(
+                result.Value.BuyerId,
+                "OrderShipped",
+                "Your order has shipped",
+                "The seller marked your order as shipped.",
+                "Order",
+                result.Value.OrderId,
+                timeProvider.GetUtcNow(),
+                dbContext,
+                notificationService,
+                loggerFactory.CreateLogger(nameof(OrderEndpoints)),
+                cancellationToken);
+        }
+
+        return result.ToHttpResult(HttpResults.Ok);
+    }
+
+    private static async Task<IResult> MarkDeliveredAsync(
+        Guid orderId,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        IOrderFulfillmentService fulfillmentService,
+        INotificationService notificationService,
+        TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
+    {
+        var seller = await GetCurrentSellerAsync(principal, dbContext, cancellationToken);
+        if (seller is null)
+        {
+            return SellerNotFound();
+        }
+
+        var occurredAtUtc = timeProvider.GetUtcNow();
+        var result = await fulfillmentService.MarkDeliveredAsync(
+            new OrderFulfillmentRequest(seller.Id, orderId, occurredAtUtc),
+            cancellationToken);
+
+        if (result.IsSuccess
+            && result.Value.StatusHistory
+                .OrderByDescending(history => history.ChangedAtUtc)
+                .FirstOrDefault()?.ChangedAtUtc == occurredAtUtc)
+        {
+            await BuyerNotificationDispatcher.NotifyBuyerAsync(
+                result.Value.BuyerId,
+                "OrderDelivered",
+                "Your order was marked delivered",
+                "The seller marked your order as delivered. You can now request a return or leave a verified review if needed.",
+                "Order",
+                result.Value.OrderId,
+                timeProvider.GetUtcNow(),
+                dbContext,
+                notificationService,
+                loggerFactory.CreateLogger(nameof(OrderEndpoints)),
+                cancellationToken);
+        }
 
         return result.ToHttpResult(HttpResults.Ok);
     }

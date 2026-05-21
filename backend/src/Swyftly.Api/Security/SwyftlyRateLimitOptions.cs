@@ -12,6 +12,10 @@ public sealed class SwyftlyRateLimitOptions
 
     public RateLimitPolicyOptions Payment { get; set; } = new() { PermitLimit = 10, WindowSeconds = 60 };
 
+    public RateLimitPolicyOptions Webhook { get; set; } = new() { PermitLimit = 60, WindowSeconds = 60 };
+
+    public RateLimitPolicyOptions AdImpression { get; set; } = new() { PermitLimit = 120, WindowSeconds = 60 };
+
     public RateLimitPolicyOptions AdClick { get; set; } = new() { PermitLimit = 120, WindowSeconds = 60 };
 
     public RateLimitPolicyOptions Search { get; set; } = new() { PermitLimit = 120, WindowSeconds = 60 };

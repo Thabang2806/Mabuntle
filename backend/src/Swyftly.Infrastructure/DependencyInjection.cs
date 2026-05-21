@@ -11,6 +11,7 @@ using Swyftly.Application.Catalog;
 using Swyftly.Application.Disputes;
 using Swyftly.Application.Inventory;
 using Swyftly.Application.Ledger;
+using Swyftly.Application.Notifications;
 using Swyftly.Application.Orders;
 using Swyftly.Application.Payments;
 using Swyftly.Application.Refunds;
@@ -23,6 +24,7 @@ using Swyftly.Infrastructure.Disputes;
 using Swyftly.Infrastructure.Identity;
 using Swyftly.Infrastructure.Inventory;
 using Swyftly.Infrastructure.Ledger;
+using Swyftly.Infrastructure.Notifications;
 using Swyftly.Infrastructure.Orders;
 using Swyftly.Infrastructure.Payments;
 using Swyftly.Infrastructure.Persistence;
@@ -59,8 +61,7 @@ public static class DependencyInjection
             }
         });
 
-        var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? "Host=localhost;Port=5432;Database=swyftly;Username=swyftly;Password=swyftly_dev_password";
+        var connectionString = configuration.GetConnectionString("DefaultConnection") ?? string.Empty;
 
         services.AddDbContext<SwyftlyDbContext>((serviceProvider, options) =>
             options
@@ -77,6 +78,9 @@ public static class DependencyInjection
                 options.Password.RequireUppercase = true;
                 options.Password.RequireNonAlphanumeric = false;
                 options.SignIn.RequireConfirmedEmail = false;
+                options.Lockout.AllowedForNewUsers = true;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+                options.Lockout.MaxFailedAccessAttempts = 5;
             })
             .AddRoles<IdentityRole<Guid>>()
             .AddEntityFrameworkStores<SwyftlyDbContext>();
@@ -104,6 +108,7 @@ public static class DependencyInjection
         services.AddScoped<IReturnWorkflowService, EfReturnWorkflowService>();
         services.AddScoped<IRefundWorkflowService, EfRefundWorkflowService>();
         services.AddScoped<IDisputeWorkflowService, EfDisputeWorkflowService>();
+        services.AddScoped<INotificationService, EfNotificationService>();
         services.AddScoped<IAdCampaignEligibilityService, AdCampaignEligibilityService>();
         services.AddScoped<IAdTrackingService, EfAdTrackingService>();
         services.Configure<PaymentProviderOptions>(options =>
@@ -115,6 +120,40 @@ public static class DependencyInjection
             options.FailureRedirectUrl = section["FailureRedirectUrl"] ?? options.FailureRedirectUrl;
             options.WebhookSigningSecret = section["WebhookSigningSecret"] ?? options.WebhookSigningSecret;
             options.FakeOutcome = section["FakeOutcome"] ?? options.FakeOutcome;
+        });
+        services.Configure<PaymentWebhookPayloadRetentionOptions>(options =>
+        {
+            var section = configuration.GetSection(PaymentWebhookPayloadRetentionOptions.SectionName);
+            if (bool.TryParse(section["Enabled"], out var enabled))
+            {
+                options.Enabled = enabled;
+            }
+
+            if (int.TryParse(section["RetentionDays"], out var retentionDays))
+            {
+                options.RetentionDays = retentionDays;
+            }
+
+            if (int.TryParse(section["BatchSize"], out var batchSize))
+            {
+                options.BatchSize = batchSize;
+            }
+        });
+        services.Configure<PayFastOptions>(options =>
+        {
+            var section = configuration.GetSection(PayFastOptions.SectionName);
+            options.MerchantId = section["MerchantId"] ?? options.MerchantId;
+            options.MerchantKey = section["MerchantKey"] ?? options.MerchantKey;
+            options.Passphrase = section["Passphrase"] ?? options.Passphrase;
+            options.ProcessUrl = section["ProcessUrl"] ?? options.ProcessUrl;
+            options.ValidateUrl = section["ValidateUrl"] ?? options.ValidateUrl;
+            options.NotifyUrl = section["NotifyUrl"] ?? options.NotifyUrl;
+            options.CheckoutBridgeBaseUrl = section["CheckoutBridgeBaseUrl"] ?? options.CheckoutBridgeBaseUrl;
+
+            if (bool.TryParse(section["RequireRemoteValidation"], out var requireRemoteValidation))
+            {
+                options.RequireRemoteValidation = requireRemoteValidation;
+            }
         });
         services.Configure<LedgerOptions>(options =>
         {
@@ -134,9 +173,27 @@ public static class DependencyInjection
                 options.PaymentProviderFixedFee = providerFixedFee;
             }
         });
-        services.AddScoped<IPaymentProvider, FakePaymentProvider>();
+        services.Configure<PayoutProviderOptions>(options =>
+        {
+            var section = configuration.GetSection(PayoutProviderOptions.SectionName);
+            options.ProviderName = section["ProviderName"] ?? options.ProviderName;
+            options.FakeOutcome = section["FakeOutcome"] ?? options.FakeOutcome;
+        });
+        services.AddScoped<FakePaymentProvider>();
+        services.AddSingleton<HttpClient>();
+        services.AddScoped<PayFastPaymentProvider>();
+        services.AddScoped<PayFastCheckoutFormBuilder>();
+        services.AddScoped<IPaymentProvider>(serviceProvider =>
+        {
+            var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<PaymentProviderOptions>>().Value;
+            return string.Equals(options.ProviderName, PayFastPaymentProvider.Name, StringComparison.OrdinalIgnoreCase)
+                ? serviceProvider.GetRequiredService<PayFastPaymentProvider>()
+                : serviceProvider.GetRequiredService<FakePaymentProvider>();
+        });
+        services.AddScoped<IPayoutProvider, FakePayoutProvider>();
         services.AddScoped<IPaymentInitiationService, PaymentInitiationService>();
         services.AddScoped<IPaymentService, EfPaymentService>();
+        services.AddScoped<IPaymentWebhookPayloadRetentionService, EfPaymentWebhookPayloadRetentionService>();
         services.AddScoped<ILedgerService, EfLedgerService>();
         services.AddScoped<IPayoutAdministrationService, EfPayoutAdministrationService>();
 

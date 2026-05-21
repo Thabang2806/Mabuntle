@@ -20,6 +20,33 @@ public sealed class Refund : AuditableEntity
         string currency,
         string reason,
         DateTimeOffset requestedAtUtc)
+        : this(
+            orderId,
+            paymentId,
+            buyerId,
+            sellerId,
+            returnRequestId,
+            amount,
+            currency,
+            reason,
+            Guid.NewGuid(),
+            "Admin",
+            requestedAtUtc)
+    {
+    }
+
+    public Refund(
+        Guid orderId,
+        Guid paymentId,
+        Guid buyerId,
+        Guid sellerId,
+        Guid? returnRequestId,
+        decimal amount,
+        string currency,
+        string reason,
+        Guid requestedByUserId,
+        string requestedByRole,
+        DateTimeOffset requestedAtUtc)
     {
         if (orderId == Guid.Empty)
         {
@@ -46,6 +73,11 @@ public sealed class Refund : AuditableEntity
             throw new ArgumentOutOfRangeException(nameof(amount), "Amount must be positive.");
         }
 
+        if (requestedByUserId == Guid.Empty)
+        {
+            throw new ArgumentException("Requested-by user id is required.", nameof(requestedByUserId));
+        }
+
         OrderId = orderId;
         PaymentId = paymentId;
         BuyerId = buyerId;
@@ -54,6 +86,8 @@ public sealed class Refund : AuditableEntity
         Amount = amount;
         Currency = Required(currency, nameof(currency)).ToUpperInvariant();
         Reason = Required(reason, nameof(reason));
+        RequestedByUserId = requestedByUserId;
+        RequestedByRole = Required(requestedByRole, nameof(requestedByRole));
         Status = RefundStatus.Requested;
         RequestedAtUtc = requestedAtUtc;
         CreatedAtUtc = requestedAtUtc;
@@ -81,6 +115,10 @@ public sealed class Refund : AuditableEntity
 
     public Guid? ApprovedByUserId { get; private set; }
 
+    public Guid RequestedByUserId { get; private set; }
+
+    public string RequestedByRole { get; private set; } = string.Empty;
+
     public string? ApprovalReason { get; private set; }
 
     public string? ProviderRefundReference { get; private set; }
@@ -92,6 +130,8 @@ public sealed class Refund : AuditableEntity
     public DateTimeOffset? ApprovedAtUtc { get; private set; }
 
     public DateTimeOffset? RefundedAtUtc { get; private set; }
+
+    public int ConcurrencyVersion { get; private set; }
 
     public IReadOnlyCollection<RefundEvent> Events => _events.AsReadOnly();
 
@@ -112,6 +152,7 @@ public sealed class Refund : AuditableEntity
         ApprovalReason = Required(approvalReason, nameof(approvalReason));
         ApprovedAtUtc = approvedAtUtc;
         UpdatedAtUtc = approvedAtUtc;
+        ConcurrencyVersion++;
         AddEvent(RefundStatus.Approved, "RefundApproved", ApprovalReason, approvedAtUtc);
     }
 
@@ -124,6 +165,7 @@ public sealed class Refund : AuditableEntity
 
         Status = RefundStatus.Processing;
         UpdatedAtUtc = processingAtUtc;
+        ConcurrencyVersion++;
         AddEvent(RefundStatus.Processing, "RefundProcessing", "Refund provider call started.", processingAtUtc);
     }
 
@@ -138,7 +180,20 @@ public sealed class Refund : AuditableEntity
         ProviderRefundReference = Required(providerRefundReference, nameof(providerRefundReference));
         RefundedAtUtc = refundedAtUtc;
         UpdatedAtUtc = refundedAtUtc;
+        ConcurrencyVersion++;
         AddEvent(RefundStatus.Refunded, "Refunded", "Refund completed.", refundedAtUtc);
+    }
+
+    public void MarkProviderActionRequired(string message, DateTimeOffset updatedAtUtc)
+    {
+        if (Status != RefundStatus.Processing)
+        {
+            throw new InvalidOperationException("Only processing refunds can wait for provider action.");
+        }
+
+        UpdatedAtUtc = updatedAtUtc;
+        ConcurrencyVersion++;
+        AddEvent(RefundStatus.Processing, "ProviderRefundActionRequired", Required(message, nameof(message)), updatedAtUtc);
     }
 
     public void MarkFailed(string failureReason, DateTimeOffset failedAtUtc)
@@ -151,6 +206,7 @@ public sealed class Refund : AuditableEntity
         Status = RefundStatus.Failed;
         FailureReason = Required(failureReason, nameof(failureReason));
         UpdatedAtUtc = failedAtUtc;
+        ConcurrencyVersion++;
         AddEvent(RefundStatus.Failed, "RefundFailed", FailureReason, failedAtUtc);
     }
 

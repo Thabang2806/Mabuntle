@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Swyftly.Api.Authentication;
 using Swyftly.Api.Returns;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Notifications;
 using Swyftly.Application.Returns;
 using Swyftly.Domain.Ledger;
 using Swyftly.Domain.Orders;
@@ -73,6 +74,11 @@ public sealed class ReturnTests
         Assert.NotNull(approved);
         Assert.Equal("Approved", approved!.Status);
         Assert.Contains(approved.Messages, message => message.SenderRole == "Seller");
+
+        using var notificationsResponse = await buyerClient.GetAsync("/api/buyer/notifications");
+        notificationsResponse.EnsureSuccessStatusCode();
+        var notifications = await notificationsResponse.Content.ReadFromJsonAsync<NotificationResult[]>();
+        Assert.Contains(notifications!, notification => notification.Type == "ReturnApproved" && notification.RelatedEntityId == returnRequest.ReturnRequestId);
     }
 
     [Fact]
@@ -127,6 +133,11 @@ public sealed class ReturnTests
             $"/api/seller/returns/{returnRequest!.ReturnRequestId}/reject",
             new SellerReturnResponseApiRequest("Seller rejects the claim."));
         rejectResponse.EnsureSuccessStatusCode();
+
+        using var notificationsResponse = await buyerClient.GetAsync("/api/buyer/notifications");
+        notificationsResponse.EnsureSuccessStatusCode();
+        var notifications = await notificationsResponse.Content.ReadFromJsonAsync<NotificationResult[]>();
+        Assert.Contains(notifications!, notification => notification.Type == "ReturnRejected" && notification.RelatedEntityId == returnRequest.ReturnRequestId);
 
         using var disputeResponse = await buyerClient.PostAsJsonAsync(
             $"/api/buyer/returns/{returnRequest.ReturnRequestId}/dispute",

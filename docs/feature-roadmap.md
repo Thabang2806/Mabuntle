@@ -25,7 +25,7 @@
 ## Deferred
 
 - Multi-seller checkout.
-- Payment reconciliation hardening before real provider launch.
+- PayFast sandbox verification, provider status reconciliation, and automatic refund hardening before real provider launch.
 - External payout processing.
 - Native mobile app.
 - Virtual try-on.

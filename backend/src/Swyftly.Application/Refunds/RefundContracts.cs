@@ -11,6 +11,10 @@ public interface IRefundWorkflowService
     Task<Result<RefundResult>> ApproveRefundAsync(
         ApproveRefundWorkflowRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<Result<RefundResult>> ConfirmManualProviderRefundAsync(
+        ConfirmManualProviderRefundWorkflowRequest request,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record CreateRefundWorkflowRequest(
@@ -19,6 +23,7 @@ public sealed record CreateRefundWorkflowRequest(
     decimal Amount,
     string Reason,
     Guid ActorUserId,
+    string ActorRole,
     DateTimeOffset RequestedAtUtc);
 
 public sealed record ApproveRefundWorkflowRequest(
@@ -28,6 +33,15 @@ public sealed record ApproveRefundWorkflowRequest(
     string Reason,
     string? IpAddress,
     DateTimeOffset ApprovedAtUtc);
+
+public sealed record ConfirmManualProviderRefundWorkflowRequest(
+    Guid RefundId,
+    Guid ActorUserId,
+    string ActorRole,
+    string ProviderRefundReference,
+    string Reason,
+    string? IpAddress,
+    DateTimeOffset ConfirmedAtUtc);
 
 public sealed record RefundResult(
     Guid RefundId,

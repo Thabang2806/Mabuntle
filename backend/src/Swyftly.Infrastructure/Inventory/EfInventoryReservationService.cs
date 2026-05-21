@@ -32,6 +32,7 @@ public sealed class EfInventoryReservationService(SwyftlyDbContext dbContext) : 
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var useDatabaseConditionalUpdates = dbContext.Database.IsRelational();
         var cart = await dbContext.Carts
             .Include(cart => cart.Items)
             .SingleOrDefaultAsync(
@@ -55,22 +56,11 @@ public sealed class EfInventoryReservationService(SwyftlyDbContext dbContext) : 
             .ToListAsync(cancellationToken);
 
         var variants = new Dictionary<Guid, ProductVariant>();
-        var existingReservedVariants = new Dictionary<Guid, ProductVariant>();
-        foreach (var reservation in existingActiveReservations)
-        {
-            var variant = await dbContext.ProductVariants.SingleOrDefaultAsync(
-                variant => variant.Id == reservation.ProductVariantId,
-                cancellationToken);
-            if (variant is not null)
-            {
-                existingReservedVariants[variant.Id] = variant;
-            }
-        }
-
         foreach (var item in cart.Items)
         {
-            var variant = await dbContext.ProductVariants.SingleOrDefaultAsync(
-                variant => variant.Id == item.ProductVariantId,
+            var variant = await LoadVariantAsync(
+                item.ProductVariantId,
+                trackChanges: !useDatabaseConditionalUpdates,
                 cancellationToken);
             if (variant is null || variant.Status != ProductVariantStatus.Active)
             {
@@ -90,9 +80,17 @@ public sealed class EfInventoryReservationService(SwyftlyDbContext dbContext) : 
 
         foreach (var reservation in existingActiveReservations)
         {
-            if (existingReservedVariants.TryGetValue(reservation.ProductVariantId, out var reservedVariant))
+            var released = await TryReleaseVariantReservationAsync(
+                reservation.ProductVariantId,
+                reservation.Quantity,
+                useDatabaseConditionalUpdates,
+                cancellationToken);
+            if (!released)
             {
-                reservedVariant.ReleaseReservation(reservation.Quantity);
+                return Result<IReadOnlyCollection<InventoryReservationResult>>.Failure(
+                    Error.Conflict(
+                        "InventoryReservations.ReleaseConflict",
+                        $"Reserved stock could not be released for product variant {reservation.ProductVariantId}."));
             }
 
             reservation.Cancel(request.StartedAtUtc);
@@ -104,7 +102,16 @@ public sealed class EfInventoryReservationService(SwyftlyDbContext dbContext) : 
         foreach (var item in cart.Items)
         {
             var variant = variants[item.ProductVariantId];
-            variant.Reserve(item.Quantity);
+            var reserved = await TryReserveVariantAsync(
+                variant.Id,
+                item.Quantity,
+                useDatabaseConditionalUpdates,
+                cancellationToken);
+            if (!reserved)
+            {
+                return Validation("cart", $"Insufficient stock for product variant {item.ProductVariantId}.");
+            }
+
             var reservation = new InventoryReservation(
                 variant.Id,
                 cart.BuyerId,
@@ -126,6 +133,7 @@ public sealed class EfInventoryReservationService(SwyftlyDbContext dbContext) : 
         CancellationToken cancellationToken = default)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var useDatabaseConditionalUpdates = dbContext.Database.IsRelational();
         var reservations = await dbContext.InventoryReservations
             .Where(reservation => reservation.Status == InventoryReservationStatus.Active
                 && reservation.ExpiresAtUtc <= utcNow)
@@ -135,12 +143,17 @@ public sealed class EfInventoryReservationService(SwyftlyDbContext dbContext) : 
 
         foreach (var reservation in reservations)
         {
-            var variant = await dbContext.ProductVariants.SingleOrDefaultAsync(
-                variant => variant.Id == reservation.ProductVariantId,
+            var released = await TryReleaseVariantReservationAsync(
+                reservation.ProductVariantId,
+                reservation.Quantity,
+                useDatabaseConditionalUpdates,
                 cancellationToken);
-            if (variant is not null)
+            if (!released)
             {
-                variant.ReleaseReservation(reservation.Quantity);
+                return Result<IReadOnlyCollection<InventoryReservationResult>>.Failure(
+                    Error.Conflict(
+                        "InventoryReservations.ReleaseConflict",
+                        $"Reserved stock could not be released for product variant {reservation.ProductVariantId}."));
             }
 
             reservation.Expire(utcNow);
@@ -161,6 +174,83 @@ public sealed class EfInventoryReservationService(SwyftlyDbContext dbContext) : 
             reservation.Quantity,
             reservation.Status.ToString(),
             reservation.ExpiresAtUtc);
+
+    private async Task<ProductVariant?> LoadVariantAsync(
+        Guid productVariantId,
+        bool trackChanges,
+        CancellationToken cancellationToken)
+    {
+        var query = dbContext.ProductVariants.AsQueryable();
+        if (!trackChanges)
+        {
+            query = query.AsNoTracking();
+        }
+
+        return await query.SingleOrDefaultAsync(
+            variant => variant.Id == productVariantId,
+            cancellationToken);
+    }
+
+    private async Task<bool> TryReserveVariantAsync(
+        Guid productVariantId,
+        int quantity,
+        bool useDatabaseConditionalUpdates,
+        CancellationToken cancellationToken)
+    {
+        if (useDatabaseConditionalUpdates)
+        {
+            var updatedRows = await dbContext.ProductVariants
+                .Where(variant => variant.Id == productVariantId
+                    && variant.Status == ProductVariantStatus.Active
+                    && variant.StockQuantity - variant.ReservedQuantity >= quantity)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(
+                        variant => variant.ReservedQuantity,
+                        variant => variant.ReservedQuantity + quantity),
+                    cancellationToken);
+
+            return updatedRows == 1;
+        }
+
+        var variant = await LoadVariantAsync(productVariantId, trackChanges: true, cancellationToken);
+        if (variant is null || variant.Status != ProductVariantStatus.Active || variant.AvailableQuantity < quantity)
+        {
+            return false;
+        }
+
+        variant.Reserve(quantity);
+        return true;
+    }
+
+    private async Task<bool> TryReleaseVariantReservationAsync(
+        Guid productVariantId,
+        int quantity,
+        bool useDatabaseConditionalUpdates,
+        CancellationToken cancellationToken)
+    {
+        if (useDatabaseConditionalUpdates)
+        {
+            var updatedRows = await dbContext.ProductVariants
+                .Where(variant => variant.Id == productVariantId
+                    && variant.ReservedQuantity >= quantity)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(
+                        variant => variant.ReservedQuantity,
+                        variant => variant.ReservedQuantity - quantity),
+                    cancellationToken);
+
+            return updatedRows == 1;
+        }
+
+        var variant = await LoadVariantAsync(productVariantId, trackChanges: true, cancellationToken);
+        if (variant is null || variant.ReservedQuantity < quantity)
+        {
+            return false;
+        }
+
+        variant.ReleaseReservation(quantity);
+        return true;
+    }
 
     private static Result<IReadOnlyCollection<InventoryReservationResult>> Validation(string propertyName, string message) =>
         Result<IReadOnlyCollection<InventoryReservationResult>>.Failure(Error.Validation([

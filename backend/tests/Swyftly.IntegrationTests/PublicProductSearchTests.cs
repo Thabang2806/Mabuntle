@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -92,10 +93,57 @@ public sealed class PublicProductSearchTests
         Assert.Equal(middleProductId, item.ProductId);
     }
 
+    [Fact]
+    public async Task SellerStorefront_ReturnsNotFoundUnlessStorefrontIsPublishedAndSellerIsVerified()
+    {
+        using var factory = new PublicProductSearchTestFactory();
+        using var client = factory.CreateClient();
+        await CreateSellerAsync(factory, "Visible Seller", "visible-seller");
+        await CreateSellerAsync(factory, "Unpublished Seller", "unpublished-seller", publishStorefront: false);
+        await CreateSellerAsync(factory, "Pending Seller", "pending-seller", sellerStatus: SellerSeedStatus.PendingVerification);
+        await CreateSellerAsync(factory, "Rejected Seller", "rejected-seller", sellerStatus: SellerSeedStatus.Rejected);
+        await CreateSellerAsync(factory, "Suspended Seller", "suspended-seller", sellerStatus: SellerSeedStatus.Suspended);
+
+        using var visibleResponse = await client.GetAsync("/api/sellers/visible-seller");
+        using var unpublishedResponse = await client.GetAsync("/api/sellers/unpublished-seller");
+        using var pendingResponse = await client.GetAsync("/api/sellers/pending-seller");
+        using var rejectedResponse = await client.GetAsync("/api/sellers/rejected-seller");
+        using var suspendedResponse = await client.GetAsync("/api/sellers/suspended-seller");
+
+        visibleResponse.EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.NotFound, unpublishedResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, pendingResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, rejectedResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, suspendedResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task SearchAndDetail_HideProductsFromNonPublicSellers()
+    {
+        using var factory = new PublicProductSearchTestFactory();
+        using var client = factory.CreateClient();
+        var visibleSellerId = await CreateSellerAsync(factory, "Visible Product Seller", "visible-product-seller");
+        var hiddenSellerId = await CreateSellerAsync(factory, "Hidden Product Seller", "hidden-product-seller", sellerStatus: SellerSeedStatus.Suspended);
+        var visibleProductId = await CreateProductAsync(factory, visibleSellerId, "Visible Dress", "visible-dress", 499m, ProductSeedStatus.Published);
+        await CreateProductAsync(factory, hiddenSellerId, "Hidden Dress", "hidden-dress", 399m, ProductSeedStatus.Published);
+
+        using var searchResponse = await client.GetAsync("/api/products/search?query=dress");
+        using var hiddenDetailResponse = await client.GetAsync("/api/products/hidden-dress");
+
+        searchResponse.EnsureSuccessStatusCode();
+        var search = await searchResponse.Content.ReadFromJsonAsync<ProductSearchResponse>();
+        Assert.NotNull(search);
+        var item = Assert.Single(search!.Items);
+        Assert.Equal(visibleProductId, item.ProductId);
+        Assert.Equal(HttpStatusCode.NotFound, hiddenDetailResponse.StatusCode);
+    }
+
     private static async Task<Guid> CreateSellerAsync(
         PublicProductSearchTestFactory factory,
         string storeName,
-        string storeSlug)
+        string storeSlug,
+        bool publishStorefront = true,
+        SellerSeedStatus sellerStatus = SellerSeedStatus.Verified)
     {
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
@@ -111,8 +159,24 @@ public sealed class PublicProductSearchTests
         var address = new SellerAddress(seller.Id, "1 Market Street", null, "Johannesburg", "Gauteng", "2000", "ZA");
         var payout = new SellerPayoutProfilePlaceholder(seller.Id, "provider-ref-123");
         payout.MarkAdminApproved(Guid.NewGuid(), DateTimeOffset.UtcNow);
-        seller.MarkVerified(storefront, address, payout);
-        storefront.Publish();
+        if (sellerStatus is SellerSeedStatus.Verified or SellerSeedStatus.Suspended)
+        {
+            seller.MarkVerified(storefront, address, payout);
+        }
+        else if (sellerStatus == SellerSeedStatus.Rejected)
+        {
+            seller.MarkRejected("Rejected by test.");
+        }
+
+        if (sellerStatus == SellerSeedStatus.Suspended)
+        {
+            seller.Suspend();
+        }
+
+        if (publishStorefront)
+        {
+            storefront.Publish();
+        }
 
         dbContext.SellerProfiles.Add(seller);
         dbContext.SellerStorefronts.Add(storefront);
@@ -182,6 +246,14 @@ public sealed class PublicProductSearchTests
     {
         Draft,
         Published
+    }
+
+    private enum SellerSeedStatus
+    {
+        PendingVerification,
+        Verified,
+        Rejected,
+        Suspended
     }
 
     private sealed class PublicProductSearchTestFactory : WebApplicationFactory<Program>

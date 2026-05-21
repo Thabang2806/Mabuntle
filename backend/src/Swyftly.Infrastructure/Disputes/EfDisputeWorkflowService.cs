@@ -7,11 +7,15 @@ using Swyftly.Application.Common.Validation;
 using Swyftly.Application.Disputes;
 using Swyftly.Application.Identity;
 using Swyftly.Application.Ledger;
+using Swyftly.Application.Refunds;
 using Swyftly.Domain.Disputes;
 using Swyftly.Domain.Ledger;
 using Swyftly.Domain.Orders;
+using Swyftly.Domain.Payments;
+using Swyftly.Domain.Refunds;
 using Swyftly.Domain.Returns;
 using Swyftly.Infrastructure.Persistence;
+using Swyftly.Infrastructure.Refunds;
 
 namespace Swyftly.Infrastructure.Disputes;
 
@@ -223,9 +227,20 @@ public sealed class EfDisputeWorkflowService(
             return Validation("dispute", exception.Message);
         }
 
+        RefundResult? buyerFavouredRefund = null;
         if (dispute.Status == DisputeStatus.ResolvedSellerFavoured)
         {
             await ReleaseLinkedPayoutsAsync(dispute.OrderId, dispute.SellerId, request, cancellationToken);
+        }
+        else if (dispute.Status == DisputeStatus.ResolvedBuyerFavoured)
+        {
+            var refundResult = await CreateBuyerFavouredRefundRequestAsync(dispute, request, cancellationToken);
+            if (refundResult.IsFailure)
+            {
+                return Result<DisputeResult>.Failure(refundResult.Error);
+            }
+
+            buyerFavouredRefund = refundResult.Value;
         }
 
         await auditLogService.RecordAsync(
@@ -236,7 +251,13 @@ public sealed class EfDisputeWorkflowService(
                 "Dispute",
                 dispute.Id.ToString(),
                 JsonSerializer.Serialize(new { status = previousStatus.ToString() }),
-                JsonSerializer.Serialize(new { status = dispute.Status.ToString(), outcome = request.Outcome }),
+                JsonSerializer.Serialize(new
+                {
+                    status = dispute.Status.ToString(),
+                    outcome = request.Outcome,
+                    refundId = buyerFavouredRefund?.RefundId,
+                    refundAmount = buyerFavouredRefund?.Amount
+                }),
                 request.Reason,
                 request.IpAddress),
             cancellationToken);
@@ -302,6 +323,75 @@ public sealed class EfDisputeWorkflowService(
                     request.IpAddress),
                 cancellationToken);
         }
+    }
+
+    private async Task<Result<RefundResult>> CreateBuyerFavouredRefundRequestAsync(
+        Dispute dispute,
+        ResolveDisputeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var payment = await dbContext.Payments
+            .AsNoTracking()
+            .Where(existing => existing.OrderId == dispute.OrderId
+                && (existing.Status == PaymentStatus.Paid || existing.Status == PaymentStatus.PartiallyRefunded))
+            .OrderByDescending(existing => existing.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (payment is null)
+        {
+            return Result<RefundResult>.Failure(Error.Conflict(
+                "Disputes.RefundablePaymentNotFound",
+                "Buyer-favoured disputes require a paid or partially refunded payment before refund recovery can start."));
+        }
+
+        var alreadyRefundedOrPending = await dbContext.Refunds
+            .AsNoTracking()
+            .Where(refund => refund.PaymentId == payment.Id
+                && refund.Status != RefundStatus.Failed
+                && refund.Status != RefundStatus.Rejected)
+            .SumAsync(refund => refund.Amount, cancellationToken);
+        var remainingRefundableAmount = payment.Amount - alreadyRefundedOrPending;
+        if (remainingRefundableAmount <= 0)
+        {
+            return Result<RefundResult>.Failure(Error.Conflict(
+                "Disputes.NoRefundableBalance",
+                "The disputed order has no remaining refundable payment balance."));
+        }
+
+        if (dispute.ReturnRequestId.HasValue)
+        {
+            var returnRequest = await dbContext.ReturnRequests.SingleOrDefaultAsync(
+                existing => existing.Id == dispute.ReturnRequestId.Value && existing.OrderId == dispute.OrderId,
+                cancellationToken);
+            if (returnRequest is not null && returnRequest.Status != ReturnStatus.RefundPending)
+            {
+                try
+                {
+                    returnRequest.MarkRefundPending(request.ResolvedAtUtc);
+                }
+                catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+                {
+                    return Result<RefundResult>.Failure(Error.Conflict(
+                        "Disputes.ReturnNotRefundable",
+                        exception.Message));
+                }
+            }
+        }
+
+        var refund = new Refund(
+            dispute.OrderId,
+            payment.Id,
+            dispute.BuyerId,
+            dispute.SellerId,
+            dispute.ReturnRequestId,
+            remainingRefundableAmount,
+            payment.Currency,
+            $"Buyer-favoured dispute {dispute.Id}: {request.Reason}",
+            request.ActorUserId,
+            request.ActorRole,
+            request.ResolvedAtUtc);
+
+        dbContext.Refunds.Add(refund);
+        return Result<RefundResult>.Success(EfRefundWorkflowService.Map(refund));
     }
 
     private async Task<Dispute?> GetActorDisputeAsync(

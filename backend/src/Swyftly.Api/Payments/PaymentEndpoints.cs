@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Text;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Swyftly.Api.Results;
@@ -5,6 +7,8 @@ using Swyftly.Api.Security;
 using Swyftly.Application.Identity;
 using Swyftly.Application.Payments;
 using Swyftly.Domain.Buyers;
+using Swyftly.Domain.Payments;
+using Swyftly.Infrastructure.Payments;
 using Swyftly.Infrastructure.Persistence;
 using HttpResults = Microsoft.AspNetCore.Http.Results;
 
@@ -12,6 +16,8 @@ namespace Swyftly.Api.Payments;
 
 public static class PaymentEndpoints
 {
+    private const long MaxWebhookPayloadBytes = 64 * 1024;
+
     public static IEndpointRouteBuilder MapPaymentEndpoints(this IEndpointRouteBuilder app)
     {
         var buyerGroup = app.MapGroup("/api/payments")
@@ -32,10 +38,23 @@ public static class PaymentEndpoints
             .WithName("ProcessPaymentWebhook")
             .WithSummary("Processes a payment provider webhook with provider signature verification and idempotency.")
             .AllowAnonymous()
+            .RequireRateLimiting(SwyftlyRateLimitPolicies.Webhook)
             .Produces<PaymentWebhookProcessingResult>(StatusCodes.Status200OK)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status401Unauthorized)
-            .ProducesProblem(StatusCodes.Status404NotFound);
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status413PayloadTooLarge)
+            .ProducesProblem(StatusCodes.Status415UnsupportedMediaType);
+
+        app.MapGet("/api/payments/payfast/checkout/{providerReference}", GetPayFastCheckoutAsync)
+            .WithTags("Payments")
+            .WithName("GetPayFastCheckout")
+            .WithSummary("Builds the PayFast hosted-checkout form for a pending local PayFast payment.")
+            .AllowAnonymous()
+            .RequireRateLimiting(SwyftlyRateLimitPolicies.Payment)
+            .Produces(StatusCodes.Status200OK, contentType: "text/html")
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
 
         return app;
     }
@@ -66,8 +85,25 @@ public static class PaymentEndpoints
         IPaymentService paymentService,
         CancellationToken cancellationToken)
     {
-        using var reader = new StreamReader(httpRequest.Body);
-        var payload = await reader.ReadToEndAsync(cancellationToken);
+        if (!IsSupportedWebhookContentType(provider, httpRequest.ContentType))
+        {
+            return HttpResults.Problem(
+                title: "Payments.InvalidWebhookContentType",
+                detail: "Payment webhook content type is not supported for this provider.",
+                statusCode: StatusCodes.Status415UnsupportedMediaType);
+        }
+
+        if (httpRequest.ContentLength > MaxWebhookPayloadBytes)
+        {
+            return WebhookPayloadTooLarge();
+        }
+
+        var payload = await ReadBodyWithLimitAsync(httpRequest.Body, MaxWebhookPayloadBytes, cancellationToken);
+        if (payload is null)
+        {
+            return WebhookPayloadTooLarge();
+        }
+
         var headers = httpRequest.Headers.ToDictionary(
             header => header.Key,
             header => header.Value.ToString(),
@@ -78,6 +114,48 @@ public static class PaymentEndpoints
             cancellationToken);
 
         return result.ToHttpResult(HttpResults.Ok);
+    }
+
+    private static async Task<IResult> GetPayFastCheckoutAsync(
+        string providerReference,
+        SwyftlyDbContext dbContext,
+        PayFastCheckoutFormBuilder formBuilder,
+        CancellationToken cancellationToken)
+    {
+        var payment = await dbContext.Payments
+            .SingleOrDefaultAsync(payment =>
+                    payment.Provider == PayFastPaymentProvider.Name
+                    && payment.ProviderReference == providerReference,
+                cancellationToken);
+        if (payment is null)
+        {
+            return HttpResults.Problem(
+                title: "Payments.PayFastPaymentNotFound",
+                detail: "The PayFast payment reference was not found.",
+                statusCode: StatusCodes.Status404NotFound);
+        }
+
+        if (payment.Status != PaymentStatus.Pending)
+        {
+            return HttpResults.Problem(
+                title: "Payments.PayFastPaymentNotPending",
+                detail: "Only pending PayFast payments can be checked out.",
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
+        var order = await dbContext.Orders
+            .SingleOrDefaultAsync(order => order.Id == payment.OrderId, cancellationToken);
+        if (order is null)
+        {
+            return HttpResults.Problem(
+                title: "Payments.OrderNotFound",
+                detail: "The order for the PayFast payment was not found.",
+                statusCode: StatusCodes.Status404NotFound);
+        }
+
+        var result = formBuilder.Build(payment, order);
+        return result.ToHttpResult(form =>
+            HttpResults.Content(form.Html, "text/html; charset=utf-8", Encoding.UTF8));
     }
 
     private static async Task<BuyerProfile?> GetCurrentBuyerAsync(
@@ -96,6 +174,76 @@ public static class PaymentEndpoints
             title: "Payments.BuyerNotFound",
             detail: "The authenticated user does not have a buyer profile.",
             statusCode: StatusCodes.Status404NotFound);
+
+    private static bool IsJsonContentType(string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            return false;
+        }
+
+        var mediaType = contentType.Split(';', 2)[0].Trim();
+        return string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase)
+            || mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSupportedWebhookContentType(string provider, string? contentType)
+    {
+        if (string.Equals(provider, PayFastPaymentProvider.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return IsFormUrlEncodedContentType(contentType);
+        }
+
+        return IsJsonContentType(contentType);
+    }
+
+    private static bool IsFormUrlEncodedContentType(string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            return false;
+        }
+
+        var mediaType = contentType.Split(';', 2)[0].Trim();
+        return string.Equals(mediaType, "application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task<string?> ReadBodyWithLimitAsync(
+        Stream body,
+        long maxBytes,
+        CancellationToken cancellationToken)
+    {
+        var buffer = ArrayPool<byte>.Shared.Rent(8192);
+        try
+        {
+            await using var memoryStream = new MemoryStream();
+            while (true)
+            {
+                var read = await body.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
+                if (read == 0)
+                {
+                    return Encoding.UTF8.GetString(memoryStream.ToArray());
+                }
+
+                if (memoryStream.Length + read > maxBytes)
+                {
+                    return null;
+                }
+
+                await memoryStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static IResult WebhookPayloadTooLarge() =>
+        HttpResults.Problem(
+            title: "Payments.WebhookPayloadTooLarge",
+            detail: $"Payment webhook payloads must be {MaxWebhookPayloadBytes} bytes or smaller.",
+            statusCode: StatusCodes.Status413PayloadTooLarge);
 }
 
 public sealed record InitiatePaymentApiRequest(Guid OrderId);

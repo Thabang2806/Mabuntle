@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Swyftly.Api.Notifications;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Notifications;
 using Swyftly.Domain.Buyers;
 using Swyftly.Domain.Orders;
 using Swyftly.Domain.Sellers;
@@ -390,7 +392,9 @@ public static class SupportTicketEndpoints
         SupportMessageRequest request,
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
+        INotificationService notificationService,
         TimeProvider timeProvider,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         return await AddSupportTicketMessageAsync(
@@ -399,7 +403,9 @@ public static class SupportTicketEndpoints
             principal,
             isInternal: false,
             dbContext,
+            notificationService,
             timeProvider,
+            loggerFactory,
             cancellationToken);
     }
 
@@ -417,7 +423,9 @@ public static class SupportTicketEndpoints
             principal,
             isInternal: true,
             dbContext,
+            notificationService: null,
             timeProvider,
+            loggerFactory: null,
             cancellationToken);
     }
 
@@ -427,7 +435,9 @@ public static class SupportTicketEndpoints
         ClaimsPrincipal principal,
         bool isInternal,
         SwyftlyDbContext dbContext,
+        INotificationService? notificationService,
         TimeProvider timeProvider,
+        ILoggerFactory? loggerFactory,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(principal, out var userId))
@@ -455,6 +465,22 @@ public static class SupportTicketEndpoints
 
             dbContext.SupportMessages.Add(ticket.Messages.OrderBy(message => message.CreatedAtUtc).Last());
             await dbContext.SaveChangesAsync(cancellationToken);
+            if (!isInternal && notificationService is not null && loggerFactory is not null && ticket.BuyerId.HasValue)
+            {
+                await BuyerNotificationDispatcher.NotifyBuyerAsync(
+                    ticket.BuyerId.Value,
+                    "SupportReply",
+                    "Support replied to your ticket",
+                    "A support agent replied to your support ticket.",
+                    "SupportTicket",
+                    ticket.Id,
+                    timeProvider.GetUtcNow(),
+                    dbContext,
+                    notificationService,
+                    loggerFactory.CreateLogger(nameof(SupportTicketEndpoints)),
+                    cancellationToken);
+            }
+
             return HttpResults.Ok(Map(ticket, includeInternalMessages: true));
         }
         catch (InvalidOperationException exception)

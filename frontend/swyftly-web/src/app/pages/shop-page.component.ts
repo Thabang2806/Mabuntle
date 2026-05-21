@@ -1,37 +1,96 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { getApiErrorMessage } from '../auth/api-error';
 import { ProductCardComponent } from '../shop/product-card.component';
-import { ProductSearchItemResponse } from '../shop/public-catalog.models';
+import { ProductSearchItemResponse, PublicCategoryResponse } from '../shop/public-catalog.models';
 import { PublicCatalogService } from '../shop/public-catalog.service';
+import { EmptyStateComponent } from '../shared/ui/empty-state.component';
+import { PageHeaderComponent } from '../shared/ui/page-header.component';
+import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
+import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
 @Component({
   selector: 'app-shop-page',
   imports: [
+    EmptyStateComponent,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    PageHeaderComponent,
     ProductCardComponent,
-    ReactiveFormsModule
+    ReactiveFormsModule,
+    RouterLink,
+    StatusBadgeComponent,
+    UiAlertComponent
   ],
   template: `
     <section class="page shop-surface">
-      <div class="page-header">
-        <span class="eyebrow">Shop</span>
-        <h1>Shop</h1>
-        <p>Browse published fashion, beauty, jewellery, and accessories from verified sellers.</p>
+      <div class="shop-hero">
+        <app-page-header
+          eyebrow="Shop"
+          heading="Find your next fashion, beauty, or accessory piece"
+          description="Search verified marketplace listings, compare seller and stock details, and keep filters visible as you browse."
+        >
+          <a pageHeaderActions mat-stroked-button routerLink="/">Marketplace home</a>
+        </app-page-header>
+
+        <div class="shop-quick-links" aria-label="Category quick filters">
+          <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="applyCategory(null)">All products</button>
+          @for (category of quickCategories(); track category.categoryId) {
+            <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="applyCategory(category.slug)">
+              {{ category.name }}
+            </button>
+          }
+        </div>
       </div>
 
+      <button class="shop-filter-toggle" mat-stroked-button type="button" (click)="filtersExpanded.set(!filtersExpanded())">
+        {{ filtersExpanded() ? 'Hide filters' : 'Show filters' }}
+      </button>
+
       <div class="shop-layout">
-        <form [formGroup]="filtersForm" (ngSubmit)="search(1)" class="shop-filters" novalidate>
+        <form
+          [formGroup]="filtersForm"
+          (ngSubmit)="search(1)"
+          class="shop-filters"
+          [class.shop-filters--open]="filtersExpanded()"
+          novalidate
+        >
+          <div class="shop-filter-heading">
+            <strong>Refine results</strong>
+            @if (activeFilters().length > 0) {
+              <span>{{ activeFilters().length }} active</span>
+            }
+          </div>
+
           <mat-form-field appearance="outline">
             <mat-label>Search</mat-label>
             <input matInput formControlName="query">
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Category</mat-label>
+            <mat-select formControlName="categorySlug">
+              <mat-option value="">All categories</mat-option>
+              @for (category of categories(); track category.categoryId) {
+                <mat-option [value]="category.slug">{{ categoryLabel(category) }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Availability</mat-label>
+            <mat-select formControlName="availability">
+              <mat-option value="">All products</mat-option>
+              <mat-option value="in_stock">In stock</mat-option>
+              <mat-option value="out_of_stock">Out of stock</mat-option>
+            </mat-select>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
@@ -80,19 +139,29 @@ import { PublicCatalogService } from '../shop/public-catalog.service';
             <div class="route-card">Loading products...</div>
           } @else {
             @if (errorMessage()) {
-              <p class="auth-alert error" role="alert">{{ errorMessage() }}</p>
+              <app-ui-alert tone="error">{{ errorMessage() }}</app-ui-alert>
+            }
+
+            @if (activeFilters().length > 0) {
+              <div class="active-filter-row" aria-label="Active filters">
+                @for (filter of activeFilters(); track filter) {
+                  <app-status-badge [label]="filter" />
+                }
+              </div>
             }
 
             @if (products().length === 0 && !errorMessage()) {
-              <div class="route-card">
-                <span class="status-pill">Empty</span>
-                <h2>No products found</h2>
-                <p>Try a broader search or fewer filters.</p>
-              </div>
+              <app-empty-state
+                eyebrow="No matches"
+                heading="No products found"
+                message="Try a broader search, choose fewer filters, or browse all products."
+              >
+                <button mat-flat-button type="button" (click)="clearFilters()">Clear filters</button>
+              </app-empty-state>
             } @else {
               <div class="shop-result-bar">
                 <span>{{ totalCount() }} result{{ totalCount() === 1 ? '' : 's' }}</span>
-                <span>Page {{ page() }}</span>
+                <span>Page {{ page() }} - {{ sortLabel() }}</span>
               </div>
 
               <div class="product-grid">
@@ -116,15 +185,19 @@ export class ShopPageComponent implements OnInit {
   private readonly formBuilder = inject(NonNullableFormBuilder);
   private readonly publicCatalogService = inject(PublicCatalogService);
 
+  protected readonly categories = signal<PublicCategoryResponse[]>([]);
   protected readonly products = signal<ProductSearchItemResponse[]>([]);
   protected readonly totalCount = signal(0);
   protected readonly page = signal(1);
   protected readonly pageSize = signal(24);
   protected readonly isLoading = signal(true);
   protected readonly errorMessage = signal<string | null>(null);
+  protected readonly filtersExpanded = signal(false);
 
   protected readonly filtersForm = this.formBuilder.group({
     query: [''],
+    categorySlug: [''],
+    availability: [''],
     minPrice: [''],
     maxPrice: [''],
     size: [''],
@@ -134,7 +207,10 @@ export class ShopPageComponent implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
-    await this.search(1);
+    await Promise.all([
+      this.loadCategories(),
+      this.search(1)
+    ]);
   }
 
   protected async search(page: number): Promise<void> {
@@ -145,6 +221,8 @@ export class ShopPageComponent implements OnInit {
       const filters = this.filtersForm.getRawValue();
       const response = await this.publicCatalogService.searchProducts({
         query: filters.query,
+        categorySlug: filters.categorySlug,
+        inStock: this.toAvailability(filters.availability),
         minPrice: this.toNumber(filters.minPrice),
         maxPrice: this.toNumber(filters.maxPrice),
         size: filters.size,
@@ -159,6 +237,7 @@ export class ShopPageComponent implements OnInit {
       this.totalCount.set(response.totalCount);
       this.page.set(response.page);
       this.pageSize.set(response.pageSize);
+      this.filtersExpanded.set(false);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
       this.products.set([]);
@@ -171,6 +250,8 @@ export class ShopPageComponent implements OnInit {
   protected async clearFilters(): Promise<void> {
     this.filtersForm.reset({
       query: '',
+      categorySlug: '',
+      availability: '',
       minPrice: '',
       maxPrice: '',
       size: '',
@@ -181,6 +262,98 @@ export class ShopPageComponent implements OnInit {
     await this.search(1);
   }
 
+  protected async applyCategory(categorySlug: string | null): Promise<void> {
+    this.filtersForm.patchValue({ categorySlug: categorySlug ?? '' });
+    await this.search(1);
+  }
+
+  protected quickCategories(): PublicCategoryResponse[] {
+    return [...this.categories()]
+      .sort((left, right) => left.displayOrder - right.displayOrder || left.name.localeCompare(right.name))
+      .slice(0, 6);
+  }
+
+  protected categoryLabel(category: PublicCategoryResponse): string {
+    const path = this.categoryPath(category);
+    return path || category.name;
+  }
+
+  protected activeFilters(): string[] {
+    const filters = this.filtersForm.getRawValue();
+    const active: string[] = [];
+    if (filters.query) {
+      active.push(`Search: ${filters.query}`);
+    }
+
+    if (filters.categorySlug) {
+      const category = this.categories().find(item => item.slug === filters.categorySlug);
+      active.push(`Category: ${category ? this.categoryLabel(category) : filters.categorySlug}`);
+    }
+
+    if (filters.availability) {
+      active.push(filters.availability === 'in_stock' ? 'In stock' : 'Out of stock');
+    }
+
+    if (filters.minPrice) {
+      active.push(`Min: R${filters.minPrice}`);
+    }
+
+    if (filters.maxPrice) {
+      active.push(`Max: R${filters.maxPrice}`);
+    }
+
+    if (filters.size) {
+      active.push(`Size: ${filters.size}`);
+    }
+
+    if (filters.colour) {
+      active.push(`Colour: ${filters.colour}`);
+    }
+
+    if (filters.material) {
+      active.push(`Material: ${filters.material}`);
+    }
+
+    return active;
+  }
+
+  protected sortLabel(): string {
+    const sort = this.filtersForm.controls.sort.value;
+    if (sort === 'price_asc') {
+      return 'Price low to high';
+    }
+
+    if (sort === 'price_desc') {
+      return 'Price high to low';
+    }
+
+    if (sort === 'relevance') {
+      return 'Relevance';
+    }
+
+    return 'Newest';
+  }
+
+  private async loadCategories(): Promise<void> {
+    try {
+      this.categories.set(await this.publicCatalogService.getCategories());
+    } catch {
+      this.categories.set([]);
+    }
+  }
+
+  private categoryPath(category: PublicCategoryResponse): string {
+    const byId = new Map(this.categories().map(item => [item.categoryId, item]));
+    const names: string[] = [];
+    let current: PublicCategoryResponse | undefined = category;
+    while (current) {
+      names.unshift(current.name);
+      current = current.parentCategoryId ? byId.get(current.parentCategoryId) : undefined;
+    }
+
+    return names.join(' > ');
+  }
+
   private toNumber(value: string): number | null {
     if (!value) {
       return null;
@@ -188,5 +361,17 @@ export class ShopPageComponent implements OnInit {
 
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private toAvailability(value: string): boolean | null {
+    if (value === 'in_stock') {
+      return true;
+    }
+
+    if (value === 'out_of_stock') {
+      return false;
+    }
+
+    return null;
   }
 }

@@ -68,6 +68,8 @@ describe('BuyerVisualSearchPageComponent', () => {
       contentType: null
     });
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Black Formal Maxi Dress');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Confidence 72%');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Formal');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('not persisted');
   });
 
@@ -82,4 +84,36 @@ describe('BuyerVisualSearchPageComponent', () => {
     expect(visualSearchService.search).not.toHaveBeenCalled();
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Upload an image or enter an image reference.');
   });
+
+  it('rejects unsupported image types before calling the service', () => {
+    fixture.detectChanges();
+    const input = (fixture.nativeElement as HTMLElement).querySelector('input[type="file"]') as HTMLInputElement;
+    setInputFile(input, new File(['not an image'], 'reference.gif', { type: 'image/gif' }));
+
+    input.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    expect(visualSearchService.search).not.toHaveBeenCalled();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Upload a PNG, JPEG, or WebP image.');
+  });
+
+  it('rejects oversized image uploads before calling the service', () => {
+    fixture.detectChanges();
+    const input = (fixture.nativeElement as HTMLElement).querySelector('input[type="file"]') as HTMLInputElement;
+    const largeFile = new File([new Uint8Array((5 * 1024 * 1024) + 1)], 'large.jpg', { type: 'image/jpeg' });
+    setInputFile(input, largeFile);
+
+    input.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    expect(visualSearchService.search).not.toHaveBeenCalled();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Upload an image up to 5 MB.');
+  });
 });
+
+function setInputFile(input: HTMLInputElement, file: File): void {
+  Object.defineProperty(input, 'files', {
+    configurable: true,
+    value: [file]
+  });
+}

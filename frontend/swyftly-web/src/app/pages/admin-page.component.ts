@@ -1,15 +1,18 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
 import { getApiErrorMessage } from '../auth/api-error';
 import { AdminDashboardSummaryResponse } from '../admin/admin-dashboard.models';
 import { AdminDashboardService } from '../admin/admin-dashboard.service';
 
 @Component({
   selector: 'app-admin-page',
-  imports: [MatButtonModule, RouterLink],
+  imports: [AdminWorkspaceNavComponent, MatButtonModule, RouterLink],
   template: `
     <section class="page admin-dashboard">
+      <app-admin-workspace-nav />
+
       <div class="page-header">
         <span class="eyebrow">Admin command centre</span>
         <h1>Dashboard</h1>
@@ -34,7 +37,7 @@ import { AdminDashboardService } from '../admin/admin-dashboard.service';
           </div>
 
           <div class="route-card compact-card">
-            <span class="status-pill">Finance placeholders</span>
+            <span class="status-pill">Finance summary</span>
             <div class="dashboard-finance">
               <div>
                 <span>Total gross sales</span>
@@ -71,13 +74,16 @@ export class AdminPageComponent implements OnInit {
   protected readonly navigationItems = [
     { label: 'Sellers', route: '/admin/sellers', status: 'Review', description: 'Seller verification queue.' },
     { label: 'Products', route: '/admin/products', status: 'Review', description: 'Product moderation queue.' },
-    { label: 'Orders', route: '/admin/orders', status: 'Shell', description: 'Order operations landing area.' },
-    { label: 'Payments', route: '/admin/payments', status: 'Shell', description: 'Payment operations landing area.' },
+    { label: 'Reviews', route: '/admin/reviews', status: 'Trust', description: 'Verified-buyer review moderation.' },
+    { label: 'Orders', route: '/admin/orders', status: 'Read', description: 'Marketplace order search and detail context.' },
+    { label: 'Payments', route: '/admin/payments', status: 'Read', description: 'Payment records, provider references, and webhook event context.' },
     { label: 'Reports', route: '/admin/reports', status: 'Finance', description: 'Marketplace and finance reporting.' },
     { label: 'AI usage', route: '/admin/ai-usage', status: 'Analytics', description: 'AI usage, cost, quality, and moderation reporting.' },
-    { label: 'Refunds', route: '/admin/refunds', status: 'Shell', description: 'Refund operations landing area.' },
-    { label: 'Disputes', route: '/admin/disputes', status: 'Shell', description: 'Dispute operations landing area.' },
-    { label: 'Payouts', route: '/admin/payouts', status: 'Shell', description: 'Payout operations landing area.' },
+    { label: 'Refunds', route: '/admin/refunds', status: 'Finance', description: 'Refund request and approval queue.' },
+    { label: 'Disputes', route: '/admin/disputes', status: 'Resolve', description: 'Dispute review and resolution queue.' },
+    { label: 'Payouts', route: '/admin/payouts', status: 'Finance', description: 'Payout hold, availability, processing, and reconciliation.' },
+    { label: 'Support', route: '/admin/support', status: 'Ops', description: 'Buyer and seller support ticket queue.' },
+    { label: 'Categories', route: '/admin/categories', status: 'Reference', description: 'Catalog taxonomy and attribute definitions.' },
     { label: 'Ads', route: '/admin/ads', status: 'Review', description: 'Ad campaign review queue.' },
     { label: 'Audit logs', route: '/admin/audit-logs', status: 'Audit', description: 'Administrative action history.' }
   ];

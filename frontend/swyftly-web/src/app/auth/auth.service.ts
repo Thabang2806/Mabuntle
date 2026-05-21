@@ -1,22 +1,18 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { isPlatformBrowser } from '@angular/common';
+import { Injectable, PLATFORM_ID, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
   AuthResponse,
   AuthRole,
-  AuthSession,
   AuthState,
   AuthTokens,
   AuthUser,
-  CurrentUserResponse,
   LoginRequest,
-  LogoutRequest,
-  RefreshTokenRequest,
   RegisterRequest,
   RegisterResponse
 } from './auth.models';
-import { AuthStorageService } from './auth-storage.service';
 
 const INITIAL_AUTH_STATE: AuthState = {
   currentUser: null,
@@ -28,7 +24,7 @@ const INITIAL_AUTH_STATE: AuthState = {
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
-  private readonly storage = inject(AuthStorageService);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
   private readonly state = signal<AuthState>(INITIAL_AUTH_STATE);
   private initializePromise: Promise<void> | null = null;
 
@@ -38,7 +34,7 @@ export class AuthService {
   readonly isLoading = computed(() => this.state().loading);
 
   get accessToken(): string | null {
-    return this.state().tokens?.accessToken ?? this.storage.load()?.tokens.accessToken ?? null;
+    return this.state().tokens?.accessToken ?? null;
   }
 
   async initialize(): Promise<void> {
@@ -46,7 +42,7 @@ export class AuthService {
       return;
     }
 
-    this.initializePromise ??= this.loadStoredSession();
+    this.initializePromise ??= this.tryRefresh();
     await this.initializePromise;
     this.initializePromise = null;
   }
@@ -59,7 +55,7 @@ export class AuthService {
 
   async login(request: LoginRequest): Promise<AuthResponse> {
     const response = await firstValueFrom(
-      this.http.post<AuthResponse>(this.authUrl('/login'), request)
+      this.http.post<AuthResponse>(this.authUrl('/login'), request, { withCredentials: true })
     );
 
     this.setAuthenticatedSession(response);
@@ -67,16 +63,11 @@ export class AuthService {
   }
 
   async logout(): Promise<void> {
-    const refreshToken = this.state().tokens?.refreshToken ?? this.storage.load()?.tokens.refreshToken;
     this.clearSession();
-
-    if (!refreshToken) {
-      return;
-    }
 
     try {
       await firstValueFrom(
-        this.http.post<void>(this.authUrl('/logout'), { refreshToken } satisfies LogoutRequest)
+        this.http.post<void>(this.authUrl('/logout'), {}, this.cookieAuthOptions())
       );
     } catch {
       // Local logout should not fail because the server-side token was already invalid.
@@ -88,42 +79,22 @@ export class AuthService {
     return allowedRoles.some(role => roles.includes(role));
   }
 
-  private async loadStoredSession(): Promise<void> {
-    const storedSession = this.storage.load();
-    if (!storedSession) {
+  private async tryRefresh(): Promise<void> {
+    if (!this.readCookie('swyftly_csrf')) {
       this.state.set({ ...INITIAL_AUTH_STATE, initialized: true });
       return;
     }
 
     this.state.set({
-      currentUser: storedSession.currentUser,
-      tokens: storedSession.tokens,
+      currentUser: null,
+      tokens: null,
       initialized: false,
       loading: true
     });
 
     try {
-      const currentUser = await firstValueFrom(
-        this.http.get<CurrentUserResponse>(this.authUrl('/me'))
-      );
-      this.setSession(storedSession.tokens, currentUser, true);
-    } catch (error) {
-      if (this.isUnauthorized(error)) {
-        await this.tryRefresh(storedSession.tokens.refreshToken);
-        return;
-      }
-
-      this.clearSession(true);
-    }
-  }
-
-  private async tryRefresh(refreshToken: string): Promise<void> {
-    try {
       const response = await firstValueFrom(
-        this.http.post<AuthResponse>(
-          this.authUrl('/refresh'),
-          { refreshToken } satisfies RefreshTokenRequest
-        )
+        this.http.post<AuthResponse>(this.authUrl('/refresh'), {}, this.cookieAuthOptions())
       );
       this.setAuthenticatedSession(response);
     } catch {
@@ -134,9 +105,7 @@ export class AuthService {
   private setAuthenticatedSession(response: AuthResponse): void {
     const tokens: AuthTokens = {
       accessToken: response.accessToken,
-      accessTokenExpiresAtUtc: response.accessTokenExpiresAtUtc,
-      refreshToken: response.refreshToken,
-      refreshTokenExpiresAtUtc: response.refreshTokenExpiresAtUtc
+      accessTokenExpiresAtUtc: response.accessTokenExpiresAtUtc
     };
 
     const currentUser: AuthUser = {
@@ -149,8 +118,6 @@ export class AuthService {
   }
 
   private setSession(tokens: AuthTokens, currentUser: AuthUser, initialized: boolean): void {
-    const session: AuthSession = { currentUser, tokens };
-    this.storage.save(session);
     this.state.set({
       currentUser,
       tokens,
@@ -160,7 +127,6 @@ export class AuthService {
   }
 
   private clearSession(initialized = this.state().initialized): void {
-    this.storage.clear();
     this.state.set({
       ...INITIAL_AUTH_STATE,
       initialized
@@ -171,7 +137,25 @@ export class AuthService {
     return `${environment.apiBaseUrl}/api/auth${path}`;
   }
 
-  private isUnauthorized(error: unknown): boolean {
-    return error instanceof HttpErrorResponse && error.status === 401;
+  private cookieAuthOptions(): { withCredentials: true; headers?: Record<string, string> } {
+    const csrfToken = this.readCookie('swyftly_csrf');
+    return csrfToken
+      ? { withCredentials: true, headers: { 'X-Swyftly-CSRF': csrfToken } }
+      : { withCredentials: true };
   }
+
+  private readCookie(name: string): string | null {
+    if (!this.isBrowser) {
+      return null;
+    }
+
+    const encodedName = `${encodeURIComponent(name)}=`;
+    const value = document.cookie
+      .split(';')
+      .map(cookie => cookie.trim())
+      .find(cookie => cookie.startsWith(encodedName));
+
+    return value ? decodeURIComponent(value.slice(encodedName.length)) : null;
+  }
+
 }

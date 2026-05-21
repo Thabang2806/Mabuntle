@@ -1,6 +1,9 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Swyftly.Api.Security;
 using Swyftly.Application.Identity;
 using Swyftly.Domain.Buyers;
@@ -13,6 +16,10 @@ namespace Swyftly.Api.Authentication;
 
 public static class AuthEndpoints
 {
+    public const string RefreshTokenCookieName = "swyftly_rt";
+    public const string CsrfCookieName = "swyftly_csrf";
+    public const string CsrfHeaderName = "X-Swyftly-CSRF";
+
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/auth")
@@ -28,20 +35,23 @@ public static class AuthEndpoints
 
         group.MapPost("/login", LoginAsync)
             .WithName("Login")
-            .WithSummary("Authenticates a user and returns JWT and refresh tokens.")
+            .WithSummary("Authenticates a user, returns a JWT access token, and sets HttpOnly refresh cookies.")
             .RequireRateLimiting(SwyftlyRateLimitPolicies.Auth)
             .Produces<AuthResponse>(StatusCodes.Status200OK)
-            .ProducesProblem(StatusCodes.Status401Unauthorized);
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status423Locked);
 
         group.MapPost("/refresh", RefreshAsync)
             .WithName("RefreshToken")
-            .WithSummary("Rotates a valid refresh token and returns a new token pair.")
+            .WithSummary("Rotates a valid refresh cookie and returns a new access token.")
+            .RequireRateLimiting(SwyftlyRateLimitPolicies.Auth)
             .Produces<AuthResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status401Unauthorized);
 
         group.MapPost("/logout", LogoutAsync)
             .WithName("Logout")
-            .WithSummary("Revokes a refresh token.")
+            .WithSummary("Revokes the refresh cookie token.")
+            .RequireRateLimiting(SwyftlyRateLimitPolicies.Auth)
             .Produces(StatusCodes.Status204NoContent);
 
         group.MapGet("/me", CurrentUserAsync)
@@ -103,6 +113,7 @@ public static class AuthEndpoints
             UserName = email,
             Email = email,
             EmailConfirmed = false,
+            LockoutEnabled = true,
             CreatedAtUtc = now
         };
 
@@ -149,10 +160,12 @@ public static class AuthEndpoints
         JwtTokenService jwtTokenService,
         SwyftlyDbContext dbContext,
         TimeProvider timeProvider,
+        HttpContext httpContext,
+        IOptions<AuthCookieOptions> authCookieOptions,
         CancellationToken cancellationToken)
     {
         var user = await userManager.FindByEmailAsync(request.Email.Trim());
-        if (user is null || !await userManager.CheckPasswordAsync(user, request.Password))
+        if (user is null)
         {
             return Problem(
                 StatusCodes.Status401Unauthorized,
@@ -160,6 +173,37 @@ public static class AuthEndpoints
                 "The email address or password is incorrect.");
         }
 
+        if (!await userManager.GetLockoutEnabledAsync(user))
+        {
+            await userManager.SetLockoutEnabledAsync(user, true);
+        }
+
+        if (await userManager.IsLockedOutAsync(user))
+        {
+            return Problem(
+                StatusCodes.Status423Locked,
+                "Identity.AccountLocked",
+                "The account is temporarily locked after too many failed login attempts.");
+        }
+
+        if (!await userManager.CheckPasswordAsync(user, request.Password))
+        {
+            await userManager.AccessFailedAsync(user);
+            if (await userManager.IsLockedOutAsync(user))
+            {
+                return Problem(
+                    StatusCodes.Status423Locked,
+                    "Identity.AccountLocked",
+                    "The account is temporarily locked after too many failed login attempts.");
+            }
+
+            return Problem(
+                StatusCodes.Status401Unauthorized,
+                "Identity.InvalidCredentials",
+                "The email address or password is incorrect.");
+        }
+
+        await userManager.ResetAccessFailedCountAsync(user);
         user.LastLoginAtUtc = timeProvider.GetUtcNow();
         await userManager.UpdateAsync(user);
 
@@ -169,27 +213,75 @@ public static class AuthEndpoints
             jwtTokenService,
             dbContext,
             timeProvider,
+            httpContext,
+            authCookieOptions.Value,
             cancellationToken);
 
         return HttpResults.Ok(response);
     }
 
     private static async Task<IResult> RefreshAsync(
-        RefreshTokenRequest request,
+        HttpContext httpContext,
         UserManager<ApplicationUser> userManager,
         JwtTokenService jwtTokenService,
         SwyftlyDbContext dbContext,
         TimeProvider timeProvider,
+        IOptions<AuthCookieOptions> authCookieOptions,
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        var tokenHash = JwtTokenService.HashRefreshToken(request.RefreshToken);
+        if (!TryValidateCsrf(httpContext))
+        {
+            return Problem(
+                StatusCodes.Status401Unauthorized,
+                "Identity.InvalidCsrfToken",
+                "The refresh request is missing a valid CSRF token.");
+        }
+
+        if (!httpContext.Request.Cookies.TryGetValue(RefreshTokenCookieName, out var refreshTokenValue)
+            || string.IsNullOrWhiteSpace(refreshTokenValue))
+        {
+            ClearAuthCookies(httpContext, authCookieOptions.Value);
+            return Problem(
+                StatusCodes.Status401Unauthorized,
+                "Identity.InvalidRefreshToken",
+                "The refresh token is invalid or expired.");
+        }
+
+        var tokenHash = JwtTokenService.HashRefreshToken(refreshTokenValue);
         var refreshToken = await dbContext.RefreshTokens
             .Include(token => token.User)
             .SingleOrDefaultAsync(token => token.TokenHash == tokenHash, cancellationToken);
 
-        if (refreshToken is null || !refreshToken.IsActive(now))
+        if (refreshToken is null)
         {
+            ClearAuthCookies(httpContext, authCookieOptions.Value);
+            return Problem(
+                StatusCodes.Status401Unauthorized,
+                "Identity.InvalidRefreshToken",
+                "The refresh token is invalid or expired.");
+        }
+
+        if (refreshToken.IsRevoked)
+        {
+            await RevokeRefreshTokenFamilyAsync(
+                refreshToken.UserId,
+                refreshToken.FamilyId,
+                now,
+                "ReplayDetected",
+                dbContext,
+                cancellationToken);
+
+            ClearAuthCookies(httpContext, authCookieOptions.Value);
+            return Problem(
+                StatusCodes.Status401Unauthorized,
+                "Identity.InvalidRefreshToken",
+                "The refresh token is invalid or expired.");
+        }
+
+        if (refreshToken.IsExpired(now))
+        {
+            ClearAuthCookies(httpContext, authCookieOptions.Value);
             return Problem(
                 StatusCodes.Status401Unauthorized,
                 "Identity.InvalidRefreshToken",
@@ -198,35 +290,54 @@ public static class AuthEndpoints
 
         var tokenPair = await jwtTokenService.CreateTokenPairAsync(refreshToken.User, cancellationToken);
         var replacementHash = JwtTokenService.HashRefreshToken(tokenPair.RefreshToken);
-        refreshToken.Revoke(now, replacementHash);
+        refreshToken.Revoke(now, replacementHash, "Rotated");
         dbContext.RefreshTokens.Add(new RefreshToken(
             refreshToken.UserId,
             replacementHash,
             tokenPair.RefreshTokenExpiresAtUtc,
-            now));
+            now,
+            refreshToken.FamilyId));
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var roles = await userManager.GetRolesAsync(refreshToken.User);
+        SetAuthCookies(httpContext, tokenPair.RefreshToken, tokenPair.RefreshTokenExpiresAtUtc, authCookieOptions.Value);
         return HttpResults.Ok(ToAuthResponse(refreshToken.User, roles.ToArray(), tokenPair));
     }
 
     private static async Task<IResult> LogoutAsync(
-        LogoutRequest request,
+        HttpContext httpContext,
         SwyftlyDbContext dbContext,
         TimeProvider timeProvider,
+        IOptions<AuthCookieOptions> authCookieOptions,
         CancellationToken cancellationToken)
     {
-        var tokenHash = JwtTokenService.HashRefreshToken(request.RefreshToken);
+        if (!TryValidateCsrf(httpContext))
+        {
+            return Problem(
+                StatusCodes.Status401Unauthorized,
+                "Identity.InvalidCsrfToken",
+                "The logout request is missing a valid CSRF token.");
+        }
+
+        if (!httpContext.Request.Cookies.TryGetValue(RefreshTokenCookieName, out var refreshTokenValue)
+            || string.IsNullOrWhiteSpace(refreshTokenValue))
+        {
+            ClearAuthCookies(httpContext, authCookieOptions.Value);
+            return HttpResults.NoContent();
+        }
+
+        var tokenHash = JwtTokenService.HashRefreshToken(refreshTokenValue);
         var refreshToken = await dbContext.RefreshTokens
             .SingleOrDefaultAsync(token => token.TokenHash == tokenHash, cancellationToken);
 
         if (refreshToken is not null && refreshToken.IsActive(timeProvider.GetUtcNow()))
         {
-            refreshToken.Revoke(timeProvider.GetUtcNow());
+            refreshToken.Revoke(timeProvider.GetUtcNow(), revokedReason: "Logout");
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
+        ClearAuthCookies(httpContext, authCookieOptions.Value);
         return HttpResults.NoContent();
     }
 
@@ -263,6 +374,8 @@ public static class AuthEndpoints
         JwtTokenService jwtTokenService,
         SwyftlyDbContext dbContext,
         TimeProvider timeProvider,
+        HttpContext httpContext,
+        AuthCookieOptions authCookieOptions,
         CancellationToken cancellationToken)
     {
         var tokenPair = await jwtTokenService.CreateTokenPairAsync(user, cancellationToken);
@@ -275,7 +388,34 @@ public static class AuthEndpoints
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var roles = await userManager.GetRolesAsync(user);
+        SetAuthCookies(httpContext, tokenPair.RefreshToken, tokenPair.RefreshTokenExpiresAtUtc, authCookieOptions);
         return ToAuthResponse(user, roles.ToArray(), tokenPair);
+    }
+
+    private static async Task RevokeRefreshTokenFamilyAsync(
+        Guid userId,
+        Guid familyId,
+        DateTimeOffset revokedAtUtc,
+        string revokedReason,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var activeFamilyTokens = await dbContext.RefreshTokens
+            .Where(token => token.UserId == userId
+                && token.FamilyId == familyId
+                && token.RevokedAtUtc == null
+                && token.ExpiresAtUtc > revokedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        foreach (var token in activeFamilyTokens)
+        {
+            token.Revoke(revokedAtUtc, revokedReason: revokedReason);
+        }
+
+        if (activeFamilyTokens.Count > 0)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static AuthResponse ToAuthResponse(
@@ -288,10 +428,75 @@ public static class AuthEndpoints
             user.Email ?? string.Empty,
             roles,
             tokenPair.AccessToken,
-            tokenPair.AccessTokenExpiresAtUtc,
-            tokenPair.RefreshToken,
-            tokenPair.RefreshTokenExpiresAtUtc);
+            tokenPair.AccessTokenExpiresAtUtc);
     }
+
+    private static bool TryValidateCsrf(HttpContext httpContext)
+    {
+        var hasCookie = httpContext.Request.Cookies.TryGetValue(CsrfCookieName, out var cookieValue);
+        var headerValue = httpContext.Request.Headers[CsrfHeaderName].ToString();
+
+        return hasCookie
+            && !string.IsNullOrWhiteSpace(cookieValue)
+            && string.Equals(cookieValue, headerValue, StringComparison.Ordinal);
+    }
+
+    private static void SetAuthCookies(
+        HttpContext httpContext,
+        string refreshToken,
+        DateTimeOffset refreshTokenExpiresAtUtc,
+        AuthCookieOptions authCookieOptions)
+    {
+        httpContext.Response.Cookies.Append(
+            RefreshTokenCookieName,
+            refreshToken,
+            CreateCookieOptions(authCookieOptions, true, authCookieOptions.RefreshTokenPath, refreshTokenExpiresAtUtc));
+
+        httpContext.Response.Cookies.Append(
+            CsrfCookieName,
+            GenerateToken(),
+            CreateCookieOptions(authCookieOptions, false, authCookieOptions.CsrfPath, refreshTokenExpiresAtUtc));
+    }
+
+    private static void ClearAuthCookies(HttpContext httpContext, AuthCookieOptions authCookieOptions)
+    {
+        var expired = DateTimeOffset.UnixEpoch;
+        httpContext.Response.Cookies.Append(
+            RefreshTokenCookieName,
+            string.Empty,
+            CreateCookieOptions(authCookieOptions, true, authCookieOptions.RefreshTokenPath, expired));
+
+        httpContext.Response.Cookies.Append(
+            CsrfCookieName,
+            string.Empty,
+            CreateCookieOptions(authCookieOptions, false, authCookieOptions.CsrfPath, expired));
+    }
+
+    private static CookieOptions CreateCookieOptions(
+        AuthCookieOptions authCookieOptions,
+        bool httpOnly,
+        string path,
+        DateTimeOffset expires)
+    {
+        var options = new CookieOptions
+        {
+            HttpOnly = httpOnly,
+            Secure = authCookieOptions.Secure,
+            SameSite = authCookieOptions.SameSite,
+            Path = string.IsNullOrWhiteSpace(path) ? "/" : path,
+            Expires = expires
+        };
+
+        if (!string.IsNullOrWhiteSpace(authCookieOptions.Domain))
+        {
+            options.Domain = authCookieOptions.Domain.Trim();
+        }
+
+        return options;
+    }
+
+    private static string GenerateToken() =>
+        Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
 
     private static string? NormalizePublicRegistrationRole(string role)
     {
@@ -335,10 +540,10 @@ public sealed record LoginRequest(
     string Password);
 
 public sealed record RefreshTokenRequest(
-    string RefreshToken);
+    string? RefreshToken = null);
 
 public sealed record LogoutRequest(
-    string RefreshToken);
+    string? RefreshToken = null);
 
 public sealed record AuthResponse(
     Guid UserId,
@@ -346,8 +551,8 @@ public sealed record AuthResponse(
     IReadOnlyCollection<string> Roles,
     string AccessToken,
     DateTimeOffset AccessTokenExpiresAtUtc,
-    string RefreshToken,
-    DateTimeOffset RefreshTokenExpiresAtUtc);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Always)] string? RefreshToken = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Always)] DateTimeOffset? RefreshTokenExpiresAtUtc = null);
 
 public sealed record CurrentUserResponse(
     Guid UserId,

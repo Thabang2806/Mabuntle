@@ -5,45 +5,58 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
 import { AdminSellerDetailResponse } from '../admin/admin-seller.models';
 import { AdminSellerService } from '../admin/admin-seller.service';
 import { getApiErrorMessage } from '../auth/api-error';
+import { PageHeaderComponent } from '../shared/ui/page-header.component';
+import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge.component';
+import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
 @Component({
   selector: 'app-admin-seller-detail-page',
   imports: [
+    AdminWorkspaceNavComponent,
     DatePipe,
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
+    PageHeaderComponent,
     ReactiveFormsModule,
-    RouterLink
+    RouterLink,
+    StatusBadgeComponent,
+    UiAlertComponent
   ],
   template: `
     <section class="page admin-review">
-      <a class="admin-back-link" routerLink="/admin">Back to approvals</a>
+      <app-admin-workspace-nav />
+      <a class="admin-back-link" routerLink="/admin/sellers">Back to seller approvals</a>
 
       @if (isLoading()) {
         <div class="route-card">Loading seller review...</div>
       } @else if (seller()) {
-        <div class="page-header">
-          <span class="eyebrow">Seller review</span>
-          <h1>{{ seller()?.displayName ?? seller()?.storefront?.storeName ?? 'Seller review' }}</h1>
-          <p>{{ seller()?.contactEmail ?? 'No contact email' }}</p>
-        </div>
+        <app-page-header
+          eyebrow="Seller review"
+          [heading]="seller()?.displayName ?? seller()?.storefront?.storeName ?? 'Seller review'"
+          [description]="seller()?.contactEmail ?? 'No contact email'"
+        >
+          <div pageHeaderActions>
+            <app-status-badge [label]="seller()!.verificationStatus" [tone]="sellerStatusTone(seller()!.verificationStatus)" />
+          </div>
+        </app-page-header>
 
         @if (errorMessage()) {
-          <p class="auth-alert error" role="alert">{{ errorMessage() }}</p>
+          <app-ui-alert tone="error">{{ errorMessage() }}</app-ui-alert>
         }
 
         @if (successMessage()) {
-          <p class="auth-alert success" role="status">{{ successMessage() }}</p>
+          <app-ui-alert tone="success">{{ successMessage() }}</app-ui-alert>
         }
 
         <div class="admin-detail-layout">
           <div class="admin-detail-main">
             <article class="route-card admin-detail-card">
-              <span class="status-pill">{{ seller()?.verificationStatus }}</span>
+              <app-status-badge [label]="seller()!.verificationStatus" [tone]="sellerStatusTone(seller()!.verificationStatus)" />
               <h2>Profile</h2>
               <dl class="admin-facts">
                 <div><dt>Business type</dt><dd>{{ seller()?.businessType ?? 'Not provided' }}</dd></div>
@@ -53,11 +66,27 @@ import { getApiErrorMessage } from '../auth/api-error';
             </article>
 
             <article class="route-card admin-detail-card">
+              <h2>Review completeness</h2>
+              <div class="admin-checklist">
+                @for (item of completenessItems(); track item.label) {
+                  <div>
+                    <app-status-badge [label]="item.isComplete ? 'Ready' : 'Missing'" [tone]="item.isComplete ? 'success' : 'warning'" />
+                    <span>{{ item.label }}</span>
+                    <small>{{ item.description }}</small>
+                  </div>
+                }
+              </div>
+            </article>
+
+            <article class="route-card admin-detail-card">
               <h2>Storefront</h2>
               <dl class="admin-facts">
                 <div><dt>Store name</dt><dd>{{ seller()?.storefront?.storeName ?? 'Not provided' }}</dd></div>
                 <div><dt>Slug</dt><dd>{{ seller()?.storefront?.slug ?? 'Not provided' }}</dd></div>
                 <div><dt>Description</dt><dd>{{ seller()?.storefront?.description ?? 'Not provided' }}</dd></div>
+                <div><dt>Published</dt><dd>{{ seller()?.storefront?.isPublished ? 'Yes' : 'No' }}</dd></div>
+                <div><dt>Logo</dt><dd>{{ seller()?.storefront?.logoUrl ? 'Provided' : 'Not provided' }}</dd></div>
+                <div><dt>Banner</dt><dd>{{ seller()?.storefront?.bannerUrl ? 'Provided' : 'Not provided' }}</dd></div>
               </dl>
             </article>
 
@@ -65,14 +94,16 @@ import { getApiErrorMessage } from '../auth/api-error';
               <h2>Address</h2>
               <dl class="admin-facts">
                 <div><dt>Line 1</dt><dd>{{ seller()?.address?.addressLine1 ?? 'Not provided' }}</dd></div>
+                <div><dt>Line 2</dt><dd>{{ seller()?.address?.addressLine2 ?? 'Not provided' }}</dd></div>
                 <div><dt>City</dt><dd>{{ seller()?.address?.city ?? 'Not provided' }}</dd></div>
                 <div><dt>Province</dt><dd>{{ seller()?.address?.province ?? 'Not provided' }}</dd></div>
                 <div><dt>Postal code</dt><dd>{{ seller()?.address?.postalCode ?? 'Not provided' }}</dd></div>
+                <div><dt>Country</dt><dd>{{ seller()?.address?.countryCode ?? 'Not provided' }}</dd></div>
               </dl>
             </article>
 
             <article class="route-card admin-detail-card">
-              <h2>Payout placeholder</h2>
+              <h2>Payout setup</h2>
               <dl class="admin-facts">
                 <div><dt>Provider reference</dt><dd>{{ seller()?.payout?.payoutProviderReference ?? 'Not provided' }}</dd></div>
                 <div><dt>Submitted</dt><dd>{{ seller()?.payout?.hasSubmittedPlaceholder ? 'Yes' : 'No' }}</dd></div>
@@ -131,7 +162,7 @@ import { getApiErrorMessage } from '../auth/api-error';
           </aside>
         </div>
       } @else {
-        <p class="auth-alert error" role="alert">{{ errorMessage() ?? 'Seller was not found.' }}</p>
+        <app-ui-alert tone="error">{{ errorMessage() ?? 'Seller was not found.' }}</app-ui-alert>
       }
     </section>
   `
@@ -204,6 +235,48 @@ export class AdminSellerDetailPageComponent implements OnInit {
       () => this.adminSellerService.suspendSeller(seller.sellerId, { reason }),
       'Seller suspended.');
     this.suspendForm.reset();
+  }
+
+  protected completenessItems(): { label: string; description: string; isComplete: boolean }[] {
+    const seller = this.seller();
+    if (!seller) {
+      return [];
+    }
+
+    return [
+      {
+        label: 'Profile',
+        description: 'Business type, business name, contact email, and phone are present.',
+        isComplete: Boolean(seller.businessType && seller.businessName && seller.contactEmail && seller.phoneNumber)
+      },
+      {
+        label: 'Storefront',
+        description: 'Store name, slug, description, and publication state are available for review.',
+        isComplete: Boolean(seller.storefront?.storeName && seller.storefront.slug && seller.storefront.description)
+      },
+      {
+        label: 'Address',
+        description: 'Primary address, city, province, postal code, and country are present.',
+        isComplete: Boolean(seller.address?.addressLine1 && seller.address.city && seller.address.province && seller.address.postalCode && seller.address.countryCode)
+      },
+      {
+        label: 'Payout setup',
+        description: 'Provider reference placeholder was submitted for admin approval.',
+        isComplete: Boolean(seller.payout?.payoutProviderReference && seller.payout.hasSubmittedPlaceholder)
+      }
+    ];
+  }
+
+  protected sellerStatusTone(status: string): StatusBadgeTone {
+    if (['Verified', 'Approved'].includes(status)) {
+      return 'success';
+    }
+
+    if (['Rejected', 'Suspended'].includes(status)) {
+      return 'danger';
+    }
+
+    return 'warning';
   }
 
   private async loadSeller(): Promise<void> {

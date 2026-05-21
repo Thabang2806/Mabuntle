@@ -30,6 +30,28 @@ describe('AdminSellerDetailPageComponent', () => {
         createdAtUtc: '2026-05-18T12:30:00Z'
       }]
     }));
+    adminSellerService.rejectSeller.and.resolveTo(createSellerDetail({
+      verificationStatus: 'Rejected',
+      auditTrail: [{
+        id: 'audit-rejected',
+        actionType: 'SellerRejected',
+        actorUserId: 'admin-id',
+        actorRole: 'Admin',
+        reason: 'Business details do not match.',
+        createdAtUtc: '2026-05-18T12:35:00Z'
+      }]
+    }));
+    adminSellerService.suspendSeller.and.resolveTo(createSellerDetail({
+      verificationStatus: 'Suspended',
+      auditTrail: [{
+        id: 'audit-suspended',
+        actionType: 'SellerSuspended',
+        actorUserId: 'admin-id',
+        actorRole: 'Admin',
+        reason: 'Policy issue.',
+        createdAtUtc: '2026-05-18T12:40:00Z'
+      }]
+    }));
 
     await TestBed.configureTestingModule({
       imports: [AdminSellerDetailPageComponent],
@@ -59,7 +81,25 @@ describe('AdminSellerDetailPageComponent', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Seller Store');
     expect(compiled.textContent).toContain('RegisteredBusiness');
+    expect(compiled.textContent).toContain('Review completeness');
+    expect(compiled.textContent).toContain('Profile');
     expect(compiled.textContent).toContain('SellerSubmitted');
+  });
+
+  it('shows missing completeness indicators for incomplete onboarding data', async () => {
+    adminSellerService.getSeller.and.resolveTo(createSellerDetail({
+      phoneNumber: null,
+      payout: null
+    }));
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Review completeness');
+    expect(compiled.textContent).toContain('Missing');
+    expect(compiled.textContent).toContain('Payout setup');
   });
 
   it('approves the loaded seller and displays success state', async () => {
@@ -77,6 +117,40 @@ describe('AdminSellerDetailPageComponent', () => {
     expect(adminSellerService.approveSeller).toHaveBeenCalledWith('seller-id');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Seller approved.');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('SellerApproved');
+  });
+
+  it('rejects the loaded seller with the unchanged reason payload', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const rejectTextarea = ((fixture.nativeElement as HTMLElement).querySelectorAll('textarea[formControlName="reason"]')[0]) as HTMLTextAreaElement;
+    rejectTextarea.value = 'Business details do not match.';
+    rejectTextarea.dispatchEvent(new Event('input'));
+    rejectTextarea.closest('form')?.dispatchEvent(new Event('submit'));
+
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(adminSellerService.rejectSeller).toHaveBeenCalledWith('seller-id', { reason: 'Business details do not match.' });
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Seller rejected.');
+  });
+
+  it('suspends the loaded seller with the unchanged reason payload', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const suspendTextarea = ((fixture.nativeElement as HTMLElement).querySelectorAll('textarea[formControlName="reason"]')[1]) as HTMLTextAreaElement;
+    suspendTextarea.value = 'Policy issue.';
+    suspendTextarea.dispatchEvent(new Event('input'));
+    suspendTextarea.closest('form')?.dispatchEvent(new Event('submit'));
+
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(adminSellerService.suspendSeller).toHaveBeenCalledWith('seller-id', { reason: 'Policy issue.' });
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Seller suspended.');
   });
 });
 
