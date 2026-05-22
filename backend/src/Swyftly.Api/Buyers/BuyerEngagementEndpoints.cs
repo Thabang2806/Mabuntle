@@ -98,6 +98,12 @@ public static class BuyerEngagementEndpoints
             .Produces<IReadOnlyCollection<NotificationResult>>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
+        notifications.MapGet("/unread-count", GetUnreadNotificationCountAsync)
+            .WithName("GetBuyerUnreadNotificationCount")
+            .WithSummary("Returns the authenticated buyer's unread in-app notification count.")
+            .Produces<NotificationsUnreadCountResponse>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         notifications.MapPost("/{notificationId:guid}/read", MarkNotificationReadAsync)
             .WithName("MarkBuyerNotificationRead")
             .WithSummary("Marks one in-app notification as read.")
@@ -528,6 +534,7 @@ public static class BuyerEngagementEndpoints
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
         TimeProvider timeProvider,
+        INotificationRealtimePublisher realtimePublisher,
         CancellationToken cancellationToken)
     {
         var buyer = await GetCurrentBuyerAsync(principal, dbContext, cancellationToken);
@@ -547,16 +554,43 @@ public static class BuyerEngagementEndpoints
             return NotificationNotFound();
         }
 
-        notification.MarkRead(timeProvider.GetUtcNow());
+        var readAtUtc = timeProvider.GetUtcNow();
+        notification.MarkRead(readAtUtc);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await realtimePublisher.PublishNotificationReadAsync(
+            buyer.UserId,
+            notification.Id,
+            notification.ReadAtUtc ?? readAtUtc,
+            cancellationToken);
 
         return HttpResults.Ok(EfNotificationService.Map(notification));
+    }
+
+    private static async Task<IResult> GetUnreadNotificationCountAsync(
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var buyer = await GetCurrentBuyerAsync(principal, dbContext, cancellationToken);
+        if (buyer is null)
+        {
+            return BuyerNotFound();
+        }
+
+        var count = await dbContext.Notifications.CountAsync(
+            notification => notification.RecipientUserId == buyer.UserId
+                && notification.IsInAppVisible
+                && notification.ReadAtUtc == null,
+            cancellationToken);
+
+        return HttpResults.Ok(new NotificationsUnreadCountResponse(count));
     }
 
     private static async Task<IResult> MarkAllNotificationsReadAsync(
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
         TimeProvider timeProvider,
+        INotificationRealtimePublisher realtimePublisher,
         CancellationToken cancellationToken)
     {
         var buyer = await GetCurrentBuyerAsync(principal, dbContext, cancellationToken);
@@ -577,6 +611,11 @@ public static class BuyerEngagementEndpoints
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await realtimePublisher.PublishNotificationsReadAllAsync(
+            buyer.UserId,
+            now,
+            unreadNotifications.Count,
+            cancellationToken);
         return HttpResults.Ok(new NotificationsReadAllResponse(unreadNotifications.Count));
     }
 
@@ -979,3 +1018,5 @@ public sealed record ProductReviewRatingCountResponse(
     int Count);
 
 public sealed record NotificationsReadAllResponse(int UpdatedCount);
+
+public sealed record NotificationsUnreadCountResponse(int UnreadCount);

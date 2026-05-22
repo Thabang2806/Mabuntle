@@ -1,9 +1,11 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Swyftly.Application.Delivery;
 using Swyftly.Application.Identity;
 using Swyftly.Domain.Buyers;
 using Swyftly.Domain.Carts;
 using Swyftly.Domain.Catalog;
+using Swyftly.Domain.Delivery;
 using Swyftly.Domain.Orders;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Persistence;
@@ -148,6 +150,7 @@ public static class CartEndpoints
         CartShippingOptionsRequest request,
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
+        IAddressVerificationService addressVerificationService,
         CancellationToken cancellationToken)
     {
         var buyer = await GetCurrentBuyerAsync(principal, dbContext, cancellationToken);
@@ -188,21 +191,42 @@ public static class CartEndpoints
             return deliveryAddressResult.Error;
         }
 
-        var deliveryAddress = deliveryAddressResult.Address!;
+        var deliveryAddress = await VerifyAddressAsync(
+            deliveryAddressResult.Address!,
+            addressVerificationService,
+            cancellationToken);
         var candidateMethods = await dbContext.SellerDeliveryMethods
             .AsNoTracking()
             .Where(method => method.SellerId == cart.SellerId.Value
                 && method.IsActive
                 && method.CountryCode == deliveryAddress.CountryCode)
             .ToListAsync(cancellationToken);
+        var pickupPoints = await dbContext.PickupPoints
+            .AsNoTracking()
+            .Where(point => point.IsActive && point.CountryCode == deliveryAddress.CountryCode)
+            .ToListAsync(cancellationToken);
 
         var options = candidateMethods
             .Where(method => method.MatchesAddress(deliveryAddress.CountryCode, deliveryAddress.Province))
-            .OrderBy(method => method.Province is null ? 1 : 0)
-            .ThenBy(method => method.DisplayOrder)
-            .ThenBy(method => method.Name)
-            .Select(method =>
+            .Select(method => new
             {
+                Method = method,
+                PickupPoints = method.MethodType == SellerDeliveryMethodType.PickupPoint
+                    ? pickupPoints
+                        .Where(point => point.MatchesAddress(deliveryAddress.CountryCode, deliveryAddress.Province))
+                        .OrderBy(point => string.Equals(point.City, deliveryAddress.City, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                        .ThenBy(point => point.Name)
+                        .Select(MapPickupPoint)
+                        .ToArray()
+                    : Array.Empty<CartShippingPickupPointResponse>()
+            })
+            .Where(item => item.Method.MethodType != SellerDeliveryMethodType.PickupPoint || item.PickupPoints.Length > 0)
+            .OrderBy(item => item.Method.Province is null ? 1 : 0)
+            .ThenBy(method => method.Method.DisplayOrder)
+            .ThenBy(method => method.Method.Name)
+            .Select(item =>
+            {
+                var method = item.Method;
                 var shippingAmount = method.CalculateShippingAmount(cart.Subtotal);
                 return new CartShippingOptionResponse(
                     method.Id,
@@ -217,7 +241,9 @@ public static class CartEndpoints
                     method.FreeShippingThreshold.HasValue && shippingAmount == 0,
                     method.EstimatedMinDays,
                     method.EstimatedMaxDays,
-                    method.DisplayOrder);
+                    method.DisplayOrder,
+                    method.MethodType == SellerDeliveryMethodType.PickupPoint,
+                    item.PickupPoints);
             })
             .ToArray();
 
@@ -230,7 +256,8 @@ public static class CartEndpoints
             cart.Id,
             cart.SellerId.Value,
             cart.Subtotal,
-            options));
+            options,
+            MapAddressVerification(deliveryAddress)));
     }
 
     private static async Task<IResult> UpdateItemAsync(
@@ -562,7 +589,11 @@ public static class CartEndpoints
             address.Province,
             address.PostalCode,
             address.CountryCode,
-            address.DeliveryInstructions);
+            address.DeliveryInstructions,
+            address.VerificationStatus,
+            address.VerificationProvider,
+            address.VerificationWarningsJson,
+            address.VerifiedAtUtc);
 
     private static OrderDeliveryAddress ToDeliveryAddress(
         Guid buyerId,
@@ -585,6 +616,66 @@ public static class CartEndpoints
 
         return ToDeliveryAddress(address);
     }
+
+    private static async Task<OrderDeliveryAddress> VerifyAddressAsync(
+        OrderDeliveryAddress address,
+        IAddressVerificationService addressVerificationService,
+        CancellationToken cancellationToken)
+    {
+        var verification = await addressVerificationService.VerifyAsync(
+            new AddressVerificationRequest(
+                address.RecipientName,
+                address.PhoneNumber,
+                address.AddressLine1,
+                address.AddressLine2,
+                address.Suburb,
+                address.City,
+                address.Province,
+                address.PostalCode,
+                address.CountryCode,
+                address.DeliveryInstructions),
+            cancellationToken);
+
+        return new OrderDeliveryAddress(
+            verification.RecipientName,
+            verification.PhoneNumber,
+            verification.AddressLine1,
+            verification.AddressLine2,
+            verification.Suburb,
+            verification.City,
+            verification.Province,
+            verification.PostalCode,
+            verification.CountryCode,
+            verification.DeliveryInstructions,
+            verification.Status,
+            verification.Provider,
+            AddressVerificationWarningsJson.Serialize(verification.Warnings),
+            verification.VerifiedAtUtc);
+    }
+
+    private static CartAddressVerificationResponse MapAddressVerification(OrderDeliveryAddress address) =>
+        new(
+            address.VerificationStatus.ToString(),
+            address.VerificationProvider ?? "LocalRules",
+            AddressVerificationWarningsJson.Deserialize(address.VerificationWarningsJson),
+            address.VerifiedAtUtc);
+
+    private static CartShippingPickupPointResponse MapPickupPoint(PickupPoint point) =>
+        new(
+            point.Id,
+            point.ProviderName,
+            point.Code,
+            point.Name,
+            point.AddressLine1,
+            point.AddressLine2,
+            point.Suburb,
+            point.City,
+            point.Province,
+            point.PostalCode,
+            point.CountryCode,
+            point.Latitude,
+            point.Longitude,
+            point.OpeningHours);
 
     private static string ToCamelCase(string value) =>
         string.IsNullOrEmpty(value) ? value : char.ToLowerInvariant(value[0]) + value[1..];
@@ -617,7 +708,8 @@ public sealed record CartShippingOptionsResponse(
     Guid CartId,
     Guid SellerId,
     decimal CartSubtotal,
-    IReadOnlyCollection<CartShippingOptionResponse> Options);
+    IReadOnlyCollection<CartShippingOptionResponse> Options,
+    CartAddressVerificationResponse? AddressVerification = null);
 
 public sealed record CartShippingOptionResponse(
     Guid DeliveryMethodId,
@@ -632,7 +724,31 @@ public sealed record CartShippingOptionResponse(
     bool FreeShippingApplied,
     int EstimatedMinDays,
     int EstimatedMaxDays,
-    int DisplayOrder);
+    int DisplayOrder,
+    bool RequiresPickupPoint = false,
+    IReadOnlyCollection<CartShippingPickupPointResponse>? PickupPoints = null);
+
+public sealed record CartShippingPickupPointResponse(
+    Guid PickupPointId,
+    string ProviderName,
+    string Code,
+    string Name,
+    string AddressLine1,
+    string? AddressLine2,
+    string? Suburb,
+    string City,
+    string Province,
+    string PostalCode,
+    string CountryCode,
+    decimal? Latitude,
+    decimal? Longitude,
+    string? OpeningHours);
+
+public sealed record CartAddressVerificationResponse(
+    string VerificationStatus,
+    string VerificationProvider,
+    IReadOnlyCollection<string> VerificationWarnings,
+    DateTimeOffset? VerifiedAtUtc);
 
 public sealed record CartResponse(
     Guid? CartId,

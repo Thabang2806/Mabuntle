@@ -2,10 +2,12 @@ using Microsoft.EntityFrameworkCore;
 using Swyftly.Application.Common.Errors;
 using Swyftly.Application.Common.Results;
 using Swyftly.Application.Common.Validation;
+using Swyftly.Application.Delivery;
 using Swyftly.Application.Inventory;
 using Swyftly.Application.Orders;
 using Swyftly.Domain.Buyers;
 using Swyftly.Domain.Carts;
+using Swyftly.Domain.Delivery;
 using Swyftly.Domain.Orders;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Persistence;
@@ -14,7 +16,8 @@ namespace Swyftly.Infrastructure.Orders;
 
 public sealed class EfOrderCreationService(
     SwyftlyDbContext dbContext,
-    IInventoryReservationService inventoryReservationService) : IOrderCreationService
+    IInventoryReservationService inventoryReservationService,
+    IAddressVerificationService addressVerificationService) : IOrderCreationService
 {
     public async Task<Result<OrderResult>> CreateFromCartAsync(
         CreateOrderFromCartRequest request,
@@ -60,6 +63,16 @@ public sealed class EfOrderCreationService(
             return Result<OrderResult>.Failure(deliveryMethodResult.Error);
         }
 
+        var pickupPointResult = await ResolvePickupPointAsync(
+            deliveryMethodResult.Value.DeliveryMethod,
+            request.PickupPointId,
+            deliveryAddressResult.Value,
+            cancellationToken);
+        if (pickupPointResult.IsFailure)
+        {
+            return Result<OrderResult>.Failure(pickupPointResult.Error);
+        }
+
         var existingOrder = await dbContext.Orders
             .Include(order => order.Items)
             .Include(order => order.StatusHistory)
@@ -84,6 +97,12 @@ public sealed class EfOrderCreationService(
                 existingOrder.SetDeliveryMethod(
                     deliveryMethodResult.Value.DeliveryMethod,
                     deliveryMethodResult.Value.ShippingAmount);
+                changed = true;
+            }
+
+            if (existingOrder.PickupPoint is null && pickupPointResult.Value is not null)
+            {
+                existingOrder.SetPickupPoint(pickupPointResult.Value);
                 changed = true;
             }
 
@@ -119,6 +138,7 @@ public sealed class EfOrderCreationService(
         order.SetDeliveryMethod(
             deliveryMethodResult.Value.DeliveryMethod,
             deliveryMethodResult.Value.ShippingAmount);
+        order.SetPickupPoint(pickupPointResult.Value);
 
         foreach (var item in cart.Items.OrderBy(item => item.CreatedAtUtc))
         {
@@ -221,6 +241,11 @@ public sealed class EfOrderCreationService(
             failures.Add(new ValidationFailure("deliveryMethodId", "Delivery method id cannot be empty."));
         }
 
+        if (request.PickupPointId.HasValue && request.PickupPointId.Value == Guid.Empty)
+        {
+            failures.Add(new ValidationFailure("pickupPointId", "Pickup point id cannot be empty."));
+        }
+
         return failures;
     }
 
@@ -285,13 +310,22 @@ public sealed class EfOrderCreationService(
                             shipmentEvent.CarrierName,
                             shipmentEvent.TrackingNumber,
                             shipmentEvent.OccurredAtUtc))
-                        .ToArray()))
+                        .ToArray(),
+                    shipment.CarrierProviderName,
+                    shipment.CarrierServiceCode,
+                    shipment.ProviderShipmentReference,
+                    shipment.CarrierBookingStatus?.ToString(),
+                    shipment.ProviderStatus,
+                    shipment.ProviderLabelUrl,
+                    shipment.ProviderLastSyncedAtUtc,
+                    shipment.ProviderError))
                 .ToArray(),
             order.DeliveryMethodId,
             order.DeliveryMethodName,
             order.DeliveryMethodType,
             order.DeliveryEstimatedMinDays,
-            order.DeliveryEstimatedMaxDays);
+            order.DeliveryEstimatedMaxDays,
+            MapPickupPoint(order.PickupPoint));
 
     private async Task<Result<ResolvedDeliveryMethod>> ResolveDeliveryMethodAsync(
         Guid sellerId,
@@ -336,6 +370,46 @@ public sealed class EfOrderCreationService(
             deliveryMethod.CalculateShippingAmount(cartSubtotal)));
     }
 
+    private async Task<Result<PickupPoint?>> ResolvePickupPointAsync(
+        SellerDeliveryMethod deliveryMethod,
+        Guid? pickupPointId,
+        OrderDeliveryAddress deliveryAddress,
+        CancellationToken cancellationToken)
+    {
+        if (deliveryMethod.MethodType != SellerDeliveryMethodType.PickupPoint)
+        {
+            return pickupPointId.HasValue
+                ? Result<PickupPoint?>.Failure(Error.Validation([
+                    new ValidationFailure("pickupPointId", "Pickup point can only be selected for pickup delivery methods.")
+                ]))
+                : Result<PickupPoint?>.Success(null);
+        }
+
+        if (!pickupPointId.HasValue)
+        {
+            return Result<PickupPoint?>.Failure(Error.Validation([
+                new ValidationFailure("pickupPointId", "A pickup point is required for this delivery method.")
+            ]));
+        }
+
+        var pickupPoint = await dbContext.PickupPoints
+            .SingleOrDefaultAsync(point => point.Id == pickupPointId.Value, cancellationToken);
+        if (pickupPoint is null || !pickupPoint.IsActive)
+        {
+            return Result<PickupPoint?>.Failure(
+                Error.NotFound("Orders.PickupPointNotFound", "Pickup point was not found."));
+        }
+
+        if (!pickupPoint.MatchesAddress(deliveryAddress.CountryCode, deliveryAddress.Province))
+        {
+            return Result<PickupPoint?>.Failure(Error.Validation([
+                new ValidationFailure("pickupPointId", "Pickup point does not serve the selected delivery address.")
+            ]));
+        }
+
+        return Result<PickupPoint?>.Success(pickupPoint);
+    }
+
     private async Task<Result<OrderDeliveryAddress>> ResolveDeliveryAddressAsync(
         CreateOrderFromCartRequest request,
         CancellationToken cancellationToken)
@@ -352,14 +426,14 @@ public sealed class EfOrderCreationService(
             return saved is null
                 ? Result<OrderDeliveryAddress>.Failure(
                     Error.NotFound("Orders.DeliveryAddressNotFound", "Delivery address was not found."))
-                : Result<OrderDeliveryAddress>.Success(ToDeliveryAddress(saved));
+                : Result<OrderDeliveryAddress>.Success(await VerifyAddressAsync(ToVerificationRequest(saved), cancellationToken));
         }
 
         return request.DeliveryAddress is null
             ? Result<OrderDeliveryAddress>.Failure(Error.Validation([
                 new ValidationFailure("deliveryAddress", "A delivery address is required.")
             ]))
-            : Result<OrderDeliveryAddress>.Success(ToDeliveryAddress(request.BuyerId, request.DeliveryAddress));
+            : Result<OrderDeliveryAddress>.Success(await VerifyAddressAsync(ToVerificationRequest(request.DeliveryAddress), cancellationToken));
     }
 
     private static OrderDeliveryAddress ToDeliveryAddress(BuyerDeliveryAddress address) =>
@@ -373,7 +447,11 @@ public sealed class EfOrderCreationService(
             address.Province,
             address.PostalCode,
             address.CountryCode,
-            address.DeliveryInstructions);
+            address.DeliveryInstructions,
+            address.VerificationStatus,
+            address.VerificationProvider,
+            address.VerificationWarningsJson,
+            address.VerifiedAtUtc);
 
     private static OrderDeliveryAddress ToDeliveryAddress(
         Guid buyerId,
@@ -397,6 +475,54 @@ public sealed class EfOrderCreationService(
         return ToDeliveryAddress(address);
     }
 
+    private async Task<OrderDeliveryAddress> VerifyAddressAsync(
+        AddressVerificationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var verification = await addressVerificationService.VerifyAsync(request, cancellationToken);
+        return new OrderDeliveryAddress(
+            verification.RecipientName,
+            verification.PhoneNumber,
+            verification.AddressLine1,
+            verification.AddressLine2,
+            verification.Suburb,
+            verification.City,
+            verification.Province,
+            verification.PostalCode,
+            verification.CountryCode,
+            verification.DeliveryInstructions,
+            verification.Status,
+            verification.Provider,
+            AddressVerificationWarningsJson.Serialize(verification.Warnings),
+            verification.VerifiedAtUtc);
+    }
+
+    private static AddressVerificationRequest ToVerificationRequest(BuyerDeliveryAddress address) =>
+        new(
+            address.RecipientName,
+            address.PhoneNumber,
+            address.AddressLine1,
+            address.AddressLine2,
+            address.Suburb,
+            address.City,
+            address.Province,
+            address.PostalCode,
+            address.CountryCode,
+            address.DeliveryInstructions);
+
+    private static AddressVerificationRequest ToVerificationRequest(OrderDeliveryAddressRequest address) =>
+        new(
+            address.RecipientName,
+            address.PhoneNumber,
+            address.AddressLine1,
+            address.AddressLine2,
+            address.Suburb,
+            address.City,
+            address.Province,
+            address.PostalCode,
+            address.CountryCode,
+            address.DeliveryInstructions);
+
     private static OrderDeliveryAddressResult? MapDeliveryAddress(OrderDeliveryAddress? address) =>
         address is null
             ? null
@@ -410,7 +536,30 @@ public sealed class EfOrderCreationService(
                 address.Province,
                 address.PostalCode,
                 address.CountryCode,
-                address.DeliveryInstructions);
+                address.DeliveryInstructions,
+                address.VerificationStatus.ToString(),
+                address.VerificationProvider,
+                AddressVerificationWarningsJson.Deserialize(address.VerificationWarningsJson),
+                address.VerifiedAtUtc);
+
+    private static OrderPickupPointResult? MapPickupPoint(PickupPointSnapshot? pickupPoint) =>
+        pickupPoint is null
+            ? null
+            : new OrderPickupPointResult(
+                pickupPoint.PickupPointId,
+                pickupPoint.ProviderName,
+                pickupPoint.Code,
+                pickupPoint.Name,
+                pickupPoint.AddressLine1,
+                pickupPoint.AddressLine2,
+                pickupPoint.Suburb,
+                pickupPoint.City,
+                pickupPoint.Province,
+                pickupPoint.PostalCode,
+                pickupPoint.CountryCode,
+                pickupPoint.Latitude,
+                pickupPoint.Longitude,
+                pickupPoint.OpeningHours);
 
     private static string ToCamelCase(string value) =>
         string.IsNullOrEmpty(value) ? value : char.ToLowerInvariant(value[0]) + value[1..];

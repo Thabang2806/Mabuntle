@@ -39,6 +39,7 @@ export interface CreateOrderFromCartRequest {
   deliveryAddressId: string | null;
   deliveryAddress: OrderDeliveryAddressRequest | null;
   deliveryMethodId: string | null;
+  pickupPointId?: string | null;
 }
 
 export interface OrderDeliveryAddressRequest {
@@ -52,6 +53,10 @@ export interface OrderDeliveryAddressRequest {
   postalCode: string;
   countryCode: string;
   deliveryInstructions: string | null;
+  verificationStatus?: string | null;
+  verificationProvider?: string | null;
+  verificationWarnings?: string[] | null;
+  verifiedAtUtc?: string | null;
 }
 
 export interface OrderResult {
@@ -73,6 +78,7 @@ export interface OrderResult {
   deliveryMethodType?: string | null;
   deliveryEstimatedMinDays?: number | null;
   deliveryEstimatedMaxDays?: number | null;
+  pickupPoint?: OrderPickupPointResult | null;
 }
 
 export interface OrderDeliveryAddressResult {
@@ -86,6 +92,27 @@ export interface OrderDeliveryAddressResult {
   postalCode: string;
   countryCode: string;
   deliveryInstructions: string | null;
+  verificationStatus?: string | null;
+  verificationProvider?: string | null;
+  verificationWarnings?: string[] | null;
+  verifiedAtUtc?: string | null;
+}
+
+export interface OrderPickupPointResult {
+  pickupPointId: string;
+  providerName: string;
+  code: string;
+  name: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  suburb: string | null;
+  city: string;
+  province: string;
+  postalCode: string;
+  countryCode: string;
+  latitude: number | null;
+  longitude: number | null;
+  openingHours: string | null;
 }
 
 export interface OrderItemResult {
@@ -120,13 +147,14 @@ export interface CartShippingOptionsResponse {
   sellerId: string;
   cartSubtotal: number;
   options: CartShippingOptionResponse[];
+  addressVerification?: CartAddressVerificationResponse | null;
 }
 
 export interface CartShippingOptionResponse {
   deliveryMethodId: string;
   name: string;
   description: string | null;
-  methodType: 'Standard' | 'Express' | 'LocalCourier';
+  methodType: 'Standard' | 'Express' | 'LocalCourier' | 'PickupPoint';
   countryCode: string;
   province: string | null;
   basePrice: number;
@@ -136,4 +164,30 @@ export interface CartShippingOptionResponse {
   estimatedMinDays: number;
   estimatedMaxDays: number;
   displayOrder: number;
+  requiresPickupPoint?: boolean;
+  pickupPoints?: CartShippingPickupPointResponse[] | null;
+}
+
+export interface CartShippingPickupPointResponse {
+  pickupPointId: string;
+  providerName: string;
+  code: string;
+  name: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  suburb: string | null;
+  city: string;
+  province: string;
+  postalCode: string;
+  countryCode: string;
+  latitude: number | null;
+  longitude: number | null;
+  openingHours: string | null;
+}
+
+export interface CartAddressVerificationResponse {
+  verificationStatus: string;
+  verificationProvider: string;
+  verificationWarnings: string[];
+  verifiedAtUtc: string | null;
 }

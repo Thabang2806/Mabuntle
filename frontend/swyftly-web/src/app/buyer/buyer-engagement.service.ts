@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
   BuyerNotificationResponse,
+  BuyerNotificationUnreadCountResponse,
   BuyerProductReviewResponse,
   BuyerWishlistProductIdsResponse,
   BuyerWishlistItemResponse,
@@ -69,6 +70,10 @@ export class BuyerEngagementService {
 
   listNotifications(): Promise<BuyerNotificationResponse[]> {
     return firstValueFrom(this.http.get<BuyerNotificationResponse[]>(`${this.baseUrl}/api/buyer/notifications`));
+  }
+
+  getUnreadNotificationCount(): Promise<BuyerNotificationUnreadCountResponse> {
+    return firstValueFrom(this.http.get<BuyerNotificationUnreadCountResponse>(`${this.baseUrl}/api/buyer/notifications/unread-count`));
   }
 
   markNotificationRead(notificationId: string): Promise<BuyerNotificationResponse> {

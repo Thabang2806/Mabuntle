@@ -61,6 +61,7 @@ public static class SellerInventoryEndpoints
         group.MapPost("/import/preview", PreviewInventoryImportAsync)
             .WithName("PreviewSellerInventoryImport")
             .WithSummary("Previews a seller inventory CSV import without changing data.")
+            .Accepts<IFormFile>("multipart/form-data")
             .Produces<SellerInventoryBulkAdjustmentResponse>(StatusCodes.Status200OK)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound)
@@ -136,7 +137,7 @@ public static class SellerInventoryEndpoints
     }
 
     private static async Task<IResult> PreviewInventoryImportAsync(
-        [FromForm] IFormFile file,
+        IFormFile file,
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
         CancellationToken cancellationToken)

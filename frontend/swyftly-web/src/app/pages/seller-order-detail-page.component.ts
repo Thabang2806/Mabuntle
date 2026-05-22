@@ -67,6 +67,9 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 @if (order()!.deliveryMethodName) {
                   <div><dt>Delivery method</dt><dd>{{ order()!.deliveryMethodName }} - {{ deliveryEstimate(order()!) }}</dd></div>
                 }
+                @if (order()!.pickupPoint) {
+                  <div><dt>Pickup point</dt><dd>{{ order()!.pickupPoint!.name }}</dd></div>
+                }
                 <div><dt>Platform fee</dt><dd>{{ order()!.platformFeeAmount | currency:'ZAR':'symbol-narrow' }}</dd></div>
                 <div><dt>Discount</dt><dd>{{ order()!.discountAmount | currency:'ZAR':'symbol-narrow' }}</dd></div>
                 <div><dt>Total</dt><dd>{{ order()!.totalAmount | currency:'ZAR':'symbol-narrow' }}</dd></div>
@@ -83,15 +86,32 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   @if (order()!.deliveryAddress!.deliveryInstructions) {
                     <div><dt>Instructions</dt><dd>{{ order()!.deliveryAddress!.deliveryInstructions }}</dd></div>
                   }
+                  @if (order()!.deliveryAddress!.verificationStatus) {
+                    <div><dt>Address check</dt><dd>{{ order()!.deliveryAddress!.verificationStatus }}</dd></div>
+                  }
                 </dl>
               } @else {
                 <app-ui-alert tone="info">This older order does not have a delivery-address snapshot.</app-ui-alert>
               }
             </section>
 
+            @if (order()!.pickupPoint) {
+              <section class="seller-panel">
+                <h2>Pickup point</h2>
+                <dl class="seller-facts">
+                  <div><dt>Name</dt><dd>{{ order()!.pickupPoint!.name }}</dd></div>
+                  <div><dt>Code</dt><dd>{{ order()!.pickupPoint!.code }}</dd></div>
+                  <div><dt>Address</dt><dd>{{ order()!.pickupPoint!.addressLine1 }}, {{ order()!.pickupPoint!.city }}, {{ order()!.pickupPoint!.province }}</dd></div>
+                  @if (order()!.pickupPoint!.openingHours) {
+                    <div><dt>Opening hours</dt><dd>{{ order()!.pickupPoint!.openingHours }}</dd></div>
+                  }
+                </dl>
+              </section>
+            }
+
             <section class="seller-panel">
               <h2>Fulfilment actions</h2>
-              <p>Use these controls for manual marketplace fulfilment. Carrier automation is not connected yet.</p>
+              <p>Use these controls for manual marketplace fulfilment. Carrier booking is available when the API is configured with a carrier provider.</p>
               <div class="seller-action-row">
                 <button mat-flat-button type="button" [disabled]="isActing()" (click)="markProcessing()">Mark processing</button>
                 <button mat-stroked-button type="button" [disabled]="isActing() || !canMarkReadyToShip()" (click)="markReadyToShip()">Ready to ship</button>
@@ -138,6 +158,72 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   <button mat-stroked-button type="button" [disabled]="isActing() || exceptionForm.invalid || !canMarkDeliveryFailed()" (click)="markDeliveryFailed()">Mark delivery failed</button>
                   <button mat-stroked-button type="button" [disabled]="isActing() || exceptionForm.invalid || !canMarkReturnedToSender()" (click)="markReturnedToSender()">Returned to sender</button>
                 </div>
+              </form>
+            </section>
+
+            <section class="seller-panel">
+              <h2>Carrier booking</h2>
+              <p>Book a configured carrier for a ready-to-ship order, or keep using manual tracking when carrier booking is disabled.</p>
+
+              @if (latestShipment()) {
+                <dl class="seller-facts">
+                  <div><dt>Provider</dt><dd>{{ latestShipment()!.carrierProviderName ?? 'Manual fulfilment' }}</dd></div>
+                  <div><dt>Booking</dt><dd>{{ latestShipment()!.carrierBookingStatus ?? 'Not booked' }}</dd></div>
+                  <div><dt>Provider status</dt><dd>{{ latestShipment()!.providerStatus ?? 'No carrier status yet' }}</dd></div>
+                  @if (latestShipment()!.providerShipmentReference) {
+                    <div><dt>Provider reference</dt><dd>{{ latestShipment()!.providerShipmentReference }}</dd></div>
+                  }
+                  @if (latestShipment()!.providerLastSyncedAtUtc) {
+                    <div><dt>Last synced</dt><dd>{{ latestShipment()!.providerLastSyncedAtUtc | date:'medium' }}</dd></div>
+                  }
+                  @if (latestShipment()!.providerError) {
+                    <div><dt>Provider error</dt><dd>{{ latestShipment()!.providerError }}</dd></div>
+                  }
+                </dl>
+
+                <div class="seller-action-row">
+                  @if (latestShipment()!.providerLabelUrl) {
+                    <a mat-stroked-button [href]="latestShipment()!.providerLabelUrl" target="_blank" rel="noreferrer">Open label</a>
+                  }
+                  @if (latestShipment()!.trackingUrl) {
+                    <a mat-stroked-button [href]="latestShipment()!.trackingUrl" target="_blank" rel="noreferrer">Track shipment</a>
+                  }
+                  <button mat-stroked-button type="button" [disabled]="isActing() || !latestShipment()!.providerShipmentReference" (click)="syncCarrierTracking()">Sync carrier tracking</button>
+                </div>
+              }
+
+              <form [formGroup]="carrierBookingForm" (ngSubmit)="bookCarrier()" class="seller-form-grid" novalidate>
+                <mat-form-field appearance="outline">
+                  <mat-label>Service code</mat-label>
+                  <input matInput formControlName="serviceCode" />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Weight kg</mat-label>
+                  <input matInput type="number" formControlName="packageWeightKg" />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Length cm</mat-label>
+                  <input matInput type="number" formControlName="packageLengthCm" />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Width cm</mat-label>
+                  <input matInput type="number" formControlName="packageWidthCm" />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Height cm</mat-label>
+                  <input matInput type="number" formControlName="packageHeightCm" />
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Collection note</mat-label>
+                  <textarea matInput rows="3" formControlName="collectionNote" maxlength="500"></textarea>
+                </mat-form-field>
+
+                <button mat-flat-button type="submit" [disabled]="isActing() || carrierBookingForm.invalid || !canBookCarrier()">Book carrier</button>
               </form>
             </section>
           </div>
@@ -187,6 +273,12 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                       @if (shipment.trackingNumber) {
                         <small>{{ shipment.trackingNumber }}</small>
                       }
+                      @if (shipment.providerStatus || shipment.providerShipmentReference) {
+                        <small>Carrier {{ shipment.carrierProviderName ?? 'provider' }}: {{ shipment.providerStatus ?? shipment.carrierBookingStatus ?? 'Booked' }} {{ shipment.providerShipmentReference ? '- ' + shipment.providerShipmentReference : '' }}</small>
+                      }
+                      @if (shipment.providerLabelUrl) {
+                        <a [href]="shipment.providerLabelUrl" target="_blank" rel="noreferrer">Open carrier label</a>
+                      }
                       @for (event of shipment.events; track event.shipmentEventId) {
                         <small>{{ event.eventType }} - {{ event.occurredAtUtc | date:'medium' }}{{ event.message ? ': ' + event.message : '' }}</small>
                       }
@@ -220,6 +312,14 @@ export class SellerOrderDetailPageComponent implements OnInit {
   });
   protected readonly exceptionForm = this.formBuilder.group({
     reason: ['', [Validators.required, Validators.maxLength(500)]]
+  });
+  protected readonly carrierBookingForm = this.formBuilder.group({
+    packageWeightKg: [1, [Validators.required, Validators.min(0.01)]],
+    packageLengthCm: [30, [Validators.required, Validators.min(0.01)]],
+    packageWidthCm: [20, [Validators.required, Validators.min(0.01)]],
+    packageHeightCm: [10, [Validators.required, Validators.min(0.01)]],
+    serviceCode: ['STANDARD', [Validators.required, Validators.maxLength(80)]],
+    collectionNote: ['', [Validators.maxLength(500)]]
   });
 
   async ngOnInit(): Promise<void> {
@@ -262,6 +362,31 @@ export class SellerOrderDetailPageComponent implements OnInit {
       'Return to sender recorded.');
   }
 
+  protected async bookCarrier(): Promise<void> {
+    if (this.carrierBookingForm.invalid || this.isActing()) {
+      this.carrierBookingForm.markAllAsTouched();
+      return;
+    }
+
+    const value = this.carrierBookingForm.getRawValue();
+    await this.runAction(
+      () => this.orderService.bookCarrier(this.orderId(), {
+        packageWeightKg: Number(value.packageWeightKg),
+        packageLengthCm: Number(value.packageLengthCm),
+        packageWidthCm: Number(value.packageWidthCm),
+        packageHeightCm: Number(value.packageHeightCm),
+        serviceCode: value.serviceCode,
+        collectionNote: emptyToNull(value.collectionNote)
+      }),
+      'Carrier booking updated.');
+  }
+
+  protected async syncCarrierTracking(): Promise<void> {
+    await this.runAction(
+      () => this.orderService.syncCarrierTracking(this.orderId()),
+      'Carrier tracking synchronized.');
+  }
+
   protected canMarkReadyToShip(): boolean {
     return ['Paid', 'Processing', 'ReadyToShip'].includes(this.order()?.status ?? '');
   }
@@ -283,6 +408,13 @@ export class SellerOrderDetailPageComponent implements OnInit {
   protected canMarkReturnedToSender(): boolean {
     const status = this.latestShipment()?.status;
     return this.order()?.status === 'Shipped' && (status === 'InTransit' || status === 'DeliveryFailed');
+  }
+
+  protected canBookCarrier(): boolean {
+    const latestShipment = this.latestShipment();
+    return this.order()?.status === 'ReadyToShip'
+      && latestShipment?.status === 'ReadyForCourier'
+      && latestShipment.carrierBookingStatus !== 'Booked';
   }
 
   protected async addTracking(): Promise<void> {
@@ -395,7 +527,7 @@ export class SellerOrderDetailPageComponent implements OnInit {
     return this.route.snapshot.paramMap.get('orderId') ?? '';
   }
 
-  private latestShipment() {
+  protected latestShipment() {
     const order = this.order();
     return order
       ? [...order.shipments].sort((left, right) => (left.shippedAtUtc ?? left.shipmentId).localeCompare(right.shippedAtUtc ?? right.shipmentId)).at(-1)

@@ -43,7 +43,7 @@ Response when healthy:
 }
 ```
 
-The readiness endpoint returns HTTP `503` with the same response shape when PostgreSQL or a required dependency check is unavailable. It includes a search placeholder plus real `image-storage`, `payment-provider`, and `email-delivery` configuration checks. The payment check is healthy for the local fake provider and validates required PayFast configuration when `PaymentProvider__ProviderName=PayFast`. The image-storage check validates local storage or S3-compatible storage configuration and enforces the configured production media-scanner policy. The email check is healthy for local `LogOnly` delivery outside production and validates SMTP configuration when `EmailDelivery__ProviderName=Smtp`; production must not use `LogOnly`.
+The readiness endpoint returns HTTP `503` with the same response shape when PostgreSQL or a required dependency check is unavailable. It includes a search placeholder plus real `image-storage`, `payment-provider`, and `email-delivery` configuration checks. The payment check is healthy for the local fake provider and validates required PayFast configuration when `PaymentProvider__ProviderName=PayFast`. The image-storage check validates local storage or S3-compatible storage configuration and enforces the configured production media-scanner policy. The email check is healthy for local `LogOnly` delivery outside production and validates SMTP configuration when `EmailDelivery__ProviderName=Smtp`; production must not use `LogOnly`. Carrier provider mode is validated by production startup configuration checks: `Manual` is allowed as the production fallback, and `Fake` is rejected in production.
 
 ## Authentication
 
@@ -545,6 +545,27 @@ Review request:
 
 Supported review outcomes are `ProviderPending`, `MatchedNoAction`, `ProviderPaidMissingWebhook`, `ProviderFailedMissingWebhook`, and `ManualRecoveryRequired`. `ProviderPaidMissingWebhook` is an investigation signal: finance should trigger provider/dashboard investigation or ITN replay, not manually settle the order from the admin screen.
 
+## Admin Seller Payout Profile Changes
+
+Verified sellers cannot directly mutate their approved payout provider reference through onboarding. They create a payout-profile change request, finance reviews it, and the live `seller_payout_profiles` record changes only on approval. Pending requests block admin payout processing for that seller, but they do not automatically hold or mutate existing payout records.
+
+```http
+GET /api/admin/sellers/payout-profile-change-requests
+GET /api/admin/sellers/payout-profile-change-requests/{requestId}
+POST /api/admin/sellers/payout-profile-change-requests/{requestId}/approve
+POST /api/admin/sellers/payout-profile-change-requests/{requestId}/reject
+```
+
+List/detail require `FinanceRead`. Approve/reject require `FinanceApprove`, and dual control blocks the requester from approving or rejecting their own change, including `SuperAdmin`.
+
+Review request:
+
+```json
+{
+  "reason": "Verified the updated provider reference."
+}
+```
+
 ## Admin Categories
 
 Category metadata and write endpoints require an `Admin` or `SuperAdmin` JWT role.
@@ -766,7 +787,7 @@ Cart response:
 
 Trying to add a product from a different seller returns a validation problem. `DELETE /api/cart` clears the active cart and returns `204`.
 
-`POST /api/cart/shipping-options` returns active seller-managed delivery methods that match the selected checkout address. It uses the active single-seller cart plus either an owned saved `deliveryAddressId` or an inline `deliveryAddress`; the backend computes each shipping amount and applies any seller free-shipping threshold.
+`POST /api/cart/shipping-options` returns active seller-managed delivery methods that match the selected checkout address. It uses the active single-seller cart plus either an owned saved `deliveryAddressId` or an inline `deliveryAddress`; the backend verifies the address with deterministic local rules, computes each shipping amount, applies any seller free-shipping threshold, and returns matching active platform pickup points for `PickupPoint` delivery methods.
 
 Shipping-options request:
 
@@ -799,13 +820,21 @@ Shipping-options response:
       "freeShippingApplied": true,
       "estimatedMinDays": 2,
       "estimatedMaxDays": 5,
-      "displayOrder": 10
+      "displayOrder": 10,
+      "requiresPickupPoint": false,
+      "pickupPoints": []
     }
-  ]
+  ],
+  "addressVerification": {
+    "verificationStatus": "Verified",
+    "verificationProvider": "LocalRules",
+    "verificationWarnings": [],
+    "verifiedAtUtc": "2026-05-21T10:00:00+00:00"
+  }
 }
 ```
 
-If no active method matches the selected address, checkout returns a validation error and the order cannot be created.
+If no active method matches the selected address, checkout returns a validation error and the order cannot be created. Address verification warnings are advisory and do not block checkout beyond normal required-field validation. Pickup delivery options require a selected `pickupPointId` during order creation.
 
 Angular buyer cart route:
 
@@ -833,12 +862,14 @@ GET /api/buyer/profile
 PUT /api/buyer/profile
 GET /api/buyer/delivery-addresses
 POST /api/buyer/delivery-addresses
+POST /api/buyer/delivery-addresses/verify
 PUT /api/buyer/delivery-addresses/{addressId}
 DELETE /api/buyer/delivery-addresses/{addressId}
 POST /api/buyer/delivery-addresses/{addressId}/make-default
 GET /api/buyer/notification-preferences
 PUT /api/buyer/notification-preferences
 GET /api/buyer/notifications
+GET /api/buyer/notifications/unread-count
 POST /api/buyer/notifications/{notificationId}/read
 POST /api/buyer/notifications/read-all
 ```
@@ -891,7 +922,7 @@ Buyer profile settings expose the buyer identity email as read-only and allow op
 }
 ```
 
-Saved delivery addresses are buyer-owned reusable checkout addresses. The first saved address becomes default automatically, creating or marking another address as default clears the previous default, and deleting the default promotes another remaining address. Buyers can store up to 10 addresses.
+Saved delivery addresses are buyer-owned reusable checkout addresses. The first saved address becomes default automatically, creating or marking another address as default clears the previous default, and deleting the default promotes another remaining address. Buyers can store up to 10 addresses. Create/update and checkout verify addresses server-side through `LocalRules`, persist normalized address fields, and store verification status/warnings. The standalone verify endpoint lets Angular preview the same warning-only result before saving.
 
 Saved-address request:
 
@@ -912,7 +943,50 @@ Saved-address request:
 }
 ```
 
-Notifications are persisted records created through backend workflows via `INotificationService`. Buyer notification APIs list in-app-visible records and update read state. Category-level preferences independently control future in-app and email delivery for `Orders`, `Returns`, `Reviews`, and `Support`; missing preference rows default both channels to enabled, and existing visible notifications remain visible. Email delivery uses a durable worker-processed outbox with `LogOnly` as the local default and `Smtp` as the first real provider option. There is no SMS, push, SignalR, marketing automation, seller/admin email workflow, or public send-email endpoint. Current workflow notifications cover review approval/rejection, seller return approval/rejection, support public replies, order tracking updates, ready-to-ship, shipped, delivered, delivery-failed, and returned-to-sender order events.
+Verify-address response:
+
+```json
+{
+  "verificationStatus": "NeedsReview",
+  "verificationProvider": "LocalRules",
+  "verificationWarnings": ["South African postal codes must be four digits."],
+  "verifiedAtUtc": "2026-05-21T10:00:00+00:00",
+  "recipientName": "Thabo",
+  "phoneNumber": "+27110000000",
+  "addressLine1": "10 Market Street",
+  "addressLine2": "Apartment 4",
+  "suburb": "Rosebank",
+  "city": "Johannesburg",
+  "province": "Gauteng",
+  "postalCode": "219",
+  "countryCode": "ZA",
+  "deliveryInstructions": "Leave at reception if needed."
+}
+```
+
+Notifications are persisted records created through backend workflows via `INotificationService`. Buyer notification APIs list in-app-visible records and update read state. Category-level preferences independently control future in-app and email delivery for `Orders`, `Returns`, `Reviews`, and `Support`; missing preference rows default both channels to enabled, and existing visible notifications remain visible. Email delivery uses a durable worker-processed outbox with `LogOnly` as the local default and `Smtp` as the first real provider option. Buyer real-time in-app delivery uses SignalR as a convenience channel after persistence; REST remains the durable source of truth. There is no SMS, push, marketing automation, seller/admin email workflow, or public send-email endpoint. Current workflow notifications cover review approval/rejection, seller return approval/rejection, support public replies, order tracking updates, ready-to-ship, shipped, delivered, delivery-failed, and returned-to-sender order events.
+
+Unread-count response:
+
+```json
+{
+  "unreadCount": 3
+}
+```
+
+Buyer real-time hub:
+
+```http
+/hubs/notifications
+```
+
+The hub requires a buyer JWT access token. Browser clients pass the access token through the SignalR `access_token` query string during hub negotiation/transport only; the API reads that query token only for `/hubs/notifications`. Server-to-client events are:
+
+- `notificationCreated`: existing `NotificationResult` shape for persisted in-app-visible notifications.
+- `notificationRead`: `{ "notificationId": "00000000-0000-0000-0000-000000000000", "readAtUtc": "2026-05-21T10:00:00Z" }`.
+- `notificationsReadAll`: `{ "readAtUtc": "2026-05-21T10:00:00Z", "updatedCount": 3 }`.
+
+Hidden email-only notification rows are not published over SignalR. Publisher failures are logged and swallowed so notification persistence, email outbox creation, and primary business workflows are not rolled back.
 
 Notification preference request:
 
@@ -1008,6 +1082,8 @@ POST /api/seller/orders/{orderId}/mark-shipped
 POST /api/seller/orders/{orderId}/mark-delivered
 POST /api/seller/orders/{orderId}/mark-delivery-failed
 POST /api/seller/orders/{orderId}/mark-returned-to-sender
+POST /api/seller/orders/{orderId}/book-carrier
+POST /api/seller/orders/{orderId}/sync-carrier-tracking
 ```
 
 `POST /api/orders/from-cart` creates a `PendingPayment` order from the authenticated buyer's active cart and reserves inventory for the cart items. Repeating the request for the same active cart returns the existing pending-payment order instead of creating a duplicate. The cart stays active until a paid webhook confirms payment; successful payment clears the active cart after reservations and ledger processing complete.
@@ -1020,11 +1096,12 @@ Request:
   "reservationMinutes": null,
   "deliveryAddressId": "00000000-0000-0000-0000-000000000000",
   "deliveryAddress": null,
-  "deliveryMethodId": "00000000-0000-0000-0000-000000000000"
+  "deliveryMethodId": "00000000-0000-0000-0000-000000000000",
+  "pickupPointId": null
 }
 ```
 
-`cartId` is optional; when omitted, the buyer's active cart is used. `reservationMinutes` is optional and defaults to 15 minutes. New orders require exactly one delivery address source: either an owned saved `deliveryAddressId` or an inline one-off `deliveryAddress`, plus an active seller delivery method that serves that address. The backend recomputes shipping from the selected delivery method and cart subtotal; Angular does not send `shippingAmount`. The selected/inline address, including optional delivery instructions, and the selected delivery method/rate are copied to the order as snapshots; later saved-address or seller delivery-method edits do not change historical orders. Older orders can return `deliveryAddress: null` and nullable delivery-method snapshot fields.
+`cartId` is optional; when omitted, the buyer's active cart is used. `reservationMinutes` is optional and defaults to 15 minutes. New orders require exactly one delivery address source: either an owned saved `deliveryAddressId` or an inline one-off `deliveryAddress`, plus an active seller delivery method that serves that address. The backend recomputes shipping from the selected delivery method and cart subtotal; Angular does not send `shippingAmount`. If the selected method type is `PickupPoint`, `pickupPointId` is required and must refer to an active platform pickup point matching the checkout address country/province. Non-pickup methods reject `pickupPointId`. The selected/inline address, address verification result, selected delivery method/rate, and selected pickup point are copied to the order as snapshots; later saved-address, seller delivery-method, or pickup-point edits do not change historical orders. Older orders can return `deliveryAddress: null`, nullable delivery-method snapshot fields, and `pickupPoint: null`.
 
 Inline delivery-address request:
 
@@ -1086,7 +1163,27 @@ Response:
     "province": "Gauteng",
     "postalCode": "2196",
     "countryCode": "ZA",
-    "deliveryInstructions": "Leave at reception if needed."
+    "deliveryInstructions": "Leave at reception if needed.",
+    "verificationStatus": "Verified",
+    "verificationProvider": "LocalRules",
+    "verificationWarnings": [],
+    "verifiedAtUtc": "2026-05-21T10:00:00+00:00"
+  },
+  "pickupPoint": {
+    "pickupPointId": "00000000-0000-0000-0000-000000000000",
+    "providerName": "Manual",
+    "code": "JHB-ROSEBANK-001",
+    "name": "Rosebank Pickup Counter",
+    "addressLine1": "10 Market Street",
+    "addressLine2": null,
+    "suburb": "Rosebank",
+    "city": "Johannesburg",
+    "province": "Gauteng",
+    "postalCode": "2196",
+    "countryCode": "ZA",
+    "latitude": null,
+    "longitude": null,
+    "openingHours": "Mon-Fri 09:00-17:00"
   },
   "statusHistory": [
     {
@@ -1106,6 +1203,14 @@ Response:
       "trackingUrl": "https://tracking.example/TRACK-123",
       "shippedAtUtc": "2026-05-18T10:30:00+00:00",
       "deliveredAtUtc": null,
+      "carrierProviderName": "Fake",
+      "carrierServiceCode": "STANDARD",
+      "providerShipmentReference": "fake-shp-00000000000000000000000000000000",
+      "carrierBookingStatus": "Booked",
+      "providerStatus": "InTransit",
+      "providerLabelUrl": "http://localhost:4200/fake-label/fake-shp-00000000000000000000000000000000",
+      "providerLastSyncedAtUtc": "2026-05-21T10:00:00+00:00",
+      "providerError": null,
       "events": [
         {
           "shipmentEventId": "00000000-0000-0000-0000-000000000000",
@@ -1138,6 +1243,46 @@ Manual fulfilment starts after payment has moved the order to `Paid`. `POST /mar
 Tracking can be added to paid or fulfilment orders and always writes a shipment event. `POST /mark-shipped` changes the order to `Shipped`, moves the current shipment to `InTransit`, and writes a shipment event. `POST /mark-delivered` is seller-owned and marks a shipped order plus its current in-transit shipment as `Delivered`; repeating it for an already delivered order returns the current order. Other statuses return conflict. Delivery confirmation creates a buyer notification and queues buyer email when enabled, and unlocks existing delivered-order return/review flows. It does not automatically make seller payouts available.
 
 Shipment exception endpoints accept `{ "reason": "Courier could not reach the recipient." }`. `POST /mark-delivery-failed` records `DeliveryFailed` against the current in-transit shipment while leaving the order `Shipped`. `POST /mark-returned-to-sender` records `ReturnedToSender` from an in-transit or failed shipment and also leaves the order `Shipped`. These exception events create buyer notifications and queue buyer email when enabled, but do not mutate payment, refund, payout, ledger, cart, or reservation state.
+
+Carrier booking is provider-neutral and layered on top of the same seller fulfilment flow. `POST /book-carrier` requires seller ownership, order status `ReadyToShip`, and the latest shipment status `ReadyForCourier`. It is idempotent for already booked shipments and returns the current order with carrier metadata. `Manual` provider mode rejects automated booking and keeps manual tracking available. `Fake` provider mode is for local/test automation only and returns deterministic provider reference, tracking URL, and label URL values.
+
+Carrier booking request:
+
+```json
+{
+  "packageWeightKg": 1.2,
+  "packageLengthCm": 30,
+  "packageWidthCm": 20,
+  "packageHeightCm": 10,
+  "serviceCode": "STANDARD",
+  "collectionNote": "Collect from reception."
+}
+```
+
+`POST /sync-carrier-tracking` reloads provider tracking status for a booked shipment. `Booked` and `LabelCreated` keep the shipment ready for courier; `Collected` and `InTransit` move the order/shipment into shipped tracking states; `Delivered` confirms delivery; `DeliveryFailed` and `ReturnedToSender` record shipment exception timeline entries only. Duplicate or stale provider statuses are ignored so shipment events and buyer notifications are not duplicated. Carrier status automation does not mutate payments, refunds, payouts, ledger, cart, or reservations.
+
+Carrier configuration keys:
+
+```text
+CarrierProvider__ProviderName=Manual|Fake
+CarrierProvider__Fake__TrackingBaseUrl=
+CarrierProvider__Fake__LabelBaseUrl=
+CarrierTracking__BatchSize=25
+CarrierTracking__SyncIntervalMinutes=15
+```
+
+Carrier provider comparison and implementation notes live in `docs/carrier-provider-comparison.md` and `docs/carrier-provider-implementation-notes.md`. Bob Go is the preferred first real adapter candidate if API documentation and sandbox credentials are available; PUDO is the documented fallback because its public API docs expose rates, shipment creation, labels, tracking, returns, cancellation, and locker data. No Bob Go, PUDO, Pargo, Shiplogic, or The Courier Guy Direct adapter is active yet.
+
+Future non-secret placeholder keys may be used once a real adapter is implemented; values must remain empty in source-controlled examples:
+
+```text
+CarrierProvider__BobGo__ApiKey=
+CarrierProvider__BobGo__SandboxBaseUrl=
+CarrierProvider__BobGo__ProductionBaseUrl=
+CarrierProvider__BobGo__WebhookSigningSecret=
+CarrierProvider__Pudo__ApiKey=
+CarrierProvider__Pudo__BaseUrl=
+```
 
 `GET /api/buyer/orders` and `GET /api/buyer/orders/{orderId}` are buyer-specific aliases for the existing buyer order reads.
 
@@ -1911,7 +2056,7 @@ POST /api/admin/payouts/{id}/reconcile
 }
 ```
 
-Successful payment ledger processing creates a `Pending` seller payout and a payout item linked to the seller-pending ledger entry. Seller payout history intentionally hides internal ledger, order, and payment identifiers; it returns payout totals plus item source type and amount only. Admin finance payout reads retain item, ledger, order, and payment identifiers for reconciliation.
+Successful payment ledger processing creates a `Pending` seller payout and a payout item linked to the seller-pending ledger entry. Seller payout history intentionally hides internal ledger, order, and payment identifiers; it returns payout totals plus item source type and amount only. Admin finance payout reads retain item, ledger, order, and payment identifiers for reconciliation. Admin payout responses also include `hasPendingPayoutProfileChange` and `pendingPayoutProfileChangeRequestId`; payout processing returns conflict while a seller payout-profile change is pending review.
 
 Seller payout item response shape:
 
@@ -1934,7 +2079,7 @@ Admin payout action request:
 
 Holding a payout changes it to `OnHold`, preserves whether it was held from `Pending` or `Available`, moves the payout amount into held balance, and writes a `PayoutHeld` audit log. Releasing a held payout returns it to the held-from status and writes a `PayoutReleased` audit log.
 
-`POST /make-available` moves a `Pending` payout into `Available` and moves seller balance from pending to available. `POST /process` starts provider payout processing, moves the payout amount out of available balance, calls the configured payout provider with the payout id as the idempotency key, and marks the payout `PaidOut`, `Processing`, or `Failed` based on provider status. Failed payouts restore available balance for retry. `POST /reconcile` refreshes a `Processing` payout from the provider and finalizes paid/failed status.
+`POST /make-available` moves a `Pending` payout into `Available` and moves seller balance from pending to available. `POST /process` starts provider payout processing, moves the payout amount out of available balance, calls the configured payout provider with the payout id as the idempotency key, and marks the payout `PaidOut`, `Processing`, or `Failed` based on provider status. Processing is blocked when the payout seller has a pending payout-profile change request. Failed payouts restore available balance for retry. `POST /reconcile` refreshes a `Processing` payout from the provider and finalizes paid/failed status.
 
 Payout provider configuration keys:
 
@@ -2104,11 +2249,64 @@ Angular seller routes:
 /seller/settings/store
 ```
 
-`/seller/inventory` uses these inventory endpoints for searchable/filterable stock operations, CSV export/template download, import preview, and bulk apply. `/seller/settings/store` reuses the existing seller onboarding profile, storefront, and address endpoints for post-verification store settings. Payout-provider/bank details remain read-only in that screen until a secure re-verification workflow exists.
+`/seller/inventory` uses these inventory endpoints for searchable/filterable stock operations, CSV export/template download, import preview, and bulk apply. `/seller/settings/store` reuses the existing seller onboarding profile, storefront, and address endpoints for post-verification store settings and exposes the verified-seller payout-profile change request workflow.
+
+Seller payout-profile change endpoints:
+
+```http
+GET /api/seller/payout-profile/change-request
+PUT /api/seller/payout-profile/change-request
+POST /api/seller/payout-profile/change-request/submit-review
+POST /api/seller/payout-profile/change-request/cancel
+```
+
+Change request:
+
+```json
+{
+  "payoutProviderReference": "provider-reference-or-token",
+  "reason": "Updated payout provider reference for re-verification."
+}
+```
+
+## Admin Pickup Points
+
+Pickup-point endpoints require an `Admin` or `SuperAdmin` role. Pickup points are platform-managed and use activate/deactivate rather than hard delete. Each create/update/activate/deactivate action writes an audit log entry. Sellers opt into pickup by creating a `PickupPoint` delivery method; pickup points themselves do not define pricing.
+
+```http
+GET /api/admin/pickup-points
+POST /api/admin/pickup-points
+PUT /api/admin/pickup-points/{pickupPointId}
+POST /api/admin/pickup-points/{pickupPointId}/activate
+POST /api/admin/pickup-points/{pickupPointId}/deactivate
+```
+
+Request:
+
+```json
+{
+  "providerName": "Manual",
+  "code": "JHB-ROSEBANK-001",
+  "name": "Rosebank Pickup Counter",
+  "addressLine1": "10 Market Street",
+  "addressLine2": null,
+  "suburb": "Rosebank",
+  "city": "Johannesburg",
+  "province": "Gauteng",
+  "postalCode": "2196",
+  "countryCode": "ZA",
+  "latitude": null,
+  "longitude": null,
+  "openingHours": "Mon-Fri 09:00-17:00",
+  "isActive": true
+}
+```
+
+The provider/code pair must be unique. Checkout matches pickup points by active status, country, and province.
 
 ## Seller Delivery Methods
 
-Seller delivery-method endpoints require a seller JWT role and always operate on methods owned by the authenticated seller. They are provider-free rates for the current single-seller checkout flow; there is no carrier API, label purchase, address verification, pickup-point network, payment mutation, or payout mutation.
+Seller delivery-method endpoints require a seller JWT role and always operate on methods owned by the authenticated seller. They are provider-free rates for the current single-seller checkout flow; there is no carrier API, label purchase, payment mutation, or payout mutation.
 
 ```http
 GET /api/seller/delivery-methods
@@ -2136,7 +2334,7 @@ Request:
 }
 ```
 
-Supported `methodType` values are `Standard`, `Express`, and `LocalCourier`. `province` is optional; country-wide and province-specific active methods can both match a checkout address, and the buyer chooses the option. Validation rejects missing names, invalid country codes, negative prices, invalid day ranges, and methods owned by another seller. Create/update/activate/deactivate actions write seller audit-log entries.
+Supported `methodType` values are `Standard`, `Express`, `LocalCourier`, and `PickupPoint`. `province` is optional; country-wide and province-specific active methods can both match a checkout address, and the buyer chooses the option. `PickupPoint` methods use seller-managed pricing but require the buyer to select one of the active platform pickup points returned by checkout. Validation rejects missing names, invalid country codes, negative prices, invalid day ranges, and methods owned by another seller. Create/update/activate/deactivate actions write seller audit-log entries.
 
 ## AI Listing Assistant
 
@@ -2217,7 +2415,7 @@ Supported `fieldsToApply` values are `title`, `shortDescription`, `fullDescripti
 
 ## Current Scope
 
-Health/readiness, identity foundation with HttpOnly refresh cookies, seller onboarding, seller inventory adjustment and bulk CSV import/export, seller delivery-method/rate management, seller store settings UI, admin seller approval and Angular moderation polish, admin product review and Angular moderation polish, admin buyer-review moderation, admin audit-log UI polish, admin dashboard summary, admin category/attribute catalog management, admin marketplace finance reports, admin order/payment read APIs and Angular read screens, public product search, public verified-buyer product review reads, buyer-facing shop/category/product/seller/cart/checkout/assistant/visual-search pages, buyer account order/return/dispute/support/wishlist/review/notification/settings Angular routes, buyer profile settings, saved delivery addresses, delivery instructions, order delivery-address and delivery-method snapshots, fulfilment exception tracking, in-app notification preferences, and buyer transactional email notification outbox delivery, seller product draft endpoints with production-hardened media uploads and image metadata updates, S3-compatible image storage configuration, media scanning abstraction, WebP image variants, media cleanup, moderation-aware published listing revisions, polished seller product editor UX, buyer cart endpoints with saved-for-later wishlist moves, product image metadata, and seller shipping-option quotes, buyer wishlist/review/notification backend APIs with saved-state hydration and wishlist-to-cart moves, inventory reservation services, order creation from cart, payment provider abstractions with fake and PayFast providers, local payment persistence with retryable checkout URLs, idempotent payment webhook handling including duplicate race fallback and paid-cart cleanup, payment reconciliation review evidence, seller delivery confirmation, successful-payment ledger entries, seller balance/payout read APIs, admin payout hold/release/make-available/process/reconcile with a fake payout provider, refund workflow with ledger reversals, payout adjustments, and manual PayFast refund confirmation, finance dual-control policies, dispute workflow with evidence/messages/admin resolution, admin finance Angular routes for refunds/payouts/disputes, support ticket workflow with private internal notes and Angular support queue/detail routes, seller ad campaign draft/submission API and Angular dashboard, seller analytics dashboard, admin ad campaign review, ad event tracking and seller campaign metrics, product moderation, AI suggestion persistence/DTOs, the backend AI listing assistant service abstraction, seller AI suggestion generation/apply endpoints, the Angular seller AI assistant UI, buyer AI shopping intent extraction/recommendations, buyer visual search with a fake vision provider, and private product embedding generation exist. PayFast sandbox verification, payment-provider status-query settlement, automatic PayFast refunds, real payout provider integration, carrier integration, provider/carrier rate calculation, address verification, carrier selection, variant/pricing revision workflows, production vision AI, buyer-favoured dispute money movement, admin order/payment mutation workflows, SMS/push notification delivery, seller/admin email workflows, payout-bank re-verification workflows, hard-delete taxonomy operations, bulk category import, and taxonomy versioning are intentionally not implemented yet.
+Health/readiness, identity foundation with HttpOnly refresh cookies, seller onboarding, seller inventory adjustment and bulk CSV import/export, seller delivery-method/rate management including pickup-point delivery methods, seller store settings UI with payout-profile change re-verification, admin seller payout-profile change review, admin seller approval and Angular moderation polish, admin product review and Angular moderation polish, admin buyer-review moderation, admin audit-log UI polish, admin dashboard summary, admin category/attribute catalog management, admin platform pickup-point management, admin marketplace finance reports, admin order/payment read APIs and Angular read screens, public product search, public verified-buyer product review reads, buyer-facing shop/category/product/seller/cart/checkout/assistant/visual-search pages, buyer account order/return/dispute/support/wishlist/review/notification/settings Angular routes, buyer profile settings, saved delivery addresses with local address verification, delivery instructions, order delivery-address verification snapshots, order delivery-method and pickup-point snapshots, fulfilment exception tracking, in-app notification preferences, buyer transactional email notification outbox delivery, and buyer SignalR notification live updates, seller product draft endpoints with production-hardened media uploads and image metadata updates, S3-compatible image storage configuration, media scanning abstraction, WebP image variants, media cleanup, moderation-aware published listing revisions, polished seller product editor UX, buyer cart endpoints with saved-for-later wishlist moves, product image metadata, and seller shipping-option quotes, buyer wishlist/review/notification backend APIs with saved-state hydration and wishlist-to-cart moves, inventory reservation services, order creation from cart, provider-neutral carrier booking/tracking with Manual and Fake providers, carrier provider comparison notes, payment provider abstractions with fake and PayFast providers, local payment persistence with retryable checkout URLs, idempotent payment webhook handling including duplicate race fallback and paid-cart cleanup, payment reconciliation review evidence, seller delivery confirmation, successful-payment ledger entries, seller balance/payout read APIs, admin payout hold/release/make-available/process/reconcile with a fake payout provider, refund workflow with ledger reversals, payout adjustments, and manual PayFast refund confirmation, finance dual-control policies, dispute workflow with evidence/messages/admin resolution, admin finance Angular routes for refunds/payouts/disputes, support ticket workflow with private internal notes and Angular support queue/detail routes, seller ad campaign draft/submission API and Angular dashboard, seller analytics dashboard, admin ad campaign review, ad event tracking and seller campaign metrics, product moderation, AI suggestion persistence/DTOs, the backend AI listing assistant service abstraction, seller AI suggestion generation/apply endpoints, the Angular seller AI assistant UI, buyer AI shopping intent extraction/recommendations, buyer visual search with a fake vision provider, and private product embedding generation exist. PayFast sandbox verification, payment-provider status-query settlement, automatic PayFast refunds, real payout provider integration, real carrier provider integration, carrier-provided rate calculation, external address verification/geocoding, pickup-network APIs, variant/pricing revision workflows, production vision AI, buyer-favoured dispute money movement, admin order/payment mutation workflows, SMS/push notification delivery, seller/admin email workflows, hard-delete taxonomy operations, bulk category import, and taxonomy versioning are intentionally not implemented yet.
 
 ## API Rules
 

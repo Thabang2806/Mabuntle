@@ -71,12 +71,12 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             }
           </div>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
             <mat-label>Search</mat-label>
             <input matInput formControlName="query">
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
             <mat-label>Category</mat-label>
             <mat-select formControlName="categorySlug">
               <mat-option value="">All categories</mat-option>
@@ -86,7 +86,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
             <mat-label>Availability</mat-label>
             <mat-select formControlName="availability">
               <mat-option value="">All products</mat-option>
@@ -95,32 +95,32 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
             <mat-label>Min price</mat-label>
             <input matInput type="number" min="0" formControlName="minPrice">
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
             <mat-label>Max price</mat-label>
             <input matInput type="number" min="0" formControlName="maxPrice">
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
             <mat-label>Size</mat-label>
             <input matInput formControlName="size">
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
             <mat-label>Colour</mat-label>
             <input matInput formControlName="colour">
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
             <mat-label>Material</mat-label>
             <input matInput formControlName="material">
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
             <mat-label>Sort</mat-label>
             <mat-select formControlName="sort">
               <mat-option value="newest">Newest</mat-option>

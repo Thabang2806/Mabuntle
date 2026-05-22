@@ -279,7 +279,7 @@ public static class SellerDeliveryMethodEndpoints
             return true;
         }
 
-        validation = Validation("methodType", "Delivery method type must be Standard, Express, or LocalCourier.");
+        validation = Validation("methodType", "Delivery method type must be Standard, Express, LocalCourier, or PickupPoint.");
         return false;
     }
 

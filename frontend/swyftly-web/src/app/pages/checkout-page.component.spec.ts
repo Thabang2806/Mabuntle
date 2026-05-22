@@ -122,7 +122,8 @@ describe('CheckoutPageComponent', () => {
         countryCode: 'ZA',
         deliveryInstructions: null
       },
-      deliveryMethodId: 'delivery-method-id'
+      deliveryMethodId: 'delivery-method-id',
+      pickupPointId: null
     });
     expect(paymentService.initiatePayment).toHaveBeenCalledWith('order-id');
     expect(paymentRedirectService.redirect).toHaveBeenCalledWith('https://checkout.example.test/session');
@@ -207,8 +208,57 @@ describe('CheckoutPageComponent', () => {
       reservationMinutes: null,
       deliveryAddressId: 'address-id',
       deliveryAddress: null,
-      deliveryMethodId: 'delivery-method-id'
+      deliveryMethodId: 'delivery-method-id',
+      pickupPointId: null
     });
+  });
+
+  it('requires pickup point selection for pickup delivery methods', async () => {
+    cartService.getShippingOptions.and.resolveTo({
+      ...createShippingOptions(),
+      options: [{
+        ...createShippingOptions().options[0],
+        methodType: 'PickupPoint' as const,
+        requiresPickupPoint: true,
+        pickupPoints: [{
+          pickupPointId: 'pickup-id',
+          providerName: 'Manual',
+          code: 'JHB-ROSEBANK-001',
+          name: 'Rosebank Pickup Counter',
+          addressLine1: '10 Market Street',
+          addressLine2: null,
+          suburb: 'Rosebank',
+          city: 'Johannesburg',
+          province: 'Gauteng',
+          postalCode: '2196',
+          countryCode: 'ZA',
+          latitude: null,
+          longitude: null,
+          openingHours: 'Mon-Fri 09:00-17:00'
+        }]
+      }]
+    });
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    setInput(compiled, 'input[formControlName="fullName"]', 'Buyer One');
+    setInput(compiled, 'input[formControlName="phone"]', '+27110000000');
+    setInput(compiled, 'input[formControlName="addressLine1"]', '1 Market Street');
+    setInput(compiled, 'input[formControlName="city"]', 'Johannesburg');
+    setInput(compiled, 'input[formControlName="province"]', 'Gauteng');
+    setInput(compiled, 'input[formControlName="postalCode"]', '2000');
+    await chooseShippingOption(compiled, fixture);
+
+    const form = compiled.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(cartService.createOrderFromCart).not.toHaveBeenCalled();
+    expect(compiled.textContent).toContain('Choose a pickup point');
   });
 });
 
@@ -225,6 +275,12 @@ function createShippingOptions() {
     cartId: 'cart-id',
     sellerId: 'seller-id',
     cartSubtotal: 998,
+    addressVerification: {
+      verificationStatus: 'Verified',
+      verificationProvider: 'LocalRules',
+      verificationWarnings: [],
+      verifiedAtUtc: '2026-05-21T10:00:00Z'
+    },
     options: [{
       deliveryMethodId: 'delivery-method-id',
       name: 'Standard courier',
@@ -238,7 +294,9 @@ function createShippingOptions() {
       freeShippingApplied: false,
       estimatedMinDays: 2,
       estimatedMaxDays: 5,
-      displayOrder: 10
+      displayOrder: 10,
+      requiresPickupPoint: false,
+      pickupPoints: []
     }]
   };
 }

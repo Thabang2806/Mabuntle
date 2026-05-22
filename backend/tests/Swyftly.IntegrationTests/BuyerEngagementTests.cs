@@ -376,15 +376,40 @@ public sealed class BuyerEngagementTests
         Assert.Equal(2, notifications!.Length);
         Assert.All(notifications, notification => Assert.Null(notification.ReadAtUtc));
 
+        using var countResponse = await client.GetAsync("/api/buyer/notifications/unread-count");
+        countResponse.EnsureSuccessStatusCode();
+        var count = await countResponse.Content.ReadFromJsonAsync<NotificationsUnreadCountResponse>();
+        Assert.Equal(2, count!.UnreadCount);
+
         using var readResponse = await client.PostAsync($"/api/buyer/notifications/{notificationIds[0]}/read", null);
         readResponse.EnsureSuccessStatusCode();
         var read = await readResponse.Content.ReadFromJsonAsync<NotificationResult>();
         Assert.NotNull(read!.ReadAtUtc);
+        var readEvent = Assert.Single(factory.RealtimePublisher.Read);
+        Assert.Equal(notificationIds[0], readEvent.NotificationId);
 
         using var readAllResponse = await client.PostAsync("/api/buyer/notifications/read-all", null);
         readAllResponse.EnsureSuccessStatusCode();
         var readAll = await readAllResponse.Content.ReadFromJsonAsync<NotificationsReadAllResponse>();
         Assert.Equal(1, readAll!.UpdatedCount);
+        var readAllEvent = Assert.Single(factory.RealtimePublisher.ReadAll);
+        Assert.Equal(1, readAllEvent.UpdatedCount);
+    }
+
+    [Fact]
+    public async Task NotificationHub_NegotiateRequiresBuyerAuthentication()
+    {
+        using var factory = new BuyerEngagementTestFactory();
+        using var client = factory.CreateClient();
+
+        using var anonymousResponse = await client.PostAsync("/hubs/notifications/negotiate?negotiateVersion=1", null);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousResponse.StatusCode);
+
+        var buyerToken = await RegisterAndLoginAsync(client, "hub-buyer@example.test", SwyftlyRoles.Buyer);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", buyerToken);
+
+        using var buyerResponse = await client.PostAsync("/hubs/notifications/negotiate?negotiateVersion=1", null);
+        buyerResponse.EnsureSuccessStatusCode();
     }
 
     [Fact]
@@ -614,6 +639,10 @@ public sealed class BuyerEngagementTests
             Assert.Single(emailDeliveries);
             Assert.Equal(emailOnly.NotificationId, emailDeliveries.Single().NotificationId);
         }
+
+        Assert.DoesNotContain(factory.RealtimePublisher.Created, notification => notification.Type == "ReviewApproved");
+        Assert.Contains(factory.RealtimePublisher.Created, notification => notification.Type == "ReturnApproved");
+        Assert.Contains(factory.RealtimePublisher.Created, notification => notification.Type == "CustomNotice");
 
         using var notificationResponse = await client.GetAsync("/api/buyer/notifications");
         notificationResponse.EnsureSuccessStatusCode();
@@ -924,6 +953,8 @@ public sealed class BuyerEngagementTests
     {
         private readonly string _databaseName = $"SwyftlyBuyerEngagementTests_{Guid.NewGuid():N}";
 
+        public RecordingNotificationRealtimePublisher RealtimePublisher { get; } = new();
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
@@ -932,8 +963,10 @@ public sealed class BuyerEngagementTests
             {
                 services.RemoveAll<DbContextOptions<SwyftlyDbContext>>();
                 services.RemoveAll<IDbContextOptionsConfiguration<SwyftlyDbContext>>();
+                services.RemoveAll<INotificationRealtimePublisher>();
 
                 services.AddSingleton<AuditableEntitySaveChangesInterceptor>();
+                services.AddSingleton<INotificationRealtimePublisher>(RealtimePublisher);
                 services.AddDbContext<SwyftlyDbContext>((serviceProvider, options) =>
                 {
                     options
@@ -942,6 +975,43 @@ public sealed class BuyerEngagementTests
                         .AddInterceptors(serviceProvider.GetRequiredService<AuditableEntitySaveChangesInterceptor>());
                 });
             });
+        }
+    }
+
+    public sealed class RecordingNotificationRealtimePublisher : INotificationRealtimePublisher
+    {
+        public List<NotificationResult> Created { get; } = [];
+
+        public List<NotificationReadRealtimeEvent> Read { get; } = [];
+
+        public List<NotificationsReadAllRealtimeEvent> ReadAll { get; } = [];
+
+        public Task PublishNotificationCreatedAsync(
+            NotificationResult notification,
+            CancellationToken cancellationToken = default)
+        {
+            Created.Add(notification);
+            return Task.CompletedTask;
+        }
+
+        public Task PublishNotificationReadAsync(
+            Guid recipientUserId,
+            Guid notificationId,
+            DateTimeOffset readAtUtc,
+            CancellationToken cancellationToken = default)
+        {
+            Read.Add(new NotificationReadRealtimeEvent(notificationId, readAtUtc));
+            return Task.CompletedTask;
+        }
+
+        public Task PublishNotificationsReadAllAsync(
+            Guid recipientUserId,
+            DateTimeOffset readAtUtc,
+            int updatedCount,
+            CancellationToken cancellationToken = default)
+        {
+            ReadAll.Add(new NotificationsReadAllRealtimeEvent(readAtUtc, updatedCount));
+            return Task.CompletedTask;
         }
     }
 }

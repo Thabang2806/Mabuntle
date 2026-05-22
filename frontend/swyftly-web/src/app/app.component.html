@@ -24,7 +24,7 @@
           >
             {{ item.label }}
           </a>
-        }
+          }
       </div>
 
       <div class="nav-group nav-group--feature" aria-label="Discovery">
@@ -48,7 +48,10 @@
               [routerLinkActiveOptions]="{ exact: true }"
               ariaCurrentWhenActive="page"
             >
-              {{ item.label }}
+              <span>{{ item.label }}</span>
+              @if (item.badge && item.badge > 0) {
+                <span class="nav-badge" [attr.aria-label]="item.badge + ' unread notifications'">{{ item.badge }}</span>
+              }
             </a>
           }
 
@@ -112,4 +115,15 @@
   </footer>
 
   <app-mobile-bottom-nav [items]="mobileNavigationItems()" />
+
+  @if (notificationRealtime.latestNotification(); as notification) {
+    <aside class="notification-toast" aria-live="polite">
+      <div>
+        <strong>{{ notification.title }}</strong>
+        <p>{{ notification.message }}</p>
+      </div>
+      <a [routerLink]="notificationRoute(notification)" (click)="notificationRealtime.dismissLatestNotification()">Open</a>
+      <button type="button" aria-label="Dismiss notification" (click)="notificationRealtime.dismissLatestNotification()">Close</button>
+    </aside>
+  }
 </div>

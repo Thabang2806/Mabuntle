@@ -5,6 +5,8 @@ import { environment } from '../../environments/environment';
 import {
   BuyerDeliveryAddressRequest,
   BuyerDeliveryAddressResponse,
+  BuyerDeliveryAddressVerificationRequest,
+  BuyerDeliveryAddressVerificationResponse,
   BuyerNotificationPreferencesRequest,
   BuyerNotificationPreferencesResponse,
   BuyerProfileSettingsRequest,
@@ -36,6 +38,12 @@ export class BuyerSettingsService {
 
   listDeliveryAddresses(): Promise<BuyerDeliveryAddressResponse[]> {
     return firstValueFrom(this.http.get<BuyerDeliveryAddressResponse[]>(`${this.baseUrl}/delivery-addresses`));
+  }
+
+  verifyDeliveryAddress(request: BuyerDeliveryAddressVerificationRequest): Promise<BuyerDeliveryAddressVerificationResponse> {
+    return firstValueFrom(this.http.post<BuyerDeliveryAddressVerificationResponse>(
+      `${this.baseUrl}/delivery-addresses/verify`,
+      request));
   }
 
   createDeliveryAddress(request: BuyerDeliveryAddressRequest): Promise<BuyerDeliveryAddressResponse> {

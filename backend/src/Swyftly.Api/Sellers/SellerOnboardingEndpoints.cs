@@ -241,6 +241,14 @@ public static class SellerOnboardingEndpoints
             return SellerNotFound();
         }
 
+        if (seller.VerificationStatus == SellerVerificationStatus.Verified)
+        {
+            return HttpResults.Problem(
+                title: "SellerOnboarding.PayoutProfileChangeRequired",
+                detail: "Verified sellers must use the payout profile change request workflow.",
+                statusCode: StatusCodes.Status409Conflict);
+        }
+
         var payoutProfile = await dbContext.SellerPayoutProfiles
             .SingleOrDefaultAsync(profile => profile.SellerId == seller.Id, cancellationToken);
 

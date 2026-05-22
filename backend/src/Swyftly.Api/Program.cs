@@ -27,6 +27,7 @@ using Swyftly.Api.Storage;
 using Swyftly.Api.Support;
 using Swyftly.Application.Abstractions;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Notifications;
 using Swyftly.Infrastructure;
 using Swyftly.Infrastructure.Identity;
 using Swyftly.Infrastructure.Persistence;
@@ -67,6 +68,8 @@ builder.Services.AddSingleton<SwyftlyMetrics>();
 builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 builder.Services.Configure<AuthCookieOptions>(builder.Configuration.GetSection(AuthCookieOptions.SectionName));
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddSignalR();
+builder.Services.AddScoped<INotificationRealtimePublisher, SignalRNotificationRealtimePublisher>();
 
 var rateLimitOptions = builder.Configuration
     .GetSection(SwyftlyRateLimitOptions.SectionName)
@@ -113,6 +116,20 @@ builder.Services
             ValidAudience = jwtOptions.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
             ClockSkew = TimeSpan.FromMinutes(1)
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"].ToString();
+                if (!string.IsNullOrWhiteSpace(accessToken)
+                    && context.HttpContext.Request.Path.StartsWithSegments("/hubs/notifications"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
         };
     });
 
@@ -300,6 +317,7 @@ app.MapGet("/health/ready", async (HealthCheckService healthCheckService) =>
 
 app.MapAuthEndpoints();
 app.MapSellerOnboardingEndpoints();
+app.MapSellerPayoutProfileChangeEndpoints();
 app.MapAdminSellerEndpoints();
 app.MapAdminProductEndpoints();
 app.MapAdminReviewEndpoints();
@@ -308,6 +326,7 @@ app.MapAdminDashboardEndpoints();
 app.MapAdminMarketplaceReportEndpoints();
 app.MapAdminAiUsageAnalyticsEndpoints();
 app.MapAdminCategoryEndpoints();
+app.MapAdminPickupPointEndpoints();
 app.MapAdminOrderPaymentEndpoints();
 app.MapSellerCatalogEndpoints();
 app.MapSellerProductEndpoints();
@@ -330,6 +349,8 @@ app.MapAdTrackingEndpoints();
 app.MapSellerAnalyticsEndpoints();
 app.MapBuyerAiShoppingAssistantEndpoints();
 app.MapBuyerVisualSearchEndpoints();
+app.MapHub<NotificationHub>("/hubs/notifications")
+    .RequireAuthorization(SwyftlyPolicies.BuyerOnly);
 
 app.Run();
 

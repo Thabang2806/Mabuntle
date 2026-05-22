@@ -1,6 +1,5 @@
-@import '@angular/material/prebuilt-themes/indigo-pink.css';
-
 @tailwind base;
+@import '@angular/material/prebuilt-themes/indigo-pink.css';
 @tailwind components;
 @tailwind utilities;
 
@@ -483,6 +482,10 @@ p {
   text-decoration: none;
 }
 
+.hf-mobile-bottom-nav a span:last-child {
+  position: relative;
+}
+
 .hf-mobile-bottom-nav a.active,
 .hf-mobile-bottom-nav a:focus-visible {
   color: var(--swyftly-primary);
@@ -496,10 +499,28 @@ p {
   background: currentColor;
 }
 
+.hf-mobile-bottom-nav-badge {
+  position: absolute;
+  top: -0.75rem;
+  right: -0.85rem;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 0.28rem;
+  border-radius: 999px;
+  color: #ffffff;
+  background: var(--swyftly-accent);
+  font-size: 0.62rem;
+  line-height: 1;
+}
+
 .auth-page {
   min-height: calc(100vh - 146px);
   display: grid;
   align-items: center;
+  justify-items: center;
+  align-content: center;
 }
 
 .auth-panel {
@@ -519,6 +540,91 @@ p {
 
 .auth-panel .mat-mdc-form-field {
   width: 100%;
+}
+
+.swyftly-field.mat-mdc-form-field {
+  width: 100%;
+  --mdc-outlined-text-field-container-shape: 10px;
+  --mdc-outlined-text-field-outline-color: rgb(232 214 199 / 100%);
+  --mdc-outlined-text-field-hover-outline-color: rgb(183 110 121 / 72%);
+  --mdc-outlined-text-field-focus-outline-color: var(--swyftly-primary);
+  --mdc-outlined-text-field-error-outline-color: var(--swyftly-danger);
+  --mdc-outlined-text-field-label-text-color: var(--swyftly-muted);
+  --mdc-outlined-text-field-hover-label-text-color: var(--swyftly-primary);
+  --mdc-outlined-text-field-focus-label-text-color: var(--swyftly-primary);
+  --mdc-outlined-text-field-input-text-color: var(--swyftly-text);
+  --mdc-outlined-text-field-caret-color: var(--swyftly-primary);
+}
+
+.swyftly-field .mat-mdc-text-field-wrapper {
+  min-height: 52px;
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 98%), rgb(255 249 244 / 76%)),
+    var(--swyftly-surface);
+  transition: box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.swyftly-field .mat-mdc-form-field-flex {
+  min-height: 52px;
+  align-items: center;
+}
+
+.swyftly-field .mat-mdc-form-field-infix {
+  min-height: 52px;
+  padding-top: 15px;
+  padding-bottom: 9px;
+}
+
+.swyftly-field .mat-mdc-input-element,
+.swyftly-field .mat-mdc-select-value {
+  color: var(--swyftly-text);
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.swyftly-field .mdc-floating-label {
+  color: var(--swyftly-muted);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.swyftly-field .mat-mdc-form-field-required-marker,
+.swyftly-field .mdc-floating-label--required::after {
+  display: none;
+  content: "";
+}
+
+.swyftly-field.mat-focused .mat-mdc-text-field-wrapper {
+  box-shadow: 0 0 0 3px rgb(183 110 121 / 18%);
+}
+
+.swyftly-field.mat-form-field-invalid .mat-mdc-text-field-wrapper {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 98%), rgb(254 242 242 / 82%)),
+    var(--swyftly-surface);
+}
+
+.swyftly-field .mat-mdc-form-field-error {
+  color: var(--swyftly-danger);
+  font-weight: 700;
+}
+
+.swyftly-field.swyftly-field--compact .mat-mdc-text-field-wrapper,
+.swyftly-field.swyftly-field--compact .mat-mdc-form-field-flex,
+.swyftly-field.swyftly-field--compact .mat-mdc-form-field-infix {
+  min-height: 48px;
+}
+
+.swyftly-field.swyftly-field--compact .mat-mdc-form-field-infix {
+  padding-top: 14px;
+  padding-bottom: 8px;
+}
+
+.swyftly-field.swyftly-field--compact .mat-mdc-input-element,
+.swyftly-field.swyftly-field--compact .mat-mdc-select-value {
+  font-size: 0.94rem;
 }
 
 .auth-actions,
@@ -2092,6 +2198,34 @@ p {
 .admin-finance-note {
   color: var(--swyftly-muted);
   font-size: 0.9rem;
+}
+
+.settings-summary-list,
+.payout-profile-change-compare {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.settings-summary-list div,
+.payout-profile-change-compare div {
+  border: 1px solid rgb(111 94 102 / 18%);
+  border-radius: 8px;
+  padding: 0.85rem;
+  background: rgb(244 237 231 / 42%);
+}
+
+.settings-summary-list span,
+.payout-profile-change-compare span {
+  display: block;
+  color: var(--swyftly-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.settings-summary-list strong,
+.payout-profile-change-compare strong {
+  display: block;
+  overflow-wrap: anywhere;
 }
 
 .admin-finance-subsection,
@@ -3962,6 +4096,35 @@ p {
 
 .checkout-delivery-option small,
 .checkout-muted-note {
+  color: var(--swyftly-muted);
+}
+
+.checkout-pickup-options {
+  display: grid;
+  gap: 0.625rem;
+  padding: 0.5rem 0 0.75rem;
+}
+
+.checkout-pickup-option {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.8rem;
+  border: 1px dashed rgb(58 29 50 / 24%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 72%);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.checkout-pickup-option.is-selected {
+  border-style: solid;
+  border-color: rgb(58 29 50 / 72%);
+  background: rgb(244 237 231 / 72%);
+}
+
+.checkout-pickup-option span,
+.checkout-pickup-option small {
   color: var(--swyftly-muted);
 }
 

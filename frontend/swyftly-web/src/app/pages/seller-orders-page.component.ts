@@ -117,9 +117,12 @@ export class SellerOrdersPageComponent implements OnInit {
       return 'No shipment yet';
     }
 
+    const carrierState = latestShipment.providerStatus ?? latestShipment.status;
     return latestShipment.trackingNumber
-      ? `${latestShipment.status} - ${latestShipment.trackingNumber}`
-      : latestShipment.status;
+      ? `${carrierState} - ${latestShipment.trackingNumber}`
+      : latestShipment.providerShipmentReference
+        ? `${carrierState} - ${latestShipment.providerShipmentReference}`
+        : carrierState;
   }
 
   protected statusTone(status: string): StatusBadgeTone {

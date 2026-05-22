@@ -46,6 +46,16 @@ public sealed class SellerPayoutProfilePlaceholder : AuditableEntity
         IsAdminApproved = true;
     }
 
+    public void ReplaceProviderReferenceAndApprove(
+        string payoutProviderReference,
+        Guid approvedByUserId,
+        DateTimeOffset approvedAtUtc)
+    {
+        PayoutProviderReference = Required(payoutProviderReference, nameof(payoutProviderReference));
+        HasSubmittedPlaceholder = true;
+        MarkAdminApproved(approvedByUserId, approvedAtUtc);
+    }
+
     private static string Required(string? value, string parameterName)
     {
         var trimmed = value?.Trim();

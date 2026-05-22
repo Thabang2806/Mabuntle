@@ -19,7 +19,8 @@ public sealed record CreateOrderFromCartRequest(
     decimal DiscountAmount = 0,
     Guid? DeliveryAddressId = null,
     OrderDeliveryAddressRequest? DeliveryAddress = null,
-    Guid? DeliveryMethodId = null);
+    Guid? DeliveryMethodId = null,
+    Guid? PickupPointId = null);
 
 public sealed record OrderDeliveryAddressRequest(
     string RecipientName,
@@ -52,7 +53,8 @@ public sealed record OrderResult(
     string? DeliveryMethodName = null,
     string? DeliveryMethodType = null,
     int? DeliveryEstimatedMinDays = null,
-    int? DeliveryEstimatedMaxDays = null);
+    int? DeliveryEstimatedMaxDays = null,
+    OrderPickupPointResult? PickupPoint = null);
 
 public sealed record OrderDeliveryAddressResult(
     string RecipientName,
@@ -64,7 +66,27 @@ public sealed record OrderDeliveryAddressResult(
     string Province,
     string PostalCode,
     string CountryCode,
-    string? DeliveryInstructions = null);
+    string? DeliveryInstructions = null,
+    string VerificationStatus = "Unverified",
+    string? VerificationProvider = null,
+    IReadOnlyCollection<string>? VerificationWarnings = null,
+    DateTimeOffset? VerifiedAtUtc = null);
+
+public sealed record OrderPickupPointResult(
+    Guid PickupPointId,
+    string ProviderName,
+    string Code,
+    string Name,
+    string AddressLine1,
+    string? AddressLine2,
+    string? Suburb,
+    string City,
+    string Province,
+    string PostalCode,
+    string CountryCode,
+    decimal? Latitude,
+    decimal? Longitude,
+    string? OpeningHours);
 
 public sealed record OrderItemResult(
     Guid OrderItemId,
@@ -93,7 +115,15 @@ public sealed record ShipmentResult(
     string? TrackingUrl,
     DateTimeOffset? ShippedAtUtc,
     DateTimeOffset? DeliveredAtUtc,
-    IReadOnlyCollection<ShipmentEventResult> Events);
+    IReadOnlyCollection<ShipmentEventResult> Events,
+    string? CarrierProviderName = null,
+    string? CarrierServiceCode = null,
+    string? ProviderShipmentReference = null,
+    string? CarrierBookingStatus = null,
+    string? ProviderStatus = null,
+    string? ProviderLabelUrl = null,
+    DateTimeOffset? ProviderLastSyncedAtUtc = null,
+    string? ProviderError = null);
 
 public sealed record ShipmentEventResult(
     Guid ShipmentEventId,

@@ -2,7 +2,12 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { AddSellerOrderTrackingRequest, SellerFulfillmentExceptionRequest, SellerOrderResult } from './seller-order.models';
+import {
+  AddSellerOrderTrackingRequest,
+  BookSellerCarrierRequest,
+  SellerFulfillmentExceptionRequest,
+  SellerOrderResult
+} from './seller-order.models';
 
 @Injectable({ providedIn: 'root' })
 export class SellerOrderService {
@@ -43,5 +48,13 @@ export class SellerOrderService {
 
   markReturnedToSender(orderId: string, request: SellerFulfillmentExceptionRequest): Promise<SellerOrderResult> {
     return firstValueFrom(this.http.post<SellerOrderResult>(`${this.baseUrl}/${orderId}/mark-returned-to-sender`, request));
+  }
+
+  bookCarrier(orderId: string, request: BookSellerCarrierRequest): Promise<SellerOrderResult> {
+    return firstValueFrom(this.http.post<SellerOrderResult>(`${this.baseUrl}/${orderId}/book-carrier`, request));
+  }
+
+  syncCarrierTracking(orderId: string): Promise<SellerOrderResult> {
+    return firstValueFrom(this.http.post<SellerOrderResult>(`${this.baseUrl}/${orderId}/sync-carrier-tracking`, {}));
   }
 }

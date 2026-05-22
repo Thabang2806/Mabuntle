@@ -128,6 +128,9 @@ type PayoutAction = 'hold' | 'release' | 'make-available' | 'process' | 'reconci
                   </span>
                   <span role="cell">
                     <app-status-badge [label]="payout.status" [tone]="statusTone(payout.status)" />
+                    @if (payout.hasPendingPayoutProfileChange) {
+                      <small>Payout profile change pending</small>
+                    }
                     @if (payout.holdReason) {
                       <small>Hold: {{ payout.holdReason }}</small>
                     }
@@ -171,6 +174,15 @@ type PayoutAction = 'hold' | 'release' | 'make-available' | 'process' | 'reconci
                 <strong>{{ selectedPayout()!.amount | currency:selectedPayout()!.currency:'symbol-narrow' }}</strong>
                 <small>{{ selectedPayout()!.payoutId }}</small>
 
+                @if (selectedPayout()!.hasPendingPayoutProfileChange) {
+                  <app-ui-alert tone="warning">
+                    Payout processing is blocked until the seller payout-profile change request is approved or rejected.
+                    @if (selectedPayout()!.pendingPayoutProfileChangeRequestId) {
+                      <a routerLink="/admin/payout-profile-changes">Review payout profile change</a>
+                    }
+                  </app-ui-alert>
+                }
+
                 <form [formGroup]="reasonForm" class="admin-finance-form" novalidate>
                   <mat-form-field appearance="outline">
                     <mat-label>Reason</mat-label>
@@ -181,7 +193,7 @@ type PayoutAction = 'hold' | 'release' | 'make-available' | 'process' | 'reconci
                     <button mat-stroked-button type="button" [disabled]="!canOperate() || isActing()" (click)="runAction('hold')">Hold</button>
                     <button mat-stroked-button type="button" [disabled]="!canApprove() || isActing()" (click)="runAction('release')">Release</button>
                     <button mat-stroked-button type="button" [disabled]="!canOperate() || isActing()" (click)="runAction('make-available')">Make available</button>
-                    <button mat-flat-button type="button" [disabled]="!canApprove() || isActing()" (click)="runAction('process')">Process</button>
+                    <button mat-flat-button type="button" [disabled]="!canApprove() || isActing() || selectedPayout()!.hasPendingPayoutProfileChange" (click)="runAction('process')">Process</button>
                     <button mat-stroked-button type="button" [disabled]="!canApprove() || isActing()" (click)="runAction('reconcile')">Reconcile</button>
                   </div>
                 </form>
@@ -260,6 +272,11 @@ export class AdminPayoutsPageComponent implements OnInit {
     }
 
     const payout = this.selectedPayout();
+    if (action === 'process' && payout?.hasPendingPayoutProfileChange) {
+      this.errorMessage.set('Payout processing is blocked while the seller has a pending payout-profile change request.');
+      return;
+    }
+
     if (!payout || this.reasonForm.invalid || this.isActing()) {
       this.reasonForm.markAllAsTouched();
       return;

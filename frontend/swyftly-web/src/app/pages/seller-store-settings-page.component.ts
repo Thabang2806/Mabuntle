@@ -27,6 +27,11 @@ import {
   UpdateSellerStorefrontRequest
 } from '../seller/seller-onboarding.models';
 import { SellerOnboardingService } from '../seller/seller-onboarding.service';
+import {
+  SellerPayoutProfileChangeRequestRequest,
+  SellerPayoutProfileChangeStateResponse
+} from '../seller/seller-payout-profile-change.models';
+import { SellerPayoutProfileChangeService } from '../seller/seller-payout-profile-change.service';
 import { SellerWorkspaceNavComponent } from '../seller/seller-workspace-nav.component';
 import { PageHeaderComponent } from '../shared/ui/page-header.component';
 import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge.component';
@@ -236,7 +241,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           <section class="route-card wizard-form seller-delivery-methods">
             <span class="eyebrow">Delivery rates</span>
             <h2>Seller delivery methods</h2>
-            <p>Set provider-free delivery options buyers can choose during checkout. Keep methods inactive until the rate is ready to use.</p>
+            <p>Set provider-free delivery options buyers can choose during checkout. Pickup locations are platform-managed by admins; this screen only opts your store into a pickup-rate option.</p>
 
             @if (deliveryMethods().length > 0) {
               <div class="seller-delivery-method-list">
@@ -292,6 +297,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                     <mat-option value="Standard">Standard</mat-option>
                     <mat-option value="Express">Express</mat-option>
                     <mat-option value="LocalCourier">Local courier</mat-option>
+                    <mat-option value="PickupPoint">Pickup point</mat-option>
                   </mat-select>
                 </mat-form-field>
 
@@ -365,12 +371,71 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
           <aside class="route-card seller-settings-readonly">
             <span class="eyebrow">Payout security</span>
-            <h2>Payout details are read-only here</h2>
-            <p>Changing payout provider or bank information after verification needs re-approval and stronger security controls, so it stays outside this seller settings pass.</p>
-            <app-status-badge
-              [label]="onboarding()?.payout?.isAdminApproved ? 'Payout approved' : 'Payout review required'"
-              [tone]="onboarding()?.payout?.isAdminApproved ? 'success' : 'warning'"
-            />
+            <h2>Payout profile changes</h2>
+
+            @if (onboarding()?.verificationStatus !== 'Verified') {
+              <p>Complete payout details through seller onboarding before verification. Changes after verification require finance re-approval.</p>
+              <app-status-badge
+                [label]="onboarding()?.payout?.isAdminApproved ? 'Payout approved' : 'Payout review required'"
+                [tone]="onboarding()?.payout?.isAdminApproved ? 'success' : 'warning'"
+              />
+            } @else {
+              <p>Request payout provider reference changes here. The current approved reference stays active until finance approves the change.</p>
+
+              <div class="settings-summary-list">
+                <div>
+                  <span>Current approved reference</span>
+                  <strong>{{ payoutChangeState()?.currentPayoutProfile?.payoutProviderReference || onboarding()?.payout?.payoutProviderReference || 'Missing' }}</strong>
+                </div>
+                @if (payoutChangeState()?.activeRequest; as activeRequest) {
+                  <div>
+                    <span>Active request</span>
+                    <strong>{{ activeRequest.status }}</strong>
+                  </div>
+                } @else {
+                  @if (payoutChangeState()?.latestRequest; as latestRequest) {
+                    <div>
+                      <span>Latest request</span>
+                      <strong>{{ latestRequest.status }}</strong>
+                    </div>
+                  }
+                }
+              </div>
+
+              @if (payoutChangeState()?.activeRequest?.status === 'PendingReview') {
+                <app-ui-alert tone="warning">A payout profile change is pending finance review. Payout processing is blocked until it is approved or rejected.</app-ui-alert>
+              }
+
+              @if (payoutChangeState()?.latestRequest?.reviewReason && payoutChangeState()?.latestRequest?.status === 'Rejected') {
+                <app-ui-alert tone="error">Rejected: {{ payoutChangeState()?.latestRequest?.reviewReason }}</app-ui-alert>
+              }
+
+              <form [formGroup]="payoutChangeForm" (ngSubmit)="savePayoutChangeDraft()" class="seller-delivery-method-form" novalidate>
+                <mat-form-field appearance="outline">
+                  <mat-label>New payout provider reference</mat-label>
+                  <input matInput formControlName="payoutProviderReference" />
+                  @if (payoutChangeForm.controls.payoutProviderReference.hasError('required')) {
+                    <mat-error>Payout provider reference is required.</mat-error>
+                  }
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>Reason for change</mat-label>
+                  <textarea matInput rows="4" formControlName="reason"></textarea>
+                  @if (payoutChangeForm.controls.reason.hasError('required')) {
+                    <mat-error>Reason is required.</mat-error>
+                  }
+                </mat-form-field>
+
+                <div class="form-actions">
+                  <button mat-flat-button type="submit" [disabled]="isSaving() || payoutChangeState()?.activeRequest?.status === 'PendingReview'">Save draft</button>
+                  <button mat-stroked-button type="button" [disabled]="isSaving() || !payoutChangeState()?.activeRequest || payoutChangeState()?.activeRequest?.status === 'PendingReview'" (click)="submitPayoutChangeReview()">Submit review</button>
+                  @if (payoutChangeState()?.activeRequest) {
+                    <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="cancelPayoutChange()">Cancel request</button>
+                  }
+                </div>
+              </form>
+            }
           </aside>
         </div>
       }
@@ -381,9 +446,11 @@ export class SellerStoreSettingsPageComponent implements OnInit {
   private readonly formBuilder = inject(NonNullableFormBuilder);
   private readonly deliveryMethodService = inject(SellerDeliveryMethodService);
   private readonly onboardingService = inject(SellerOnboardingService);
+  private readonly payoutProfileChangeService = inject(SellerPayoutProfileChangeService);
 
   protected readonly onboarding = signal<SellerOnboardingResponse | null>(null);
   protected readonly deliveryMethods = signal<SellerDeliveryMethodResponse[]>([]);
+  protected readonly payoutChangeState = signal<SellerPayoutProfileChangeStateResponse | null>(null);
   protected readonly editingDeliveryMethodId = signal<string | null>(null);
   protected readonly isLoading = signal(true);
   protected readonly isSaving = signal(false);
@@ -438,6 +505,11 @@ export class SellerStoreSettingsPageComponent implements OnInit {
     displayOrder: [10, [Validators.required, Validators.min(0)]],
     isActive: [true, [Validators.required]]
   }, { validators: [deliveryDayRangeValidator()] });
+
+  protected readonly payoutChangeForm = this.formBuilder.group({
+    payoutProviderReference: ['', [Validators.required]],
+    reason: ['', [Validators.required]]
+  });
 
   async ngOnInit(): Promise<void> {
     await this.loadSettings();
@@ -572,6 +644,32 @@ export class SellerStoreSettingsPageComponent implements OnInit {
     }
   }
 
+  protected async savePayoutChangeDraft(): Promise<void> {
+    if (!this.ensureValid(this.payoutChangeForm)) {
+      return;
+    }
+
+    const value = this.payoutChangeForm.getRawValue();
+    await this.savePayoutChange(
+      () => this.payoutProfileChangeService.upsertDraft({
+        payoutProviderReference: value.payoutProviderReference,
+        reason: value.reason
+      } satisfies SellerPayoutProfileChangeRequestRequest),
+      'Payout profile change draft saved.');
+  }
+
+  protected async submitPayoutChangeReview(): Promise<void> {
+    await this.savePayoutChange(
+      () => this.payoutProfileChangeService.submitForReview(),
+      'Payout profile change submitted for finance review.');
+  }
+
+  protected async cancelPayoutChange(): Promise<void> {
+    await this.savePayoutChange(
+      () => this.payoutProfileChangeService.cancel(),
+      'Payout profile change request cancelled.');
+  }
+
   protected verificationTone(): StatusBadgeTone {
     const status = this.onboarding()?.verificationStatus;
     if (status === 'Verified') {
@@ -596,6 +694,11 @@ export class SellerStoreSettingsPageComponent implements OnInit {
       ]);
       this.setOnboarding(onboarding);
       this.deliveryMethods.set(deliveryMethods);
+      if (onboarding.verificationStatus === 'Verified') {
+        this.setPayoutChangeState(await this.payoutProfileChangeService.getState());
+      } else {
+        this.payoutChangeState.set(null);
+      }
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
     } finally {
@@ -613,6 +716,24 @@ export class SellerStoreSettingsPageComponent implements OnInit {
 
     try {
       this.setOnboarding(await action());
+      this.successMessage.set(successMessage);
+    } catch (error) {
+      this.errorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isSaving.set(false);
+    }
+  }
+
+  private async savePayoutChange(
+    action: () => Promise<SellerPayoutProfileChangeStateResponse>,
+    successMessage: string)
+  {
+    this.isSaving.set(true);
+    this.errorMessage.set(null);
+    this.successMessage.set(null);
+
+    try {
+      this.setPayoutChangeState(await action());
       this.successMessage.set(successMessage);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
@@ -649,6 +770,19 @@ export class SellerStoreSettingsPageComponent implements OnInit {
       province: onboarding.address?.province ?? '',
       postalCode: onboarding.address?.postalCode ?? '',
       countryCode: onboarding.address?.countryCode ?? 'ZA'
+    });
+  }
+
+  private setPayoutChangeState(state: SellerPayoutProfileChangeStateResponse): void {
+    this.payoutChangeState.set(state);
+
+    const editableRequest = state.activeRequest?.status === 'Draft'
+      ? state.activeRequest
+      : null;
+
+    this.payoutChangeForm.patchValue({
+      payoutProviderReference: editableRequest?.proposedPayoutProviderReference ?? '',
+      reason: editableRequest?.reason ?? ''
     });
   }
 

@@ -5,12 +5,18 @@ import { SellerDeliveryMethodResponse } from '../seller/seller-delivery-method.m
 import { SellerDeliveryMethodService } from '../seller/seller-delivery-method.service';
 import { SellerOnboardingResponse } from '../seller/seller-onboarding.models';
 import { SellerOnboardingService } from '../seller/seller-onboarding.service';
+import {
+  SellerPayoutProfileChangeRequestResponse,
+  SellerPayoutProfileChangeStateResponse
+} from '../seller/seller-payout-profile-change.models';
+import { SellerPayoutProfileChangeService } from '../seller/seller-payout-profile-change.service';
 import { SellerStoreSettingsPageComponent } from './seller-store-settings-page.component';
 
 describe('SellerStoreSettingsPageComponent', () => {
   let fixture: ComponentFixture<SellerStoreSettingsPageComponent>;
   let deliveryMethodService: jasmine.SpyObj<SellerDeliveryMethodService>;
   let onboardingService: jasmine.SpyObj<SellerOnboardingService>;
+  let payoutProfileChangeService: jasmine.SpyObj<SellerPayoutProfileChangeService>;
 
   beforeEach(async () => {
     deliveryMethodService = jasmine.createSpyObj<SellerDeliveryMethodService>(
@@ -41,6 +47,20 @@ describe('SellerStoreSettingsPageComponent', () => {
       isPublished: true
     } }));
     onboardingService.updateAddress.and.resolveTo(createOnboardingResponse());
+    payoutProfileChangeService = jasmine.createSpyObj<SellerPayoutProfileChangeService>(
+      'SellerPayoutProfileChangeService',
+      ['getState', 'upsertDraft', 'submitForReview', 'cancel']);
+    payoutProfileChangeService.getState.and.resolveTo(createPayoutChangeState());
+    payoutProfileChangeService.upsertDraft.and.resolveTo(createPayoutChangeState({
+      activeRequest: createPayoutChangeRequest({ status: 'Draft', proposedPayoutProviderReference: 'provider-ref-next' })
+    }));
+    payoutProfileChangeService.submitForReview.and.resolveTo(createPayoutChangeState({
+      activeRequest: createPayoutChangeRequest({ status: 'PendingReview' })
+    }));
+    payoutProfileChangeService.cancel.and.resolveTo(createPayoutChangeState({
+      activeRequest: null,
+      latestRequest: createPayoutChangeRequest({ status: 'Cancelled' })
+    }));
 
     await TestBed.configureTestingModule({
       imports: [SellerStoreSettingsPageComponent],
@@ -48,14 +68,15 @@ describe('SellerStoreSettingsPageComponent', () => {
         provideNoopAnimations(),
         provideRouter([]),
         { provide: SellerDeliveryMethodService, useValue: deliveryMethodService },
-        { provide: SellerOnboardingService, useValue: onboardingService }
+        { provide: SellerOnboardingService, useValue: onboardingService },
+        { provide: SellerPayoutProfileChangeService, useValue: payoutProfileChangeService }
       ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SellerStoreSettingsPageComponent);
   });
 
-  it('loads store settings with storefront preview and read-only payout messaging', async () => {
+  it('loads store settings with storefront preview and payout change messaging', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -65,7 +86,8 @@ describe('SellerStoreSettingsPageComponent', () => {
     expect(compiled.textContent).toContain('Verified');
     expect(compiled.textContent).toContain('Standard courier');
     expect(compiled.querySelector('a[href="/seller/luxe-seller"]')).not.toBeNull();
-    expect(compiled.textContent).toContain('Payout details are read-only here');
+    expect(compiled.textContent).toContain('Payout profile changes');
+    expect(compiled.textContent).toContain('provider-ref');
   });
 
   it('saves storefront details through existing onboarding service', async () => {
@@ -135,6 +157,28 @@ describe('SellerStoreSettingsPageComponent', () => {
       isActive: true
     });
   });
+
+  it('saves a payout profile change draft through the change request service', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const component = fixture.componentInstance as unknown as {
+      payoutChangeForm: { patchValue(value: Record<string, unknown>): void };
+      savePayoutChangeDraft(): Promise<void>;
+    };
+
+    component.payoutChangeForm.patchValue({
+      payoutProviderReference: 'provider-ref-next',
+      reason: 'Updated payout account token.'
+    });
+
+    await component.savePayoutChangeDraft();
+
+    expect(payoutProfileChangeService.upsertDraft).toHaveBeenCalledWith({
+      payoutProviderReference: 'provider-ref-next',
+      reason: 'Updated payout account token.'
+    });
+  });
 });
 
 function createOnboardingResponse(
@@ -197,6 +241,40 @@ function createDeliveryMethod(
     estimatedMaxDays: 5,
     displayOrder: 10,
     isActive: true,
+    createdAtUtc: '2026-05-21T10:00:00Z',
+    updatedAtUtc: '2026-05-21T10:00:00Z',
+    ...overrides
+  };
+}
+
+function createPayoutChangeState(
+  overrides: Partial<SellerPayoutProfileChangeStateResponse> = {}
+): SellerPayoutProfileChangeStateResponse {
+  return {
+    currentPayoutProfile: {
+      payoutProviderReference: 'provider-ref',
+      isAdminApproved: true,
+      approvedAtUtc: '2026-05-21T10:00:00Z',
+      approvedByUserId: 'admin-user-id'
+    },
+    activeRequest: null,
+    latestRequest: null,
+    ...overrides
+  };
+}
+
+function createPayoutChangeRequest(
+  overrides: Partial<SellerPayoutProfileChangeRequestResponse> = {}
+): SellerPayoutProfileChangeRequestResponse {
+  return {
+    requestId: 'change-request-id',
+    status: 'Draft',
+    proposedPayoutProviderReference: 'provider-ref-next',
+    reason: 'Updated payout account token.',
+    reviewReason: null,
+    submittedAtUtc: null,
+    cancelledAtUtc: null,
+    reviewedAtUtc: null,
     createdAtUtc: '2026-05-21T10:00:00Z',
     updatedAtUtc: '2026-05-21T10:00:00Z',
     ...overrides

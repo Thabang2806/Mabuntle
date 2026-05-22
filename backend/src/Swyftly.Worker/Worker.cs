@@ -3,6 +3,7 @@ namespace Swyftly.Worker;
 using Swyftly.Application.Inventory;
 using Swyftly.Application.Media;
 using Swyftly.Application.Notifications;
+using Swyftly.Application.Orders;
 using Swyftly.Application.Payments;
 
 public class Worker(
@@ -25,6 +26,7 @@ public class Worker(
             await RedactExpiredPaymentWebhookPayloadsAsync(stoppingToken);
             await CleanupMediaAsync(stoppingToken);
             await ProcessNotificationEmailsAsync(stoppingToken);
+            await SyncCarrierTrackingAsync(stoppingToken);
             await Task.Delay(IdleDelay, stoppingToken);
         }
     }
@@ -125,6 +127,32 @@ public class Worker(
         catch (Exception exception)
         {
             logger.LogError(exception, "Notification email delivery processing failed.");
+        }
+    }
+
+    private async Task SyncCarrierTrackingAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            using var scope = serviceScopeFactory.CreateScope();
+            var carrierTrackingSyncService = scope.ServiceProvider.GetRequiredService<ICarrierTrackingSyncService>();
+            var result = await carrierTrackingSyncService.SyncDueShipmentsAsync(timeProvider.GetUtcNow(), stoppingToken);
+
+            if (result.ProcessedCount > 0)
+            {
+                logger.LogInformation(
+                    "Processed {ProcessedCount} carrier tracking sync candidates; updated {UpdatedCount}, failed {FailedCount}.",
+                    result.ProcessedCount,
+                    result.UpdatedCount,
+                    result.FailedCount);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Carrier tracking sync failed.");
         }
     }
 }

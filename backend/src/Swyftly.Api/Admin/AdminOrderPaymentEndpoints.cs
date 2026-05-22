@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Swyftly.Application.Admin;
+using Swyftly.Application.Delivery;
 using Swyftly.Application.Identity;
 using Swyftly.Application.Orders;
 using Swyftly.Domain.Orders;
@@ -472,7 +473,11 @@ public static class AdminOrderPaymentEndpoints
                     order.DeliveryAddress.Province,
                     order.DeliveryAddress.PostalCode,
                     order.DeliveryAddress.CountryCode,
-                    order.DeliveryAddress.DeliveryInstructions),
+                    order.DeliveryAddress.DeliveryInstructions,
+                    order.DeliveryAddress.VerificationStatus.ToString(),
+                    order.DeliveryAddress.VerificationProvider,
+                    AddressVerificationWarningsJson.Deserialize(order.DeliveryAddress.VerificationWarningsJson),
+                    order.DeliveryAddress.VerifiedAtUtc),
             order.StatusHistory
                 .OrderBy(history => history.ChangedAtUtc)
                 .Select(history => new OrderStatusHistoryResult(
@@ -502,7 +507,15 @@ public static class AdminOrderPaymentEndpoints
                             shipmentEvent.CarrierName,
                             shipmentEvent.TrackingNumber,
                             shipmentEvent.OccurredAtUtc))
-                        .ToArray()))
+                        .ToArray(),
+                    shipment.CarrierProviderName,
+                    shipment.CarrierServiceCode,
+                    shipment.ProviderShipmentReference,
+                    shipment.CarrierBookingStatus?.ToString(),
+                    shipment.ProviderStatus,
+                    shipment.ProviderLabelUrl,
+                    shipment.ProviderLastSyncedAtUtc,
+                    shipment.ProviderError))
                 .ToArray(),
             payments,
             order.CreatedAtUtc,
@@ -511,7 +524,24 @@ public static class AdminOrderPaymentEndpoints
             order.DeliveryMethodName,
             order.DeliveryMethodType,
             order.DeliveryEstimatedMinDays,
-            order.DeliveryEstimatedMaxDays);
+            order.DeliveryEstimatedMaxDays,
+            order.PickupPoint is null
+                ? null
+                : new OrderPickupPointResult(
+                    order.PickupPoint.PickupPointId,
+                    order.PickupPoint.ProviderName,
+                    order.PickupPoint.Code,
+                    order.PickupPoint.Name,
+                    order.PickupPoint.AddressLine1,
+                    order.PickupPoint.AddressLine2,
+                    order.PickupPoint.Suburb,
+                    order.PickupPoint.City,
+                    order.PickupPoint.Province,
+                    order.PickupPoint.PostalCode,
+                    order.PickupPoint.CountryCode,
+                    order.PickupPoint.Latitude,
+                    order.PickupPoint.Longitude,
+                    order.PickupPoint.OpeningHours));
 
     private static AdminPaymentSummaryResponse MapPaymentSummary(Payment payment) =>
         new(
@@ -635,7 +665,8 @@ public sealed record AdminOrderSummaryResponse(
     string? DeliveryMethodName = null,
     string? DeliveryMethodType = null,
     int? DeliveryEstimatedMinDays = null,
-    int? DeliveryEstimatedMaxDays = null);
+    int? DeliveryEstimatedMaxDays = null,
+    OrderPickupPointResult? PickupPoint = null);
 
 public sealed record AdminOrderDetailResponse(
     Guid OrderId,
@@ -660,7 +691,8 @@ public sealed record AdminOrderDetailResponse(
     string? DeliveryMethodName = null,
     string? DeliveryMethodType = null,
     int? DeliveryEstimatedMinDays = null,
-    int? DeliveryEstimatedMaxDays = null);
+    int? DeliveryEstimatedMaxDays = null,
+    OrderPickupPointResult? PickupPoint = null);
 
 public sealed record AdminPaymentSummaryResponse(
     Guid PaymentId,

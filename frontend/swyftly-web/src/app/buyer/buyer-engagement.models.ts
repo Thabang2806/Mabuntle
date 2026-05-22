@@ -90,6 +90,20 @@ export interface BuyerNotificationResponse {
   createdAtUtc: string;
 }
 
+export interface BuyerNotificationUnreadCountResponse {
+  unreadCount: number;
+}
+
+export interface NotificationReadRealtimeEvent {
+  notificationId: string;
+  readAtUtc: string;
+}
+
+export interface NotificationsReadAllRealtimeEvent {
+  readAtUtc: string;
+  updatedCount: number;
+}
+
 export interface NotificationsReadAllResponse {
   updatedCount: number;
 }

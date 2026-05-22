@@ -1,3 +1,5 @@
+using Swyftly.Domain.Delivery;
+
 namespace Swyftly.Domain.Orders;
 
 public sealed record OrderDeliveryAddress(
@@ -10,4 +12,8 @@ public sealed record OrderDeliveryAddress(
     string Province,
     string PostalCode,
     string CountryCode,
-    string? DeliveryInstructions = null);
+    string? DeliveryInstructions = null,
+    AddressVerificationStatus VerificationStatus = AddressVerificationStatus.Unverified,
+    string? VerificationProvider = null,
+    string? VerificationWarningsJson = null,
+    DateTimeOffset? VerifiedAtUtc = null);

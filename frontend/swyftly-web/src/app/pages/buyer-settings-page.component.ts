@@ -9,6 +9,7 @@ import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerSettingsService } from '../buyer/buyer-settings.service';
 import {
   BuyerDeliveryAddressResponse,
+  BuyerDeliveryAddressVerificationResponse,
   BuyerNotificationPreferenceCategory,
   BuyerProfileSettingsResponse
 } from '../buyer/buyer-settings.models';
@@ -143,6 +144,12 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
                     @if (address.deliveryInstructions) {
                       <p>Instructions: {{ address.deliveryInstructions }}</p>
                     }
+                    @if (address.verificationStatus) {
+                      <p>Address check: {{ address.verificationStatus }}</p>
+                    }
+                    @if ((address.verificationWarnings?.length ?? 0) > 0) {
+                      <p>Warnings: {{ address.verificationWarnings!.join(' ') }}</p>
+                    }
                     <div class="buyer-action-row">
                       <button mat-stroked-button type="button" (click)="editDeliveryAddress(address)">Edit</button>
                       <button mat-stroked-button type="button" [disabled]="address.isDefault || isSavingAddress()" (click)="makeDefaultDeliveryAddress(address.deliveryAddressId)">Make default</button>
@@ -214,7 +221,21 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
 
               <mat-checkbox formControlName="isDefault">Use as default delivery address</mat-checkbox>
 
+              @if (addressVerificationPreview(); as verification) {
+                <app-ui-alert [tone]="verification.verificationStatus === 'Verified' ? 'success' : 'warning'">
+                  Address check: {{ verification.verificationStatus }}.
+                  @if (verification.verificationWarnings.length > 0) {
+                    {{ verification.verificationWarnings.join(' ') }}
+                  } @else {
+                    No local address warnings.
+                  }
+                </app-ui-alert>
+              }
+
               <div class="buyer-action-row">
+                <button mat-stroked-button type="button" [disabled]="addressForm.invalid || isVerifyingAddress()" (click)="verifyDeliveryAddress()">
+                  {{ isVerifyingAddress() ? 'Checking...' : 'Verify address' }}
+                </button>
                 <button mat-flat-button type="submit" [disabled]="addressForm.invalid || isSavingAddress()">
                   {{ isSavingAddress() ? 'Saving...' : editingAddressId() ? 'Save address' : 'Add address' }}
                 </button>
@@ -242,7 +263,9 @@ export class BuyerSettingsPageComponent implements OnInit {
   protected readonly isSavingProfile = signal(false);
   protected readonly isSavingPreferences = signal(false);
   protected readonly isSavingAddress = signal(false);
+  protected readonly isVerifyingAddress = signal(false);
   protected readonly deliveryAddresses = signal<BuyerDeliveryAddressResponse[]>([]);
+  protected readonly addressVerificationPreview = signal<BuyerDeliveryAddressVerificationResponse | null>(null);
   protected readonly editingAddressId = signal<string | null>(null);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly successMessage = signal<string | null>(null);
@@ -394,6 +417,24 @@ export class BuyerSettingsPageComponent implements OnInit {
     }
   }
 
+  protected async verifyDeliveryAddress(): Promise<void> {
+    if (this.addressForm.invalid || this.isVerifyingAddress()) {
+      this.addressForm.markAllAsTouched();
+      return;
+    }
+
+    this.isVerifyingAddress.set(true);
+    this.errorMessage.set(null);
+    this.successMessage.set(null);
+    try {
+      this.addressVerificationPreview.set(await this.settingsService.verifyDeliveryAddress(this.toVerificationRequest()));
+    } catch (error) {
+      this.errorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isVerifyingAddress.set(false);
+    }
+  }
+
   protected editDeliveryAddress(address: BuyerDeliveryAddressResponse): void {
     this.editingAddressId.set(address.deliveryAddressId);
     this.addressForm.setValue({
@@ -410,6 +451,24 @@ export class BuyerSettingsPageComponent implements OnInit {
       deliveryInstructions: address.deliveryInstructions ?? '',
       isDefault: address.isDefault
     });
+    this.addressVerificationPreview.set(address.verificationStatus
+      ? {
+          verificationStatus: address.verificationStatus,
+          verificationProvider: address.verificationProvider ?? 'LocalRules',
+          verificationWarnings: address.verificationWarnings ?? [],
+          verifiedAtUtc: address.verifiedAtUtc ?? '',
+          recipientName: address.recipientName,
+          phoneNumber: address.phoneNumber,
+          addressLine1: address.addressLine1,
+          addressLine2: address.addressLine2,
+          suburb: address.suburb,
+          city: address.city,
+          province: address.province,
+          postalCode: address.postalCode,
+          countryCode: address.countryCode,
+          deliveryInstructions: address.deliveryInstructions
+        }
+      : null);
   }
 
   protected async deleteDeliveryAddress(deliveryAddressId: string): Promise<void> {
@@ -468,6 +527,7 @@ export class BuyerSettingsPageComponent implements OnInit {
       deliveryInstructions: '',
       isDefault: this.deliveryAddresses().length === 0
     });
+    this.addressVerificationPreview.set(null);
   }
 
   protected formatAddress(address: BuyerDeliveryAddressResponse): string {
@@ -536,6 +596,22 @@ export class BuyerSettingsPageComponent implements OnInit {
       countryCode: value.countryCode.trim().toUpperCase(),
       deliveryInstructions: this.emptyToNull(value.deliveryInstructions),
       isDefault: value.isDefault
+    };
+  }
+
+  private toVerificationRequest() {
+    const value = this.toAddressRequest();
+    return {
+      recipientName: value.recipientName,
+      phoneNumber: value.phoneNumber,
+      addressLine1: value.addressLine1,
+      addressLine2: value.addressLine2,
+      suburb: value.suburb,
+      city: value.city,
+      province: value.province,
+      postalCode: value.postalCode,
+      countryCode: value.countryCode,
+      deliveryInstructions: value.deliveryInstructions
     };
   }
 }

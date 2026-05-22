@@ -27,8 +27,10 @@ describe('AdminWorkspaceNavComponent', () => {
     expect(links).toContain(jasmine.objectContaining({ label: 'Sellers', href: '/admin/sellers' }));
     expect(links).toContain(jasmine.objectContaining({ label: 'Products', href: '/admin/products' }));
     expect(links).toContain(jasmine.objectContaining({ label: 'Reviews', href: '/admin/reviews' }));
+    expect(links).toContain(jasmine.objectContaining({ label: 'Pickup points', href: '/admin/pickup-points' }));
     expect(links).toContain(jasmine.objectContaining({ label: 'Orders', href: '/admin/orders' }));
     expect(links).toContain(jasmine.objectContaining({ label: 'Payments', href: '/admin/payments' }));
+    expect(links).toContain(jasmine.objectContaining({ label: 'Payout profile', href: '/admin/payout-profile-changes' }));
     expect(links).toContain(jasmine.objectContaining({ label: 'Audit logs', href: '/admin/audit-logs' }));
   });
 });

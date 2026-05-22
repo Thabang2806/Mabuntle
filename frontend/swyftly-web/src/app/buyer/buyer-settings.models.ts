@@ -54,4 +54,28 @@ export interface BuyerDeliveryAddressResponse extends BuyerDeliveryAddressReques
   deliveryAddressId: string;
   createdAtUtc: string;
   updatedAtUtc: string;
+  verificationStatus?: string | null;
+  verificationProvider?: string | null;
+  verificationWarnings?: string[] | null;
+  verifiedAtUtc?: string | null;
+}
+
+export interface BuyerDeliveryAddressVerificationRequest {
+  recipientName: string;
+  phoneNumber: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  suburb: string | null;
+  city: string;
+  province: string;
+  postalCode: string;
+  countryCode: string;
+  deliveryInstructions: string | null;
+}
+
+export interface BuyerDeliveryAddressVerificationResponse extends BuyerDeliveryAddressVerificationRequest {
+  verificationStatus: string;
+  verificationProvider: string;
+  verificationWarnings: string[];
+  verifiedAtUtc: string;
 }

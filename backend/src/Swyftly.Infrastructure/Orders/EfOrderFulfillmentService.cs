@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Swyftly.Application.Common.Errors;
 using Swyftly.Application.Common.Results;
 using Swyftly.Application.Common.Validation;
+using Swyftly.Application.Delivery;
 using Swyftly.Application.Orders;
+using Swyftly.Domain.Delivery;
 using Swyftly.Domain.Orders;
 using Swyftly.Infrastructure.Persistence;
 
@@ -519,13 +521,22 @@ public sealed class EfOrderFulfillmentService(SwyftlyDbContext dbContext) : IOrd
                             shipmentEvent.CarrierName,
                             shipmentEvent.TrackingNumber,
                             shipmentEvent.OccurredAtUtc))
-                        .ToArray()))
+                        .ToArray(),
+                    shipment.CarrierProviderName,
+                    shipment.CarrierServiceCode,
+                    shipment.ProviderShipmentReference,
+                    shipment.CarrierBookingStatus?.ToString(),
+                    shipment.ProviderStatus,
+                    shipment.ProviderLabelUrl,
+                    shipment.ProviderLastSyncedAtUtc,
+                    shipment.ProviderError))
                 .ToArray(),
             order.DeliveryMethodId,
             order.DeliveryMethodName,
             order.DeliveryMethodType,
             order.DeliveryEstimatedMinDays,
-            order.DeliveryEstimatedMaxDays);
+            order.DeliveryEstimatedMaxDays,
+            MapPickupPoint(order.PickupPoint));
 
     private static OrderDeliveryAddressResult? MapDeliveryAddress(OrderDeliveryAddress? address) =>
         address is null
@@ -540,7 +551,30 @@ public sealed class EfOrderFulfillmentService(SwyftlyDbContext dbContext) : IOrd
                 address.Province,
                 address.PostalCode,
                 address.CountryCode,
-                address.DeliveryInstructions);
+                address.DeliveryInstructions,
+                address.VerificationStatus.ToString(),
+                address.VerificationProvider,
+                AddressVerificationWarningsJson.Deserialize(address.VerificationWarningsJson),
+                address.VerifiedAtUtc);
+
+    private static OrderPickupPointResult? MapPickupPoint(PickupPointSnapshot? pickupPoint) =>
+        pickupPoint is null
+            ? null
+            : new OrderPickupPointResult(
+                pickupPoint.PickupPointId,
+                pickupPoint.ProviderName,
+                pickupPoint.Code,
+                pickupPoint.Name,
+                pickupPoint.AddressLine1,
+                pickupPoint.AddressLine2,
+                pickupPoint.Suburb,
+                pickupPoint.City,
+                pickupPoint.Province,
+                pickupPoint.PostalCode,
+                pickupPoint.CountryCode,
+                pickupPoint.Latitude,
+                pickupPoint.Longitude,
+                pickupPoint.OpeningHours);
 
     private static string ToCamelCase(string value) =>
         string.IsNullOrEmpty(value) ? value : char.ToLowerInvariant(value[0]) + value[1..];

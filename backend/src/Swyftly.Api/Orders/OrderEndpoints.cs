@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Swyftly.Api.Notifications;
 using Swyftly.Api.Results;
+using Swyftly.Application.Delivery;
 using Swyftly.Application.Identity;
 using Swyftly.Application.Notifications;
 using Swyftly.Application.Orders;
@@ -129,6 +130,22 @@ public static class OrderEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
+        sellerGroup.MapPost("/{orderId:guid}/book-carrier", BookCarrierAsync)
+            .WithName("BookSellerOrderCarrier")
+            .WithSummary("Books the ready-to-ship seller order with the configured carrier provider.")
+            .Produces<OrderResult>(StatusCodes.Status200OK)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        sellerGroup.MapPost("/{orderId:guid}/sync-carrier-tracking", SyncCarrierTrackingAsync)
+            .WithName("SyncSellerOrderCarrierTracking")
+            .WithSummary("Synchronizes carrier tracking for a booked seller order.")
+            .Produces<OrderResult>(StatusCodes.Status200OK)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
         return app;
     }
 
@@ -168,7 +185,8 @@ public static class OrderEndpoints
                         request.DeliveryAddress.PostalCode,
                         request.DeliveryAddress.CountryCode,
                         request.DeliveryAddress.DeliveryInstructions),
-                DeliveryMethodId: request.DeliveryMethodId),
+                DeliveryMethodId: request.DeliveryMethodId,
+                PickupPointId: request.PickupPointId),
             cancellationToken);
 
         return result.ToHttpResult(HttpResults.Ok);
@@ -528,6 +546,58 @@ public static class OrderEndpoints
         return result.ToHttpResult(HttpResults.Ok);
     }
 
+    private static async Task<IResult> BookCarrierAsync(
+        Guid orderId,
+        BookCarrierApiRequest request,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        ICarrierTrackingSyncService carrierTrackingSyncService,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var seller = await GetCurrentSellerAsync(principal, dbContext, cancellationToken);
+        if (seller is null)
+        {
+            return SellerNotFound();
+        }
+
+        var result = await carrierTrackingSyncService.BookCarrierAsync(
+            new CarrierBookingRequest(
+                seller.Id,
+                orderId,
+                request.PackageWeightKg,
+                request.PackageLengthCm,
+                request.PackageWidthCm,
+                request.PackageHeightCm,
+                request.ServiceCode,
+                request.CollectionNote,
+                timeProvider.GetUtcNow()),
+            cancellationToken);
+
+        return result.ToHttpResult(HttpResults.Ok);
+    }
+
+    private static async Task<IResult> SyncCarrierTrackingAsync(
+        Guid orderId,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        ICarrierTrackingSyncService carrierTrackingSyncService,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var seller = await GetCurrentSellerAsync(principal, dbContext, cancellationToken);
+        if (seller is null)
+        {
+            return SellerNotFound();
+        }
+
+        var result = await carrierTrackingSyncService.SyncCarrierTrackingAsync(
+            new CarrierTrackingSyncRequest(seller.Id, orderId, timeProvider.GetUtcNow()),
+            cancellationToken);
+
+        return result.ToHttpResult(HttpResults.Ok);
+    }
+
     private static IQueryable<Order> OrderQuery(SwyftlyDbContext dbContext) =>
         dbContext.Orders
             .Include(order => order.Items)
@@ -596,7 +666,11 @@ public static class OrderEndpoints
                     order.DeliveryAddress.Province,
                     order.DeliveryAddress.PostalCode,
                     order.DeliveryAddress.CountryCode,
-                    order.DeliveryAddress.DeliveryInstructions),
+                    order.DeliveryAddress.DeliveryInstructions,
+                    order.DeliveryAddress.VerificationStatus.ToString(),
+                    order.DeliveryAddress.VerificationProvider,
+                    AddressVerificationWarningsJson.Deserialize(order.DeliveryAddress.VerificationWarningsJson),
+                    order.DeliveryAddress.VerifiedAtUtc),
             order.StatusHistory
                 .OrderBy(history => history.ChangedAtUtc)
                 .Select(history => new OrderStatusHistoryResult(
@@ -626,13 +700,38 @@ public static class OrderEndpoints
                             shipmentEvent.CarrierName,
                             shipmentEvent.TrackingNumber,
                             shipmentEvent.OccurredAtUtc))
-                        .ToArray()))
+                        .ToArray(),
+                    shipment.CarrierProviderName,
+                    shipment.CarrierServiceCode,
+                    shipment.ProviderShipmentReference,
+                    shipment.CarrierBookingStatus?.ToString(),
+                    shipment.ProviderStatus,
+                    shipment.ProviderLabelUrl,
+                    shipment.ProviderLastSyncedAtUtc,
+                    shipment.ProviderError))
                 .ToArray(),
             order.DeliveryMethodId,
             order.DeliveryMethodName,
             order.DeliveryMethodType,
             order.DeliveryEstimatedMinDays,
-            order.DeliveryEstimatedMaxDays);
+            order.DeliveryEstimatedMaxDays,
+            order.PickupPoint is null
+                ? null
+                : new OrderPickupPointResult(
+                    order.PickupPoint.PickupPointId,
+                    order.PickupPoint.ProviderName,
+                    order.PickupPoint.Code,
+                    order.PickupPoint.Name,
+                    order.PickupPoint.AddressLine1,
+                    order.PickupPoint.AddressLine2,
+                    order.PickupPoint.Suburb,
+                    order.PickupPoint.City,
+                    order.PickupPoint.Province,
+                    order.PickupPoint.PostalCode,
+                    order.PickupPoint.CountryCode,
+                    order.PickupPoint.Latitude,
+                    order.PickupPoint.Longitude,
+                    order.PickupPoint.OpeningHours));
 
     private static bool HasLatestShipmentEvent(OrderResult order, string eventType, DateTimeOffset occurredAtUtc) =>
         order.Shipments
@@ -666,7 +765,8 @@ public sealed record CreateOrderFromCartApiRequest(
     int? ReservationMinutes,
     Guid? DeliveryAddressId = null,
     CreateOrderDeliveryAddressApiRequest? DeliveryAddress = null,
-    Guid? DeliveryMethodId = null);
+    Guid? DeliveryMethodId = null,
+    Guid? PickupPointId = null);
 
 public sealed record CreateOrderDeliveryAddressApiRequest(
     string RecipientName,
@@ -688,3 +788,11 @@ public sealed record AddOrderTrackingApiRequest(
 
 public sealed record FulfillmentExceptionApiRequest(
     string Reason);
+
+public sealed record BookCarrierApiRequest(
+    decimal PackageWeightKg,
+    decimal PackageLengthCm,
+    decimal PackageWidthCm,
+    decimal PackageHeightCm,
+    string ServiceCode,
+    string? CollectionNote);

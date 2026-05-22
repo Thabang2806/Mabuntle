@@ -8,6 +8,7 @@ using Swyftly.Application.Advertising;
 using Swyftly.Application.Admin;
 using Swyftly.Application.Ai;
 using Swyftly.Application.Catalog;
+using Swyftly.Application.Delivery;
 using Swyftly.Application.Disputes;
 using Swyftly.Application.Inventory;
 using Swyftly.Application.Ledger;
@@ -21,6 +22,8 @@ using Swyftly.Application.Search;
 using Swyftly.Infrastructure.Admin;
 using Swyftly.Infrastructure.Advertising;
 using Swyftly.Infrastructure.Ai;
+using Swyftly.Infrastructure.Carriers;
+using Swyftly.Infrastructure.Delivery;
 using Swyftly.Infrastructure.Disputes;
 using Swyftly.Infrastructure.Identity;
 using Swyftly.Infrastructure.Inventory;
@@ -199,6 +202,28 @@ public static class DependencyInjection
                 options.Smtp.EnableSsl = enableSsl;
             }
         });
+        services.Configure<CarrierProviderOptions>(options =>
+        {
+            var section = configuration.GetSection(CarrierProviderOptions.SectionName);
+            options.ProviderName = section["ProviderName"] ?? options.ProviderName;
+
+            var fake = section.GetSection("Fake");
+            options.Fake.TrackingBaseUrl = fake["TrackingBaseUrl"] ?? options.Fake.TrackingBaseUrl;
+            options.Fake.LabelBaseUrl = fake["LabelBaseUrl"] ?? options.Fake.LabelBaseUrl;
+        });
+        services.Configure<CarrierTrackingOptions>(options =>
+        {
+            var section = configuration.GetSection(CarrierTrackingOptions.SectionName);
+            if (int.TryParse(section["BatchSize"], out var batchSize))
+            {
+                options.BatchSize = batchSize;
+            }
+
+            if (int.TryParse(section["SyncIntervalMinutes"], out var syncIntervalMinutes))
+            {
+                options.SyncIntervalMinutes = syncIntervalMinutes;
+            }
+        });
         services.AddSingleton<IImageStorageProvider>(serviceProvider =>
         {
             var imageOptions = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ImageStorageOptions>>();
@@ -223,11 +248,23 @@ public static class DependencyInjection
         services.AddScoped<IProductEmbeddingGenerator, ProductEmbeddingGenerator>();
         services.AddSingleton<IAiEmbeddingService, FakeAiEmbeddingService>();
         services.AddScoped<IInventoryReservationService, EfInventoryReservationService>();
+        services.AddScoped<IAddressVerificationService, LocalRulesAddressVerificationService>();
         services.AddScoped<IOrderCreationService, EfOrderCreationService>();
         services.AddScoped<IOrderFulfillmentService, EfOrderFulfillmentService>();
+        services.AddScoped<ManualCarrierProvider>();
+        services.AddScoped<FakeCarrierProvider>();
+        services.AddScoped<ICarrierProvider>(serviceProvider =>
+        {
+            var carrierOptions = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<CarrierProviderOptions>>().Value;
+            return string.Equals(carrierOptions.ProviderName, FakeCarrierProvider.Name, StringComparison.OrdinalIgnoreCase)
+                ? serviceProvider.GetRequiredService<FakeCarrierProvider>()
+                : serviceProvider.GetRequiredService<ManualCarrierProvider>();
+        });
+        services.AddScoped<ICarrierTrackingSyncService, EfCarrierTrackingSyncService>();
         services.AddScoped<IReturnWorkflowService, EfReturnWorkflowService>();
         services.AddScoped<IRefundWorkflowService, EfRefundWorkflowService>();
         services.AddScoped<IDisputeWorkflowService, EfDisputeWorkflowService>();
+        services.AddScoped<INotificationRealtimePublisher, NoOpNotificationRealtimePublisher>();
         services.AddScoped<INotificationService, EfNotificationService>();
         services.AddScoped<INotificationEmailDeliveryService, EfNotificationEmailDeliveryService>();
         services.AddScoped<LogOnlyEmailDeliveryProvider>();

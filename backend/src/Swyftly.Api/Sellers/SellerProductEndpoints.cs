@@ -95,6 +95,7 @@ public static class SellerProductEndpoints
         group.MapPost("/{id:guid}/images/upload", UploadImageAsync)
             .WithName("UploadSellerProductImage")
             .WithSummary("Uploads a local product image for a seller-owned editable product.")
+            .Accepts<IFormFile>("multipart/form-data")
             .DisableAntiforgery()
             .RequireRateLimiting(SwyftlyRateLimitPolicies.ProductWrite)
             .Produces<SellerProductDetailResponse>(StatusCodes.Status201Created)
@@ -156,6 +157,7 @@ public static class SellerProductEndpoints
         group.MapPost("/{id:guid}/revision/images/upload", UploadRevisionImageAsync)
             .WithName("UploadSellerProductListingRevisionImage")
             .WithSummary("Uploads an image into a published product listing revision.")
+            .Accepts<IFormFile>("multipart/form-data")
             .DisableAntiforgery()
             .RequireRateLimiting(SwyftlyRateLimitPolicies.ProductWrite)
             .Produces<SellerProductRevisionResponse>(StatusCodes.Status201Created)
@@ -524,7 +526,7 @@ public static class SellerProductEndpoints
 
     private static async Task<IResult> UploadImageAsync(
         Guid id,
-        [FromForm] IFormFile file,
+        IFormFile file,
         [FromForm] string? altText,
         [FromForm] int sortOrder,
         [FromForm] bool isPrimary,
@@ -889,7 +891,7 @@ public static class SellerProductEndpoints
 
     private static async Task<IResult> UploadRevisionImageAsync(
         Guid id,
-        [FromForm] IFormFile file,
+        IFormFile file,
         [FromForm] string? altText,
         [FromForm] int sortOrder,
         [FromForm] bool isPrimary,

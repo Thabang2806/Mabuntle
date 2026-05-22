@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Swyftly.Api.Authentication;
+using Swyftly.Infrastructure.Carriers;
 using Swyftly.Infrastructure.Notifications;
 using Swyftly.Infrastructure.Payments;
 
@@ -62,6 +63,7 @@ public static class SecurityConfigurationValidator
         ValidatePaymentProviderConfiguration(configuration);
         ValidateAuthCookieConfiguration(configuration);
         ValidateEmailDeliveryConfiguration(configuration);
+        ValidateCarrierProviderConfiguration(configuration);
     }
 
     private static void ValidatePaymentProviderConfiguration(IConfiguration configuration)
@@ -171,6 +173,22 @@ public static class SecurityConfigurationValidator
         {
             throw new InvalidOperationException(
                 "Production EmailDelivery:Smtp:Port must be a valid positive port.");
+        }
+    }
+
+    private static void ValidateCarrierProviderConfiguration(IConfiguration configuration)
+    {
+        var providerName = configuration["CarrierProvider:ProviderName"] ?? ManualCarrierProvider.Name;
+        if (string.Equals(providerName, FakeCarrierProvider.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Production CarrierProvider:ProviderName cannot be Fake. Use Manual or configure a real carrier provider before running in production.");
+        }
+
+        if (!string.Equals(providerName, ManualCarrierProvider.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Production CarrierProvider:ProviderName '{providerName}' is not supported.");
         }
     }
 

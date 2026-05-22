@@ -219,6 +219,12 @@ export const routes: Routes = [
     canActivate: [requireRoleGuard(FINANCE_READ_ROLES)]
   },
   {
+    path: 'admin/payout-profile-changes',
+    loadComponent: () => import('./pages/admin-payout-profile-changes-page.component').then(component => component.AdminPayoutProfileChangesPageComponent),
+    title: 'Payout profile changes | Swyftly',
+    canActivate: [requireRoleGuard(FINANCE_READ_ROLES)]
+  },
+  {
     path: 'admin/support',
     loadComponent: () => import('./pages/admin-support-page.component').then(component => component.AdminSupportPageComponent),
     title: 'Support tickets | Swyftly',
@@ -234,6 +240,12 @@ export const routes: Routes = [
     path: 'admin/categories',
     loadComponent: () => import('./pages/admin-categories-page.component').then(component => component.AdminCategoriesPageComponent),
     title: 'Catalog categories | Swyftly',
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
+  },
+  {
+    path: 'admin/pickup-points',
+    loadComponent: () => import('./pages/admin-pickup-points-page.component').then(component => component.AdminPickupPointsPageComponent),
+    title: 'Pickup points | Swyftly',
     canActivate: [requireRoleGuard(ADMIN_ROLES)]
   },
   {

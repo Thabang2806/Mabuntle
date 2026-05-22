@@ -3,13 +3,16 @@ using Swyftly.Domain.Buyers;
 using Swyftly.Domain.Notifications;
 using Swyftly.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Swyftly.Infrastructure.Notifications;
 
 public sealed class EfNotificationService(
     SwyftlyDbContext dbContext,
-    IOptions<EmailDeliveryOptions> emailOptions) : INotificationService
+    IOptions<EmailDeliveryOptions> emailOptions,
+    INotificationRealtimePublisher realtimePublisher,
+    ILogger<EfNotificationService> logger) : INotificationService
 {
     private readonly EmailDeliveryOptions emailOptions = emailOptions.Value;
 
@@ -63,7 +66,29 @@ public sealed class EfNotificationService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        if (notification.IsInAppVisible)
+        {
+            await PublishCreatedBestEffortAsync(notification, cancellationToken);
+        }
+
         return Map(notification);
+    }
+
+    private async Task PublishCreatedBestEffortAsync(
+        Notification notification,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await realtimePublisher.PublishNotificationCreatedAsync(Map(notification), cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Realtime notification publish failed for notification {NotificationId}.",
+                notification.Id);
+        }
     }
 
     private async Task<NotificationChannelDecision> ResolveChannelsAsync(

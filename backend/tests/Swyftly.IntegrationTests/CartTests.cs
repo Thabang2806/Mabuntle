@@ -14,6 +14,7 @@ using Swyftly.Api.Carts;
 using Swyftly.Api.Sellers;
 using Swyftly.Application.Identity;
 using Swyftly.Domain.Catalog;
+using Swyftly.Domain.Delivery;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Persistence;
 
@@ -99,6 +100,35 @@ public class CartTests
         Assert.Equal(2, options.Options.Count);
         Assert.Contains(options.Options, option => option.Name == "Standard courier" && option.ShippingAmount == 0m && option.FreeShippingApplied);
         Assert.Contains(options.Options, option => option.Name == "Gauteng local courier" && option.ShippingAmount == 45m);
+    }
+
+    [Fact]
+    public async Task Buyer_ShippingOptionsIncludePickupPointsForPickupDeliveryMethod()
+    {
+        await using var factory = new CartTestFactory();
+        using var client = factory.CreateClient();
+        await AuthorizeBuyerAsync(client, "shipping-pickup-buyer@example.test");
+        var sellerId = await CreateSellerAsync(factory, "Seller One", "seller-one");
+        await CreateDeliveryMethodAsync(factory, sellerId, "Pickup counter", SellerDeliveryMethodType.PickupPoint, "Gauteng", 25m, freeShippingThreshold: null);
+        await CreatePickupPointAsync(factory, "Manual", "JHB-ROSEBANK-001", "Rosebank Pickup Counter", "Gauteng", isActive: true);
+        await CreatePickupPointAsync(factory, "Manual", "CPT-SEA-001", "Sea Point Pickup Counter", "Western Cape", isActive: true);
+        var variantId = await CreatePublishedProductAsync(factory, sellerId, "Pickup Dress", 499m);
+        using var addResponse = await client.PostAsJsonAsync("/api/cart/items", new AddCartItemRequest(variantId, 1));
+        addResponse.EnsureSuccessStatusCode();
+        var cart = await ReadJsonAsync<CartResponse>(addResponse);
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/cart/shipping-options",
+            new CartShippingOptionsRequest(cart.CartId, DeliveryAddress: TestDeliveryAddress()));
+
+        response.EnsureSuccessStatusCode();
+        var options = await ReadJsonAsync<CartShippingOptionsResponse>(response);
+        var option = Assert.Single(options.Options);
+        Assert.Equal("PickupPoint", option.MethodType);
+        Assert.True(option.RequiresPickupPoint);
+        var pickupPoint = Assert.Single(option.PickupPoints!);
+        Assert.Equal("Rosebank Pickup Counter", pickupPoint.Name);
+        Assert.Equal("Verified", options.AddressVerification!.VerificationStatus);
     }
 
     [Fact]
@@ -392,6 +422,36 @@ public class CartTests
         dbContext.SellerDeliveryMethods.Add(method);
         await dbContext.SaveChangesAsync();
         return method.Id;
+    }
+
+    private static async Task<Guid> CreatePickupPointAsync(
+        CartTestFactory factory,
+        string providerName,
+        string code,
+        string name,
+        string province,
+        bool isActive)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        var point = new PickupPoint(
+            providerName,
+            code,
+            name,
+            "10 Market Street",
+            null,
+            "Rosebank",
+            "Johannesburg",
+            province,
+            "2196",
+            "ZA",
+            null,
+            null,
+            "Mon-Fri 09:00-17:00",
+            isActive);
+        dbContext.PickupPoints.Add(point);
+        await dbContext.SaveChangesAsync();
+        return point.Id;
     }
 
     private static CartShippingDeliveryAddressRequest TestDeliveryAddress() =>

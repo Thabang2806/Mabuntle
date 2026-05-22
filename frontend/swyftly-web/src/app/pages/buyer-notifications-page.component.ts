@@ -1,10 +1,11 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerNotificationResponse } from '../buyer/buyer-engagement.models';
 import { BuyerEngagementService } from '../buyer/buyer-engagement.service';
+import { BuyerNotificationRealtimeService } from '../buyer/buyer-notification-realtime.service';
 import { BuyerWorkspaceNavComponent } from '../buyer/buyer-workspace-nav.component';
 import { EmptyStateComponent } from '../shared/ui/empty-state.component';
 import { PageHeaderComponent } from '../shared/ui/page-header.component';
@@ -101,6 +102,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 })
 export class BuyerNotificationsPageComponent implements OnInit {
   private readonly engagementService = inject(BuyerEngagementService);
+  private readonly notificationRealtime = inject(BuyerNotificationRealtimeService);
 
   protected readonly notifications = signal<BuyerNotificationResponse[]>([]);
   protected readonly isLoading = signal(true);
@@ -110,6 +112,29 @@ export class BuyerNotificationsPageComponent implements OnInit {
   protected readonly successMessage = signal<string | null>(null);
   protected readonly unreadCount = computed(() =>
     this.notifications().filter(notification => !notification.readAtUtc).length);
+
+  constructor() {
+    effect(() => {
+      const notification = this.notificationRealtime.latestNotification();
+      if (notification) {
+        queueMicrotask(() => this.prependNotification(notification));
+      }
+    });
+
+    effect(() => {
+      const event = this.notificationRealtime.latestReadEvent();
+      if (event) {
+        queueMicrotask(() => this.applyReadEvent(event.notificationId, event.readAtUtc));
+      }
+    });
+
+    effect(() => {
+      const event = this.notificationRealtime.latestReadAllEvent();
+      if (event) {
+        queueMicrotask(() => this.applyReadAllEvent(event.readAtUtc));
+      }
+    });
+  }
 
   async ngOnInit(): Promise<void> {
     await this.loadNotifications();
@@ -128,6 +153,7 @@ export class BuyerNotificationsPageComponent implements OnInit {
       const updated = await this.engagementService.markNotificationRead(notification.notificationId);
       this.notifications.set(this.notifications().map(existing =>
         existing.notificationId === updated.notificationId ? updated : existing));
+      await this.notificationRealtime.refreshUnreadCount();
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
     } finally {
@@ -149,6 +175,7 @@ export class BuyerNotificationsPageComponent implements OnInit {
       const readAtUtc = new Date().toISOString();
       this.notifications.set(this.notifications().map(notification =>
         notification.readAtUtc ? notification : { ...notification, readAtUtc }));
+      this.notificationRealtime.applyReadAllSync({ readAtUtc, updatedCount: result.updatedCount });
       this.successMessage.set(`${result.updatedCount} notification${result.updatedCount === 1 ? '' : 's'} marked read.`);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
@@ -163,10 +190,33 @@ export class BuyerNotificationsPageComponent implements OnInit {
 
     try {
       this.notifications.set(await this.engagementService.listNotifications());
+      await this.notificationRealtime.refreshUnreadCount();
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
     } finally {
       this.isLoading.set(false);
     }
+  }
+
+  private prependNotification(notification: BuyerNotificationResponse): void {
+    this.notifications.update(existing => {
+      if (existing.some(item => item.notificationId === notification.notificationId)) {
+        return existing.map(item => item.notificationId === notification.notificationId ? notification : item);
+      }
+
+      return [notification, ...existing];
+    });
+  }
+
+  private applyReadEvent(notificationId: string, readAtUtc: string): void {
+    this.notifications.update(existing => existing.map(notification =>
+      notification.notificationId === notificationId
+        ? { ...notification, readAtUtc }
+        : notification));
+  }
+
+  private applyReadAllEvent(readAtUtc: string): void {
+    this.notifications.update(existing => existing.map(notification =>
+      notification.readAtUtc ? notification : { ...notification, readAtUtc }));
   }
 }

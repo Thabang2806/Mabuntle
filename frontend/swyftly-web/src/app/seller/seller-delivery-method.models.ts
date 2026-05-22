@@ -1,4 +1,4 @@
-export type SellerDeliveryMethodType = 'Standard' | 'Express' | 'LocalCourier';
+export type SellerDeliveryMethodType = 'Standard' | 'Express' | 'LocalCourier' | 'PickupPoint';
 
 export interface SellerDeliveryMethodRequest {
   name: string;

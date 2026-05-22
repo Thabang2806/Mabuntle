@@ -40,7 +40,7 @@ type PublicRegistrationRole = 'Buyer' | 'Seller';
             <p class="auth-alert error" role="alert">{{ errorMessage() }}</p>
           }
 
-          <mat-form-field appearance="outline">
+          <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
             <mat-label>Email</mat-label>
             <input matInput type="email" formControlName="email" autocomplete="email" />
             @if (form.controls.email.hasError('required')) {
@@ -50,7 +50,7 @@ type PublicRegistrationRole = 'Buyer' | 'Seller';
             }
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
             <mat-label>Password</mat-label>
             <input matInput type="password" formControlName="password" autocomplete="new-password" />
             @if (form.controls.password.hasError('required')) {
@@ -62,7 +62,7 @@ type PublicRegistrationRole = 'Buyer' | 'Seller';
             }
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
+          <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
             <mat-label>Confirm password</mat-label>
             <input matInput type="password" formControlName="confirmPassword" autocomplete="new-password" />
             @if (form.controls.confirmPassword.hasError('required')) {

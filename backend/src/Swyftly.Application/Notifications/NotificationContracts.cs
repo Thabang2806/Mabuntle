@@ -7,6 +7,25 @@ public interface INotificationService
         CancellationToken cancellationToken = default);
 }
 
+public interface INotificationRealtimePublisher
+{
+    Task PublishNotificationCreatedAsync(
+        NotificationResult notification,
+        CancellationToken cancellationToken = default);
+
+    Task PublishNotificationReadAsync(
+        Guid recipientUserId,
+        Guid notificationId,
+        DateTimeOffset readAtUtc,
+        CancellationToken cancellationToken = default);
+
+    Task PublishNotificationsReadAllAsync(
+        Guid recipientUserId,
+        DateTimeOffset readAtUtc,
+        int updatedCount,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IEmailDeliveryProvider
 {
     string ProviderName { get; }
@@ -42,6 +61,14 @@ public sealed record NotificationResult(
     Guid? RelatedEntityId,
     DateTimeOffset? ReadAtUtc,
     DateTimeOffset CreatedAtUtc);
+
+public sealed record NotificationReadRealtimeEvent(
+    Guid NotificationId,
+    DateTimeOffset ReadAtUtc);
+
+public sealed record NotificationsReadAllRealtimeEvent(
+    DateTimeOffset ReadAtUtc,
+    int UpdatedCount);
 
 public sealed record EmailDeliveryMessage(
     Guid NotificationId,

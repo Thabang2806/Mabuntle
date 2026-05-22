@@ -79,6 +79,12 @@ describe('BuyerEngagementService', () => {
     listRequest.flush([]);
     await expectAsync(listPromise).toBeResolvedTo([]);
 
+    const countPromise = service.getUnreadNotificationCount();
+    const countRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/buyer/notifications/unread-count`);
+    expect(countRequest.request.method).toBe('GET');
+    countRequest.flush({ unreadCount: 3 });
+    await expectAsync(countPromise).toBeResolvedTo({ unreadCount: 3 });
+
     const readAllPromise = service.markAllNotificationsRead();
     const readAllRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/buyer/notifications/read-all`);
     expect(readAllRequest.request.method).toBe('POST');

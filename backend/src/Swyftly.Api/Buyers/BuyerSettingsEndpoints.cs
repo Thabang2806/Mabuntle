@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Swyftly.Application.Delivery;
 using Swyftly.Application.Identity;
 using Swyftly.Domain.Buyers;
 using Swyftly.Infrastructure.Persistence;
@@ -45,6 +46,13 @@ public static class BuyerSettingsEndpoints
             .WithName("GetBuyerDeliveryAddresses")
             .WithSummary("Returns saved delivery addresses for the authenticated buyer.")
             .Produces<IReadOnlyCollection<BuyerDeliveryAddressResponse>>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapPost("/delivery-addresses/verify", VerifyDeliveryAddressAsync)
+            .WithName("VerifyBuyerDeliveryAddress")
+            .WithSummary("Runs local delivery-address quality checks without saving the address.")
+            .Produces<BuyerDeliveryAddressVerificationResponse>(StatusCodes.Status200OK)
+            .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapPost("/delivery-addresses", CreateDeliveryAddressAsync)
@@ -189,6 +197,7 @@ public static class BuyerSettingsEndpoints
         BuyerDeliveryAddressRequest request,
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
+        IAddressVerificationService addressVerificationService,
         CancellationToken cancellationToken)
     {
         var buyer = await GetCurrentBuyerAsync(principal, dbContext, cancellationToken);
@@ -208,7 +217,9 @@ public static class BuyerSettingsEndpoints
         BuyerDeliveryAddress address;
         try
         {
-            address = ToEntity(buyer.Id, request, request.IsDefault || existing.Count == 0);
+            var verification = await addressVerificationService.VerifyAsync(ToVerificationRequest(request), cancellationToken);
+            address = ToEntity(buyer.Id, ToNormalizedRequest(request, verification), request.IsDefault || existing.Count == 0);
+            ApplyVerification(address, verification);
         }
         catch (ArgumentException exception)
         {
@@ -233,6 +244,7 @@ public static class BuyerSettingsEndpoints
         BuyerDeliveryAddressRequest request,
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
+        IAddressVerificationService addressVerificationService,
         CancellationToken cancellationToken)
     {
         var buyer = await GetCurrentBuyerAsync(principal, dbContext, cancellationToken);
@@ -253,19 +265,22 @@ public static class BuyerSettingsEndpoints
         var shouldRemainDefault = request.IsDefault || address.IsDefault || addresses.Count == 1;
         try
         {
+            var verification = await addressVerificationService.VerifyAsync(ToVerificationRequest(request), cancellationToken);
+            var normalizedRequest = ToNormalizedRequest(request, verification);
             address.Update(
-                request.Label,
-                request.RecipientName,
-                request.PhoneNumber,
-                request.AddressLine1,
-                request.AddressLine2,
-                request.Suburb,
-                request.City,
-                request.Province,
-                request.PostalCode,
-                request.CountryCode,
+                normalizedRequest.Label,
+                normalizedRequest.RecipientName,
+                normalizedRequest.PhoneNumber,
+                normalizedRequest.AddressLine1,
+                normalizedRequest.AddressLine2,
+                normalizedRequest.Suburb,
+                normalizedRequest.City,
+                normalizedRequest.Province,
+                normalizedRequest.PostalCode,
+                normalizedRequest.CountryCode,
                 shouldRemainDefault,
-                request.DeliveryInstructions);
+                normalizedRequest.DeliveryInstructions);
+            ApplyVerification(address, verification);
         }
         catch (ArgumentException exception)
         {
@@ -286,6 +301,57 @@ public static class BuyerSettingsEndpoints
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return HttpResults.Ok(MapDeliveryAddress(address));
+    }
+
+    private static async Task<IResult> VerifyDeliveryAddressAsync(
+        BuyerDeliveryAddressVerificationRequest request,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        IAddressVerificationService addressVerificationService,
+        CancellationToken cancellationToken)
+    {
+        var buyer = await GetCurrentBuyerAsync(principal, dbContext, cancellationToken);
+        if (buyer is null)
+        {
+            return BuyerNotFound();
+        }
+
+        try
+        {
+            var verification = await addressVerificationService.VerifyAsync(
+                new AddressVerificationRequest(
+                    request.RecipientName,
+                    request.PhoneNumber,
+                    request.AddressLine1,
+                    request.AddressLine2,
+                    request.Suburb,
+                    request.City,
+                    request.Province,
+                    request.PostalCode,
+                    request.CountryCode,
+                    request.DeliveryInstructions),
+                cancellationToken);
+
+            return HttpResults.Ok(new BuyerDeliveryAddressVerificationResponse(
+                verification.Status.ToString(),
+                verification.Provider,
+                verification.Warnings,
+                verification.VerifiedAtUtc,
+                verification.RecipientName,
+                verification.PhoneNumber,
+                verification.AddressLine1,
+                verification.AddressLine2,
+                verification.Suburb,
+                verification.City,
+                verification.Province,
+                verification.PostalCode,
+                verification.CountryCode,
+                verification.DeliveryInstructions));
+        }
+        catch (ArgumentException exception)
+        {
+            return Validation(ToCamelCase(exception.ParamName ?? "deliveryAddress"), exception.Message);
+        }
     }
 
     private static async Task<IResult> DeleteDeliveryAddressAsync(
@@ -457,6 +523,47 @@ public static class BuyerSettingsEndpoints
             isDefault,
             request.DeliveryInstructions);
 
+    private static AddressVerificationRequest ToVerificationRequest(BuyerDeliveryAddressRequest request) =>
+        new(
+            request.RecipientName,
+            request.PhoneNumber,
+            request.AddressLine1,
+            request.AddressLine2,
+            request.Suburb,
+            request.City,
+            request.Province,
+            request.PostalCode,
+            request.CountryCode,
+            request.DeliveryInstructions);
+
+    private static BuyerDeliveryAddressRequest ToNormalizedRequest(
+        BuyerDeliveryAddressRequest request,
+        AddressVerificationResult verification) =>
+        request with
+        {
+            RecipientName = verification.RecipientName,
+            PhoneNumber = verification.PhoneNumber,
+            AddressLine1 = verification.AddressLine1,
+            AddressLine2 = verification.AddressLine2,
+            Suburb = verification.Suburb,
+            City = verification.City,
+            Province = verification.Province,
+            PostalCode = verification.PostalCode,
+            CountryCode = verification.CountryCode,
+            DeliveryInstructions = verification.DeliveryInstructions
+        };
+
+    private static void ApplyVerification(
+        BuyerDeliveryAddress address,
+        AddressVerificationResult verification)
+    {
+        address.SetVerification(
+            verification.Status,
+            verification.Provider,
+            AddressVerificationWarningsJson.Serialize(verification.Warnings),
+            verification.VerifiedAtUtc);
+    }
+
     private static BuyerDeliveryAddressResponse MapDeliveryAddress(BuyerDeliveryAddress address) =>
         new(
             address.Id,
@@ -473,7 +580,11 @@ public static class BuyerSettingsEndpoints
             address.DeliveryInstructions,
             address.IsDefault,
             address.CreatedAtUtc,
-            address.UpdatedAtUtc);
+            address.UpdatedAtUtc,
+            address.VerificationStatus.ToString(),
+            address.VerificationProvider,
+            AddressVerificationWarningsJson.Deserialize(address.VerificationWarningsJson),
+            address.VerifiedAtUtc);
 
     private static async Task<BuyerProfile?> GetCurrentBuyerAsync(
         ClaimsPrincipal principal,
@@ -548,6 +659,34 @@ public sealed record BuyerDeliveryAddressRequest(
     bool IsDefault,
     string? DeliveryInstructions = null);
 
+public sealed record BuyerDeliveryAddressVerificationRequest(
+    string RecipientName,
+    string PhoneNumber,
+    string AddressLine1,
+    string? AddressLine2,
+    string? Suburb,
+    string City,
+    string Province,
+    string PostalCode,
+    string CountryCode,
+    string? DeliveryInstructions = null);
+
+public sealed record BuyerDeliveryAddressVerificationResponse(
+    string VerificationStatus,
+    string VerificationProvider,
+    IReadOnlyCollection<string> VerificationWarnings,
+    DateTimeOffset VerifiedAtUtc,
+    string RecipientName,
+    string PhoneNumber,
+    string AddressLine1,
+    string? AddressLine2,
+    string? Suburb,
+    string City,
+    string Province,
+    string PostalCode,
+    string CountryCode,
+    string? DeliveryInstructions = null);
+
 public sealed record BuyerDeliveryAddressResponse(
     Guid DeliveryAddressId,
     string Label,
@@ -563,4 +702,8 @@ public sealed record BuyerDeliveryAddressResponse(
     string? DeliveryInstructions,
     bool IsDefault,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    string VerificationStatus = "Unverified",
+    string? VerificationProvider = null,
+    IReadOnlyCollection<string>? VerificationWarnings = null,
+    DateTimeOffset? VerifiedAtUtc = null);

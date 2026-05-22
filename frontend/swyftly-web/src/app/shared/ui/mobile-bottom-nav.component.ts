@@ -4,6 +4,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 export interface MobileBottomNavItem {
   label: string;
   route: string;
+  badge?: number;
 }
 
 @Component({
@@ -19,7 +20,12 @@ export interface MobileBottomNavItem {
           ariaCurrentWhenActive="page"
         >
           <span class="hf-mobile-bottom-nav-dot" aria-hidden="true"></span>
-          <span>{{ item.label }}</span>
+          <span>
+            {{ item.label }}
+            @if (item.badge && item.badge > 0) {
+              <span class="hf-mobile-bottom-nav-badge" [attr.aria-label]="item.badge + ' unread notifications'">{{ item.badge }}</span>
+            }
+          </span>
         </a>
       }
     </nav>

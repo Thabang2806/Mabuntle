@@ -1,11 +1,14 @@
 import { Component, OnInit, computed, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from './auth/auth.service';
+import { BuyerNotificationResponse } from './buyer/buyer-engagement.models';
+import { BuyerNotificationRealtimeService } from './buyer/buyer-notification-realtime.service';
 import { MobileBottomNavComponent, MobileBottomNavItem } from './shared/ui/mobile-bottom-nav.component';
 
 type NavigationItem = {
   label: string;
   route: string;
+  badge?: number;
 };
 
 @Component({
@@ -16,6 +19,7 @@ type NavigationItem = {
 })
 export class AppComponent implements OnInit {
   protected readonly authService = inject(AuthService);
+  protected readonly notificationRealtime = inject(BuyerNotificationRealtimeService);
   private readonly router = inject(Router);
 
   protected readonly publicNavigationItems: NavigationItem[] = [
@@ -44,6 +48,7 @@ export class AppComponent implements OnInit {
       { label: 'Visual search', route: '/visual-search' },
       { label: 'Cart', route: '/cart' },
       { label: 'Wishlist', route: '/account/wishlist' },
+      { label: 'Notifications', route: '/account/notifications', badge: this.notificationRealtime.unreadCount() },
       { label: 'Account', route: '/account' }
     ];
   });
@@ -64,6 +69,7 @@ export class AppComponent implements OnInit {
     if (this.authService.hasAnyRole(['Admin', 'SuperAdmin'])) {
       items.push({ label: 'Admin', route: '/admin' });
       items.push({ label: 'Categories', route: '/admin/categories' });
+      items.push({ label: 'Pickup points', route: '/admin/pickup-points' });
     }
 
     if (this.authService.hasAnyRole(['Admin', 'SuperAdmin', 'SupportAgent'])) {
@@ -73,6 +79,7 @@ export class AppComponent implements OnInit {
     if (this.authService.hasAnyRole(['Admin', 'SuperAdmin', 'FinanceOperator', 'FinanceApprover'])) {
       items.push({ label: 'Refunds', route: '/admin/refunds' });
       items.push({ label: 'Payouts', route: '/admin/payouts' });
+      items.push({ label: 'Payout profile', route: '/admin/payout-profile-changes' });
     }
 
     return items;
@@ -112,6 +119,7 @@ export class AppComponent implements OnInit {
       return [
         ...items,
         { label: 'AI', route: '/assistant' },
+        { label: 'Alerts', route: '/account/notifications', badge: this.notificationRealtime.unreadCount() },
         { label: 'Orders', route: '/account/orders' },
         { label: 'Me', route: '/account' }
       ];
@@ -132,5 +140,25 @@ export class AppComponent implements OnInit {
   protected async logout(): Promise<void> {
     await this.authService.logout();
     await this.router.navigateByUrl('/login');
+  }
+
+  protected notificationRoute(notification: BuyerNotificationResponse): string {
+    if (notification.relatedEntityType === 'Order' && notification.relatedEntityId) {
+      return `/account/orders/${notification.relatedEntityId}`;
+    }
+
+    if (notification.relatedEntityType === 'ReturnRequest' && notification.relatedEntityId) {
+      return `/account/returns/${notification.relatedEntityId}`;
+    }
+
+    if (notification.relatedEntityType === 'SupportTicket' && notification.relatedEntityId) {
+      return `/account/support/${notification.relatedEntityId}`;
+    }
+
+    if (notification.relatedEntityType === 'ProductReview') {
+      return '/account/reviews';
+    }
+
+    return '/account/notifications';
   }
 }

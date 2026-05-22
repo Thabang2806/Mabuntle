@@ -9,6 +9,8 @@ export interface AdminPayoutResponse {
   holdReason: string | null;
   releasedAtUtc: string | null;
   releaseReason: string | null;
+  hasPendingPayoutProfileChange: boolean;
+  pendingPayoutProfileChangeRequestId: string | null;
   items: AdminPayoutItemResponse[];
 }
 

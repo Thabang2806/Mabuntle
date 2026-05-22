@@ -10,7 +10,8 @@ describe('app routes', () => {
       'admin/payments',
       'admin/payments/:paymentId',
       'admin/refunds',
-      'admin/payouts'
+      'admin/payouts',
+      'admin/payout-profile-changes'
     ];
     for (const path of financePaths) {
       const route = routes.find(item => item.path === path);
@@ -37,6 +38,9 @@ describe('app routes', () => {
   it('keeps category management admin-only', () => {
     const route = routes.find(item => item.path === 'admin/categories');
     expect(route?.canActivate?.length).toBeGreaterThan(0);
+
+    const pickupRoute = routes.find(item => item.path === 'admin/pickup-points');
+    expect(pickupRoute?.canActivate?.length).toBeGreaterThan(0);
   });
 
   it('keeps buyer review moderation admin-only', () => {

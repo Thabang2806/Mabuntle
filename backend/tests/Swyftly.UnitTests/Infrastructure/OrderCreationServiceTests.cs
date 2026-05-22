@@ -9,6 +9,7 @@ using Swyftly.Domain.Inventory;
 using Swyftly.Domain.Orders;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Inventory;
+using Swyftly.Infrastructure.Delivery;
 using Swyftly.Infrastructure.Orders;
 using Swyftly.Infrastructure.Persistence;
 
@@ -110,7 +111,7 @@ public class OrderCreationServiceTests
     }
 
     private static EfOrderCreationService CreateService(SwyftlyDbContext dbContext) =>
-        new(dbContext, new EfInventoryReservationService(dbContext));
+        new(dbContext, new EfInventoryReservationService(dbContext), new LocalRulesAddressVerificationService(TimeProvider.System));
 
     private static OrderDeliveryAddressRequest TestDeliveryAddress(string recipientName = "Thabo Buyer") =>
         new(

@@ -16,6 +16,7 @@ export interface BuyerOrderResult {
   deliveryMethodType?: string | null;
   deliveryEstimatedMinDays?: number | null;
   deliveryEstimatedMaxDays?: number | null;
+  pickupPoint?: BuyerOrderPickupPointResult | null;
   statusHistory: BuyerOrderStatusHistoryResult[];
   shipments: BuyerShipmentResult[];
 }
@@ -31,6 +32,27 @@ export interface BuyerOrderDeliveryAddressResult {
   postalCode: string;
   countryCode: string;
   deliveryInstructions: string | null;
+  verificationStatus?: string | null;
+  verificationProvider?: string | null;
+  verificationWarnings?: string[] | null;
+  verifiedAtUtc?: string | null;
+}
+
+export interface BuyerOrderPickupPointResult {
+  pickupPointId: string;
+  providerName: string;
+  code: string;
+  name: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  suburb: string | null;
+  city: string;
+  province: string;
+  postalCode: string;
+  countryCode: string;
+  latitude: number | null;
+  longitude: number | null;
+  openingHours: string | null;
 }
 
 export interface BuyerOrderItemResult {
@@ -62,6 +84,14 @@ export interface BuyerShipmentResult {
   trackingUrl: string | null;
   shippedAtUtc: string | null;
   deliveredAtUtc: string | null;
+  carrierProviderName?: string | null;
+  carrierServiceCode?: string | null;
+  providerShipmentReference?: string | null;
+  carrierBookingStatus?: string | null;
+  providerStatus?: string | null;
+  providerLabelUrl?: string | null;
+  providerLastSyncedAtUtc?: string | null;
+  providerError?: string | null;
   events: BuyerShipmentEventResult[];
 }
 

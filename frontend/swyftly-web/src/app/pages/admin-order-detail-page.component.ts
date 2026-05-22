@@ -57,6 +57,9 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               @if (order()!.deliveryMethodName) {
                 <div><dt>Delivery method</dt><dd>{{ order()!.deliveryMethodName }} - {{ deliveryEstimate(order()!) }}</dd></div>
               }
+              @if (order()!.pickupPoint) {
+                <div><dt>Pickup point</dt><dd>{{ order()!.pickupPoint!.name }}</dd></div>
+              }
               <div><dt>Platform fee</dt><dd>{{ order()!.platformFeeAmount | currency:'ZAR':'symbol-narrow' }}</dd></div>
               <div><dt>Discount</dt><dd>{{ order()!.discountAmount | currency:'ZAR':'symbol-narrow' }}</dd></div>
               <div><dt>Total</dt><dd>{{ order()!.totalAmount | currency:'ZAR':'symbol-narrow' }}</dd></div>
@@ -83,11 +86,31 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 @if (order()!.deliveryAddress!.deliveryInstructions) {
                   <div><dt>Instructions</dt><dd>{{ order()!.deliveryAddress!.deliveryInstructions }}</dd></div>
                 }
+                @if (order()!.deliveryAddress!.verificationStatus) {
+                  <div><dt>Address check</dt><dd>{{ order()!.deliveryAddress!.verificationStatus }}</dd></div>
+                }
+                @if ((order()!.deliveryAddress!.verificationWarnings?.length ?? 0) > 0) {
+                  <div><dt>Warnings</dt><dd>{{ order()!.deliveryAddress!.verificationWarnings!.join(' ') }}</dd></div>
+                }
               </dl>
             } @else {
               <app-ui-alert tone="info">This order does not have a delivery-address snapshot.</app-ui-alert>
             }
           </section>
+
+          @if (order()!.pickupPoint) {
+            <section class="buyer-panel">
+              <h2>Pickup point</h2>
+              <dl class="seller-facts">
+                <div><dt>Name</dt><dd>{{ order()!.pickupPoint!.name }}</dd></div>
+                <div><dt>Provider</dt><dd>{{ order()!.pickupPoint!.providerName }} / {{ order()!.pickupPoint!.code }}</dd></div>
+                <div><dt>Address</dt><dd>{{ order()!.pickupPoint!.addressLine1 }}, {{ order()!.pickupPoint!.city }}, {{ order()!.pickupPoint!.province }}</dd></div>
+                @if (order()!.pickupPoint!.openingHours) {
+                  <div><dt>Opening hours</dt><dd>{{ order()!.pickupPoint!.openingHours }}</dd></div>
+                }
+              </dl>
+            </section>
+          }
         </div>
 
         <section class="buyer-panel">
@@ -145,6 +168,15 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 <div>
                   <strong>{{ shipment.status }}</strong>
                   <small>{{ shipment.carrierName ?? 'Manual fulfilment' }} {{ shipment.trackingNumber ?? '' }}</small>
+                  @if (shipment.providerStatus || shipment.providerShipmentReference) {
+                    <small>Provider {{ shipment.carrierProviderName ?? 'unknown' }}: {{ shipment.providerStatus ?? shipment.carrierBookingStatus ?? 'Booked' }} {{ shipment.providerShipmentReference ? '- ' + shipment.providerShipmentReference : '' }}</small>
+                  }
+                  @if (shipment.providerLabelUrl) {
+                    <a [href]="shipment.providerLabelUrl" target="_blank" rel="noreferrer">Open carrier label</a>
+                  }
+                  @if (shipment.providerError) {
+                    <p>{{ shipment.providerError }}</p>
+                  }
                   @for (event of shipment.events; track event.shipmentEventId) {
                     <p>{{ event.eventType }} - {{ event.occurredAtUtc | date:'medium' }}</p>
                   }

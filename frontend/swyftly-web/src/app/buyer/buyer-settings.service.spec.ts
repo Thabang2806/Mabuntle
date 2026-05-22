@@ -91,6 +91,31 @@ describe('BuyerSettingsService', () => {
     createRequest.flush(address);
     await expectAsync(createPromise).toBeResolvedTo(address);
 
+    const verifyRequestBody = {
+      recipientName: request.recipientName,
+      phoneNumber: request.phoneNumber,
+      addressLine1: request.addressLine1,
+      addressLine2: request.addressLine2,
+      suburb: request.suburb,
+      city: request.city,
+      province: request.province,
+      postalCode: request.postalCode,
+      countryCode: request.countryCode,
+      deliveryInstructions: request.deliveryInstructions
+    };
+    const verifyPromise = service.verifyDeliveryAddress(verifyRequestBody);
+    const verifyRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/buyer/delivery-addresses/verify`);
+    expect(verifyRequest.request.method).toBe('POST');
+    expect(verifyRequest.request.body).toEqual(verifyRequestBody);
+    verifyRequest.flush({
+      ...verifyRequestBody,
+      verificationStatus: 'Verified',
+      verificationProvider: 'LocalRules',
+      verificationWarnings: [],
+      verifiedAtUtc: '2026-05-21T10:00:00Z'
+    });
+    await expectAsync(verifyPromise).toBeResolved();
+
     const updatePromise = service.updateDeliveryAddress('address-id', request);
     const updateRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/buyer/delivery-addresses/address-id`);
     expect(updateRequest.request.method).toBe('PUT');

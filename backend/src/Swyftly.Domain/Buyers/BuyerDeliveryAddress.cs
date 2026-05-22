@@ -1,4 +1,5 @@
 using Swyftly.Domain.Common;
+using Swyftly.Domain.Delivery;
 
 namespace Swyftly.Domain.Buyers;
 
@@ -15,6 +16,7 @@ public sealed class BuyerDeliveryAddress : AuditableEntity
     public const int PostalCodeMaxLength = 32;
     public const int CountryCodeLength = 2;
     public const int DeliveryInstructionsMaxLength = 500;
+    public const int VerificationProviderMaxLength = 80;
 
     private BuyerDeliveryAddress()
     {
@@ -70,6 +72,14 @@ public sealed class BuyerDeliveryAddress : AuditableEntity
 
     public bool IsDefault { get; private set; }
 
+    public AddressVerificationStatus VerificationStatus { get; private set; } = AddressVerificationStatus.Unverified;
+
+    public string? VerificationProvider { get; private set; }
+
+    public string? VerificationWarningsJson { get; private set; }
+
+    public DateTimeOffset? VerifiedAtUtc { get; private set; }
+
     public void Update(
         string label,
         string recipientName,
@@ -101,6 +111,18 @@ public sealed class BuyerDeliveryAddress : AuditableEntity
     public void SetDefault(bool isDefault)
     {
         IsDefault = isDefault;
+    }
+
+    public void SetVerification(
+        AddressVerificationStatus status,
+        string provider,
+        string warningsJson,
+        DateTimeOffset verifiedAtUtc)
+    {
+        VerificationStatus = status;
+        VerificationProvider = Required(provider, nameof(provider), VerificationProviderMaxLength);
+        VerificationWarningsJson = Optional(warningsJson, nameof(warningsJson), 4000);
+        VerifiedAtUtc = verifiedAtUtc;
     }
 
     private static string Required(string? value, string parameterName, int maxLength)

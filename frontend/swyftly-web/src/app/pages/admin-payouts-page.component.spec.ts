@@ -79,6 +79,24 @@ describe('AdminPayoutsPageComponent', () => {
     expect(processButton?.disabled).toBeTrue();
   });
 
+  it('shows pending payout-profile change warning and disables processing', async () => {
+    payoutService.getPendingPayouts.and.resolveTo([
+      createPayout({
+        hasPendingPayoutProfileChange: true,
+        pendingPayoutProfileChangeRequestId: 'change-request-id'
+      })
+    ]);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Payout profile change pending');
+    expect(compiled.textContent).toContain('processing is blocked');
+    expect(findButton(compiled, 'Process')?.disabled).toBeTrue();
+  });
+
   function selectPayout(compiled: HTMLElement): void {
     clickButton(compiled, 'Select');
     fixture.detectChanges();
@@ -104,6 +122,8 @@ export function createPayout(overrides: Partial<AdminPayoutResponse> = {}): Admi
     holdReason: null,
     releasedAtUtc: null,
     releaseReason: null,
+    hasPendingPayoutProfileChange: false,
+    pendingPayoutProfileChangeRequestId: null,
     items: [{
       payoutItemId: 'payout-item-id',
       ledgerEntryId: 'ledger-id',

@@ -1,4 +1,10 @@
-import { BuyerOrderDeliveryAddressResult, BuyerOrderItemResult, BuyerOrderStatusHistoryResult, BuyerShipmentResult } from '../buyer/buyer-order.models';
+import {
+  BuyerOrderDeliveryAddressResult,
+  BuyerOrderItemResult,
+  BuyerOrderPickupPointResult,
+  BuyerOrderStatusHistoryResult,
+  BuyerShipmentResult
+} from '../buyer/buyer-order.models';
 
 export interface AdminOrderSummaryResponse {
   orderId: string;
@@ -17,6 +23,7 @@ export interface AdminOrderSummaryResponse {
   deliveryMethodType?: string | null;
   deliveryEstimatedMinDays?: number | null;
   deliveryEstimatedMaxDays?: number | null;
+  pickupPoint?: BuyerOrderPickupPointResult | null;
   paymentStatus: string | null;
   shipmentStatus: string | null;
   createdAtUtc: string;

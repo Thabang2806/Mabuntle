@@ -10,6 +10,7 @@ using Swyftly.Domain.Ai;
 using Swyftly.Domain.Buyers;
 using Swyftly.Domain.Carts;
 using Swyftly.Domain.Catalog;
+using Swyftly.Domain.Delivery;
 using Swyftly.Domain.Disputes;
 using Swyftly.Domain.Inventory;
 using Swyftly.Domain.Ledger;
@@ -44,7 +45,11 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
 
     public DbSet<SellerDeliveryMethod> SellerDeliveryMethods => Set<SellerDeliveryMethod>();
 
+    public DbSet<PickupPoint> PickupPoints => Set<PickupPoint>();
+
     public DbSet<SellerPayoutProfilePlaceholder> SellerPayoutProfiles => Set<SellerPayoutProfilePlaceholder>();
+
+    public DbSet<SellerPayoutProfileChangeRequest> SellerPayoutProfileChangeRequests => Set<SellerPayoutProfileChangeRequest>();
 
     public DbSet<SellerVerification> SellerVerifications => Set<SellerVerification>();
 
@@ -219,6 +224,13 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
             builder.Property(address => address.PostalCode).HasMaxLength(BuyerDeliveryAddress.PostalCodeMaxLength).IsRequired();
             builder.Property(address => address.CountryCode).HasMaxLength(BuyerDeliveryAddress.CountryCodeLength).IsRequired();
             builder.Property(address => address.DeliveryInstructions).HasMaxLength(BuyerDeliveryAddress.DeliveryInstructionsMaxLength);
+            builder.Property(address => address.VerificationStatus)
+                .HasConversion<string>()
+                .HasMaxLength(40)
+                .HasDefaultValue(AddressVerificationStatus.Unverified)
+                .IsRequired();
+            builder.Property(address => address.VerificationProvider).HasMaxLength(BuyerDeliveryAddress.VerificationProviderMaxLength);
+            builder.Property(address => address.VerificationWarningsJson).HasColumnType("jsonb");
             builder.Property(address => address.IsDefault).IsRequired();
             builder.Property(address => address.CreatedAtUtc).IsRequired();
             builder.Property(address => address.UpdatedAtUtc).IsRequired();
@@ -226,6 +238,30 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
                 .WithMany()
                 .HasForeignKey(address => address.BuyerId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PickupPoint>(builder =>
+        {
+            builder.ToTable("pickup_points");
+            builder.HasKey(point => point.Id);
+            builder.HasIndex(point => new { point.ProviderName, point.Code }).IsUnique();
+            builder.HasIndex(point => new { point.CountryCode, point.Province, point.IsActive });
+            builder.Property(point => point.ProviderName).HasMaxLength(PickupPoint.ProviderNameMaxLength).IsRequired();
+            builder.Property(point => point.Code).HasMaxLength(PickupPoint.CodeMaxLength).IsRequired();
+            builder.Property(point => point.Name).HasMaxLength(PickupPoint.NameMaxLength).IsRequired();
+            builder.Property(point => point.AddressLine1).HasMaxLength(PickupPoint.AddressLineMaxLength).IsRequired();
+            builder.Property(point => point.AddressLine2).HasMaxLength(PickupPoint.AddressLineMaxLength);
+            builder.Property(point => point.Suburb).HasMaxLength(PickupPoint.SuburbMaxLength);
+            builder.Property(point => point.City).HasMaxLength(PickupPoint.CityMaxLength).IsRequired();
+            builder.Property(point => point.Province).HasMaxLength(PickupPoint.ProvinceMaxLength).IsRequired();
+            builder.Property(point => point.PostalCode).HasMaxLength(PickupPoint.PostalCodeMaxLength).IsRequired();
+            builder.Property(point => point.CountryCode).HasMaxLength(PickupPoint.CountryCodeLength).IsRequired();
+            builder.Property(point => point.Latitude).HasPrecision(9, 6);
+            builder.Property(point => point.Longitude).HasPrecision(9, 6);
+            builder.Property(point => point.OpeningHours).HasMaxLength(PickupPoint.OpeningHoursMaxLength);
+            builder.Property(point => point.IsActive).IsRequired();
+            builder.Property(point => point.CreatedAtUtc).IsRequired();
+            builder.Property(point => point.UpdatedAtUtc).IsRequired();
         });
 
         modelBuilder.Entity<BuyerWishlistItem>(builder =>
@@ -352,6 +388,36 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
             builder.HasOne<SellerProfile>()
                 .WithOne()
                 .HasForeignKey<SellerPayoutProfilePlaceholder>(payoutProfile => payoutProfile.SellerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SellerPayoutProfileChangeRequest>(builder =>
+        {
+            builder.ToTable("seller_payout_profile_change_requests");
+            builder.HasKey(request => request.Id);
+            builder.HasIndex(request => request.SellerId)
+                .HasFilter("\"Status\" IN ('Draft', 'PendingReview')")
+                .IsUnique();
+            builder.Property(request => request.ProposedPayoutProviderReference)
+                .HasMaxLength(SellerPayoutProfileChangeRequest.PayoutProviderReferenceMaxLength)
+                .IsRequired();
+            builder.Property(request => request.Reason)
+                .HasMaxLength(SellerPayoutProfileChangeRequest.ReasonMaxLength)
+                .IsRequired();
+            builder.Property(request => request.Status)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .IsRequired();
+            builder.Property(request => request.ReviewReason)
+                .HasMaxLength(SellerPayoutProfileChangeRequest.ReasonMaxLength);
+            builder.Property(request => request.ConcurrencyVersion)
+                .IsConcurrencyToken()
+                .IsRequired();
+            builder.Property(request => request.CreatedAtUtc).IsRequired();
+            builder.Property(request => request.UpdatedAtUtc).IsRequired();
+            builder.HasOne<SellerProfile>()
+                .WithMany()
+                .HasForeignKey(request => request.SellerId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -1018,6 +1084,27 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
             builder.Property(order => order.DeliveryPostalCode).HasMaxLength(BuyerDeliveryAddress.PostalCodeMaxLength);
             builder.Property(order => order.DeliveryCountryCode).HasMaxLength(BuyerDeliveryAddress.CountryCodeLength);
             builder.Property(order => order.DeliveryInstructions).HasMaxLength(BuyerDeliveryAddress.DeliveryInstructionsMaxLength);
+            builder.Property(order => order.DeliveryVerificationStatus)
+                .HasConversion<string>()
+                .HasMaxLength(40)
+                .HasDefaultValue(AddressVerificationStatus.Unverified)
+                .IsRequired();
+            builder.Property(order => order.DeliveryVerificationProvider).HasMaxLength(BuyerDeliveryAddress.VerificationProviderMaxLength);
+            builder.Property(order => order.DeliveryVerificationWarningsJson).HasColumnType("jsonb");
+            builder.HasIndex(order => order.PickupPointId);
+            builder.Property(order => order.PickupPointProviderName).HasMaxLength(PickupPoint.ProviderNameMaxLength);
+            builder.Property(order => order.PickupPointCode).HasMaxLength(PickupPoint.CodeMaxLength);
+            builder.Property(order => order.PickupPointName).HasMaxLength(PickupPoint.NameMaxLength);
+            builder.Property(order => order.PickupPointAddressLine1).HasMaxLength(PickupPoint.AddressLineMaxLength);
+            builder.Property(order => order.PickupPointAddressLine2).HasMaxLength(PickupPoint.AddressLineMaxLength);
+            builder.Property(order => order.PickupPointSuburb).HasMaxLength(PickupPoint.SuburbMaxLength);
+            builder.Property(order => order.PickupPointCity).HasMaxLength(PickupPoint.CityMaxLength);
+            builder.Property(order => order.PickupPointProvince).HasMaxLength(PickupPoint.ProvinceMaxLength);
+            builder.Property(order => order.PickupPointPostalCode).HasMaxLength(PickupPoint.PostalCodeMaxLength);
+            builder.Property(order => order.PickupPointCountryCode).HasMaxLength(PickupPoint.CountryCodeLength);
+            builder.Property(order => order.PickupPointLatitude).HasPrecision(9, 6);
+            builder.Property(order => order.PickupPointLongitude).HasPrecision(9, 6);
+            builder.Property(order => order.PickupPointOpeningHours).HasMaxLength(PickupPoint.OpeningHoursMaxLength);
             builder.Property(order => order.CreatedAtUtc).IsRequired();
             builder.Property(order => order.UpdatedAtUtc).IsRequired();
             builder.HasOne<BuyerProfile>()
@@ -1100,6 +1187,10 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
             builder.HasIndex(shipment => shipment.BuyerId);
             builder.HasIndex(shipment => shipment.Status);
             builder.HasIndex(shipment => shipment.TrackingNumber);
+            builder.HasIndex(shipment => shipment.ProviderShipmentReference);
+            builder.HasIndex(shipment => shipment.CarrierBookingStatus);
+            builder.HasIndex(shipment => shipment.ProviderStatus);
+            builder.HasIndex(shipment => shipment.ProviderLastSyncedAtUtc);
             builder.HasIndex(shipment => shipment.CreatedAtUtc);
             builder.Property(shipment => shipment.Status)
                 .HasConversion<string>()
@@ -1108,6 +1199,19 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
             builder.Property(shipment => shipment.CarrierName).HasMaxLength(120);
             builder.Property(shipment => shipment.TrackingNumber).HasMaxLength(160);
             builder.Property(shipment => shipment.TrackingUrl).HasMaxLength(500);
+            builder.Property(shipment => shipment.CarrierProviderName).HasMaxLength(Shipment.CarrierProviderNameMaxLength);
+            builder.Property(shipment => shipment.CarrierServiceCode).HasMaxLength(Shipment.CarrierServiceCodeMaxLength);
+            builder.Property(shipment => shipment.ProviderShipmentReference).HasMaxLength(Shipment.ProviderShipmentReferenceMaxLength);
+            builder.Property(shipment => shipment.CarrierBookingStatus)
+                .HasConversion<string>()
+                .HasMaxLength(64);
+            builder.Property(shipment => shipment.ProviderStatus).HasMaxLength(Shipment.ProviderStatusMaxLength);
+            builder.Property(shipment => shipment.ProviderLabelUrl).HasMaxLength(Shipment.ProviderLabelUrlMaxLength);
+            builder.Property(shipment => shipment.ProviderError).HasMaxLength(Shipment.ProviderErrorMaxLength);
+            builder.Property(shipment => shipment.PackageWeightKg).HasPrecision(10, 3);
+            builder.Property(shipment => shipment.PackageLengthCm).HasPrecision(10, 2);
+            builder.Property(shipment => shipment.PackageWidthCm).HasPrecision(10, 2);
+            builder.Property(shipment => shipment.PackageHeightCm).HasPrecision(10, 2);
             builder.Property(shipment => shipment.CreatedAtUtc).IsRequired();
             builder.Property(shipment => shipment.UpdatedAtUtc).IsRequired();
             builder.HasOne<Order>()

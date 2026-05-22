@@ -13,7 +13,7 @@ describe('SellerOrderDetailPageComponent', () => {
   beforeEach(async () => {
     orderService = jasmine.createSpyObj<SellerOrderService>(
       'SellerOrderService',
-      ['getOrder', 'markProcessing', 'addTracking', 'markReadyToShip', 'markShipped', 'markDelivered', 'markDeliveryFailed', 'markReturnedToSender']);
+      ['getOrder', 'markProcessing', 'addTracking', 'markReadyToShip', 'markShipped', 'markDelivered', 'markDeliveryFailed', 'markReturnedToSender', 'bookCarrier', 'syncCarrierTracking']);
     orderService.getOrder.and.resolveTo(createOrder());
     orderService.markProcessing.and.resolveTo(createOrder({ status: 'Processing' }));
     orderService.markReadyToShip.and.resolveTo(createOrder({ status: 'ReadyToShip' }));
@@ -51,6 +51,25 @@ describe('SellerOrderDetailPageComponent', () => {
       deliveredAtUtc: null,
       events: []
     }] }));
+    orderService.bookCarrier.and.resolveTo(createOrder({ status: 'ReadyToShip', shipments: [{
+      shipmentId: 'shipment-id',
+      status: 'ReadyForCourier',
+      carrierName: 'Fake Courier',
+      trackingNumber: 'FAKE-ORDER',
+      trackingUrl: 'http://localhost:4200/fake-tracking/FAKE-ORDER',
+      shippedAtUtc: null,
+      deliveredAtUtc: null,
+      carrierProviderName: 'Fake',
+      carrierServiceCode: 'STANDARD',
+      providerShipmentReference: 'fake-shp-1',
+      carrierBookingStatus: 'Booked',
+      providerStatus: 'Booked',
+      providerLabelUrl: 'http://localhost:4200/fake-label/fake-shp-1',
+      providerLastSyncedAtUtc: '2026-05-21T10:00:00Z',
+      providerError: null,
+      events: []
+    }] }));
+    orderService.syncCarrierTracking.and.resolveTo(createOrder({ status: 'Shipped' }));
 
     await TestBed.configureTestingModule({
       imports: [SellerOrderDetailPageComponent],
@@ -143,5 +162,41 @@ describe('SellerOrderDetailPageComponent', () => {
     expect(orderService.markDeliveryFailed).toHaveBeenCalledWith('order-id', {
       reason: 'Courier could not reach the recipient.'
     });
+  });
+
+  it('books carrier with package payload for ready-to-ship orders', async () => {
+    orderService.getOrder.and.resolveTo(createOrder({
+      status: 'ReadyToShip',
+      shipments: [{
+        shipmentId: 'shipment-id',
+        status: 'ReadyForCourier',
+        carrierName: null,
+        trackingNumber: null,
+        trackingUrl: null,
+        shippedAtUtc: null,
+        deliveredAtUtc: null,
+        events: []
+      }]
+    }));
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const button = Array.from(compiled.querySelectorAll('button'))
+      .find(candidate => candidate.textContent?.includes('Book carrier'));
+    expect(button?.hasAttribute('disabled')).toBeFalse();
+    button?.closest('form')?.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+
+    expect(orderService.bookCarrier).toHaveBeenCalledWith('order-id', jasmine.objectContaining({
+      packageWeightKg: 1,
+      packageLengthCm: 30,
+      packageWidthCm: 20,
+      packageHeightCm: 10,
+      serviceCode: 'STANDARD',
+      collectionNote: null
+    }));
   });
 });

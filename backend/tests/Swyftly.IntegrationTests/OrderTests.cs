@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -17,8 +18,10 @@ using Swyftly.Application.Identity;
 using Swyftly.Application.Notifications;
 using Swyftly.Application.Orders;
 using Swyftly.Domain.Catalog;
+using Swyftly.Domain.Delivery;
 using Swyftly.Domain.Orders;
 using Swyftly.Domain.Sellers;
+using Swyftly.Infrastructure.Carriers;
 using Swyftly.Infrastructure.Persistence;
 
 namespace Swyftly.IntegrationTests;
@@ -132,6 +135,70 @@ public class OrderTests
         var savedOrder = await ReadJsonAsync<OrderResult>(getOrderResponse);
         Assert.Equal("Original Recipient", savedOrder.DeliveryAddress!.RecipientName);
         Assert.Equal("Leave with reception if needed.", savedOrder.DeliveryAddress.DeliveryInstructions);
+    }
+
+    [Fact]
+    public async Task BuyerCanCreatePickupPointOrderAndSnapshotPickupPoint()
+    {
+        await using var factory = new OrderTestFactory();
+        using var buyerClient = factory.CreateClient();
+        var sellerId = await CreateSellerAsync(factory);
+        var variantId = await CreatePublishedProductAsync(factory, sellerId, "Pickup Order Dress", 499m);
+        var deliveryMethodId = await CreateDeliveryMethodAsync(
+            factory,
+            sellerId,
+            SellerDeliveryMethodType.PickupPoint,
+            "Pickup counter",
+            "Gauteng");
+        var pickupPointId = await CreatePickupPointAsync(factory, "Manual", "JHB-ROSEBANK-001", "Rosebank Pickup Counter", "Gauteng");
+        await AuthorizeAsync(buyerClient, "buyer-pickup-order@example.test", SwyftlyRoles.Buyer);
+        using var addCartResponse = await buyerClient.PostAsJsonAsync("/api/cart/items", new AddCartItemRequest(variantId, 1));
+        addCartResponse.EnsureSuccessStatusCode();
+
+        using var orderResponse = await buyerClient.PostAsJsonAsync(
+            "/api/orders/from-cart",
+            new CreateOrderFromCartApiRequest(
+                null,
+                null,
+                DeliveryAddress: TestDeliveryAddress(),
+                DeliveryMethodId: deliveryMethodId,
+                PickupPointId: pickupPointId));
+
+        orderResponse.EnsureSuccessStatusCode();
+        var order = await ReadJsonAsync<OrderResult>(orderResponse);
+        Assert.Equal("PickupPoint", order.DeliveryMethodType);
+        Assert.NotNull(order.PickupPoint);
+        Assert.Equal(pickupPointId, order.PickupPoint!.PickupPointId);
+        Assert.Equal("Rosebank Pickup Counter", order.PickupPoint.Name);
+        Assert.Equal("Verified", order.DeliveryAddress!.VerificationStatus);
+    }
+
+    [Fact]
+    public async Task CreateOrderFromCart_RequiresPickupPointOnlyForPickupMethod()
+    {
+        await using var factory = new OrderTestFactory();
+        using var buyerClient = factory.CreateClient();
+        var sellerId = await CreateSellerAsync(factory);
+        var variantId = await CreatePublishedProductAsync(factory, sellerId, "Pickup Guard Dress", 499m);
+        var deliveryMethodId = await CreateDeliveryMethodAsync(
+            factory,
+            sellerId,
+            SellerDeliveryMethodType.PickupPoint,
+            "Pickup counter",
+            "Gauteng");
+        await AuthorizeAsync(buyerClient, "buyer-pickup-guard@example.test", SwyftlyRoles.Buyer);
+        using var addCartResponse = await buyerClient.PostAsJsonAsync("/api/cart/items", new AddCartItemRequest(variantId, 1));
+        addCartResponse.EnsureSuccessStatusCode();
+
+        using var orderResponse = await buyerClient.PostAsJsonAsync(
+            "/api/orders/from-cart",
+            new CreateOrderFromCartApiRequest(
+                null,
+                null,
+                DeliveryAddress: TestDeliveryAddress(),
+                DeliveryMethodId: deliveryMethodId));
+
+        Assert.Equal(HttpStatusCode.BadRequest, orderResponse.StatusCode);
     }
 
     [Fact]
@@ -252,6 +319,128 @@ public class OrderTests
         Assert.Contains(notifications, notification => notification.Type == "OrderReadyToShip" && notification.RelatedEntityId == order.OrderId);
         Assert.Contains(notifications, notification => notification.Type == "OrderShipped" && notification.RelatedEntityId == order.OrderId);
         Assert.Single(notifications, notification => notification.Type == "OrderDelivered" && notification.RelatedEntityId == order.OrderId);
+    }
+
+    [Fact]
+    public async Task SellerCanBookCarrierAndSyncTrackingWithFakeProvider()
+    {
+        await using var factory = new OrderTestFactory(useFakeCarrier: true);
+        using var buyerClient = factory.CreateClient();
+        using var sellerClient = factory.CreateClient();
+        var sellerAuth = await AuthorizeAsync(sellerClient, "seller-fake-carrier@example.test", SwyftlyRoles.Seller);
+        var sellerId = await GetSellerProfileIdAsync(factory, sellerAuth.UserId);
+        var variantId = await CreatePublishedProductAsync(factory, sellerId, "Carrier Dress", 300m);
+        var deliveryMethodId = await GetDeliveryMethodIdAsync(factory, sellerId);
+        await AuthorizeAsync(buyerClient, "buyer-fake-carrier@example.test", SwyftlyRoles.Buyer);
+        using var addCartResponse = await buyerClient.PostAsJsonAsync("/api/cart/items", new AddCartItemRequest(variantId, 1));
+        addCartResponse.EnsureSuccessStatusCode();
+        using var orderResponse = await buyerClient.PostAsJsonAsync(
+            "/api/orders/from-cart",
+            new CreateOrderFromCartApiRequest(null, null, DeliveryAddress: TestDeliveryAddress(), DeliveryMethodId: deliveryMethodId));
+        orderResponse.EnsureSuccessStatusCode();
+        var order = await ReadJsonAsync<OrderResult>(orderResponse);
+        await MarkOrderPaidAsync(factory, order.OrderId);
+        using var readyResponse = await sellerClient.PostAsync(
+            $"/api/seller/orders/{order.OrderId}/mark-ready-to-ship",
+            content: null);
+        readyResponse.EnsureSuccessStatusCode();
+
+        using var bookingResponse = await sellerClient.PostAsJsonAsync(
+            $"/api/seller/orders/{order.OrderId}/book-carrier",
+            new BookCarrierApiRequest(1.2m, 30m, 20m, 10m, "STANDARD", "Collect from reception."));
+        bookingResponse.EnsureSuccessStatusCode();
+        var bookedOrder = await ReadJsonAsync<OrderResult>(bookingResponse);
+        var bookedShipment = Assert.Single(bookedOrder.Shipments);
+        Assert.Equal("Booked", bookedShipment.CarrierBookingStatus);
+        Assert.Equal("Fake", bookedShipment.CarrierProviderName);
+        Assert.Equal("Booked", bookedShipment.ProviderStatus);
+        Assert.StartsWith("fake-shp-", bookedShipment.ProviderShipmentReference);
+        Assert.NotNull(bookedShipment.ProviderLabelUrl);
+        Assert.Contains(bookedShipment.Events, shipmentEvent => shipmentEvent.EventType == "CarrierBooked");
+        var bookedEventCount = bookedShipment.Events.Count;
+
+        using var duplicateBookingResponse = await sellerClient.PostAsJsonAsync(
+            $"/api/seller/orders/{order.OrderId}/book-carrier",
+            new BookCarrierApiRequest(1.2m, 30m, 20m, 10m, "STANDARD", "Collect from reception."));
+        duplicateBookingResponse.EnsureSuccessStatusCode();
+        var duplicateBookedOrder = await ReadJsonAsync<OrderResult>(duplicateBookingResponse);
+        Assert.Equal(bookedEventCount, Assert.Single(duplicateBookedOrder.Shipments).Events.Count);
+
+        using var collectedResponse = await sellerClient.PostAsync(
+            $"/api/seller/orders/{order.OrderId}/sync-carrier-tracking",
+            content: null);
+        collectedResponse.EnsureSuccessStatusCode();
+        var collectedOrder = await ReadJsonAsync<OrderResult>(collectedResponse);
+        Assert.Equal("Shipped", collectedOrder.Status);
+        Assert.Equal("Collected", Assert.Single(collectedOrder.Shipments).Status);
+        Assert.Equal("Collected", Assert.Single(collectedOrder.Shipments).ProviderStatus);
+
+        using var inTransitResponse = await sellerClient.PostAsync(
+            $"/api/seller/orders/{order.OrderId}/sync-carrier-tracking",
+            content: null);
+        inTransitResponse.EnsureSuccessStatusCode();
+        var inTransitOrder = await ReadJsonAsync<OrderResult>(inTransitResponse);
+        Assert.Equal("InTransit", Assert.Single(inTransitOrder.Shipments).Status);
+
+        using var deliveredResponse = await sellerClient.PostAsync(
+            $"/api/seller/orders/{order.OrderId}/sync-carrier-tracking",
+            content: null);
+        deliveredResponse.EnsureSuccessStatusCode();
+        var deliveredOrder = await ReadJsonAsync<OrderResult>(deliveredResponse);
+        Assert.Equal("Delivered", deliveredOrder.Status);
+        Assert.Equal("Delivered", Assert.Single(deliveredOrder.Shipments).Status);
+
+        using var duplicateDeliveredResponse = await sellerClient.PostAsync(
+            $"/api/seller/orders/{order.OrderId}/sync-carrier-tracking",
+            content: null);
+        duplicateDeliveredResponse.EnsureSuccessStatusCode();
+        var duplicateDeliveredOrder = await ReadJsonAsync<OrderResult>(duplicateDeliveredResponse);
+        var deliveredEvents = Assert.Single(duplicateDeliveredOrder.Shipments).Events
+            .Where(shipmentEvent => shipmentEvent.EventType == "ShipmentDelivered")
+            .ToArray();
+        Assert.Single(deliveredEvents);
+
+        using var notificationsResponse = await buyerClient.GetAsync("/api/buyer/notifications");
+        notificationsResponse.EnsureSuccessStatusCode();
+        var notifications = await ReadJsonAsync<NotificationResult[]>(notificationsResponse);
+        Assert.Single(notifications, notification => notification.Type == "OrderShipped" && notification.RelatedEntityId == order.OrderId);
+        Assert.Single(notifications, notification => notification.Type == "OrderDelivered" && notification.RelatedEntityId == order.OrderId);
+    }
+
+    [Fact]
+    public async Task CarrierBookingRequiresConfiguredProviderAndReadyShipment()
+    {
+        await using var factory = new OrderTestFactory();
+        using var buyerClient = factory.CreateClient();
+        using var sellerClient = factory.CreateClient();
+        var sellerAuth = await AuthorizeAsync(sellerClient, "seller-manual-carrier@example.test", SwyftlyRoles.Seller);
+        var sellerId = await GetSellerProfileIdAsync(factory, sellerAuth.UserId);
+        var variantId = await CreatePublishedProductAsync(factory, sellerId, "Manual Carrier Dress", 300m);
+        var deliveryMethodId = await GetDeliveryMethodIdAsync(factory, sellerId);
+        await AuthorizeAsync(buyerClient, "buyer-manual-carrier@example.test", SwyftlyRoles.Buyer);
+        using var addCartResponse = await buyerClient.PostAsJsonAsync("/api/cart/items", new AddCartItemRequest(variantId, 1));
+        addCartResponse.EnsureSuccessStatusCode();
+        using var orderResponse = await buyerClient.PostAsJsonAsync(
+            "/api/orders/from-cart",
+            new CreateOrderFromCartApiRequest(null, null, DeliveryAddress: TestDeliveryAddress(), DeliveryMethodId: deliveryMethodId));
+        orderResponse.EnsureSuccessStatusCode();
+        var order = await ReadJsonAsync<OrderResult>(orderResponse);
+        await MarkOrderPaidAsync(factory, order.OrderId);
+
+        using var notReadyResponse = await sellerClient.PostAsJsonAsync(
+            $"/api/seller/orders/{order.OrderId}/book-carrier",
+            new BookCarrierApiRequest(1.2m, 30m, 20m, 10m, "STANDARD", null));
+        Assert.Equal(HttpStatusCode.Conflict, notReadyResponse.StatusCode);
+
+        using var readyResponse = await sellerClient.PostAsync(
+            $"/api/seller/orders/{order.OrderId}/mark-ready-to-ship",
+            content: null);
+        readyResponse.EnsureSuccessStatusCode();
+
+        using var manualProviderResponse = await sellerClient.PostAsJsonAsync(
+            $"/api/seller/orders/{order.OrderId}/book-carrier",
+            new BookCarrierApiRequest(1.2m, 30m, 20m, 10m, "STANDARD", null));
+        Assert.Equal(HttpStatusCode.Conflict, manualProviderResponse.StatusCode);
     }
 
     [Fact]
@@ -427,6 +616,63 @@ public class OrderTests
         return method.Id;
     }
 
+    private static async Task<Guid> CreateDeliveryMethodAsync(
+        OrderTestFactory factory,
+        Guid sellerId,
+        SellerDeliveryMethodType methodType,
+        string name,
+        string? province)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        var method = new SellerDeliveryMethod(
+            sellerId,
+            name,
+            "Seller managed delivery method.",
+            methodType,
+            "ZA",
+            province,
+            25m,
+            null,
+            2,
+            5,
+            10,
+            isActive: true);
+
+        dbContext.SellerDeliveryMethods.Add(method);
+        await dbContext.SaveChangesAsync();
+        return method.Id;
+    }
+
+    private static async Task<Guid> CreatePickupPointAsync(
+        OrderTestFactory factory,
+        string providerName,
+        string code,
+        string name,
+        string province)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        var point = new PickupPoint(
+            providerName,
+            code,
+            name,
+            "10 Market Street",
+            null,
+            "Rosebank",
+            "Johannesburg",
+            province,
+            "2196",
+            "ZA",
+            null,
+            null,
+            "Mon-Fri 09:00-17:00",
+            isActive: true);
+        dbContext.PickupPoints.Add(point);
+        await dbContext.SaveChangesAsync();
+        return point.Id;
+    }
+
     private static async Task<Guid> CreateSellerAsync(OrderTestFactory factory)
     {
         using var scope = factory.Services.CreateScope();
@@ -540,10 +786,30 @@ public class OrderTests
     private sealed class OrderTestFactory : WebApplicationFactory<Program>
     {
         private readonly string _databaseName = $"SwyftlyOrderTests_{Guid.NewGuid():N}";
+        private readonly bool _useFakeCarrier;
+
+        public OrderTestFactory(bool useFakeCarrier = false)
+        {
+            _useFakeCarrier = useFakeCarrier;
+        }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
+            if (_useFakeCarrier)
+            {
+                builder.ConfigureAppConfiguration((_, configurationBuilder) =>
+                {
+                    configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["CarrierProvider:ProviderName"] = FakeCarrierProvider.Name,
+                        ["CarrierProvider:Fake:TrackingBaseUrl"] = "http://localhost:4200/fake-tracking",
+                        ["CarrierProvider:Fake:LabelBaseUrl"] = "http://localhost:4200/fake-label",
+                        ["CarrierTracking:BatchSize"] = "25",
+                        ["CarrierTracking:SyncIntervalMinutes"] = "15"
+                    });
+                });
+            }
 
             builder.ConfigureServices(services =>
             {

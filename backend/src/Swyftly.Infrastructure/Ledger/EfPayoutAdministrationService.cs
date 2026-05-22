@@ -6,6 +6,7 @@ using Swyftly.Application.Common.Results;
 using Swyftly.Application.Common.Validation;
 using Swyftly.Application.Ledger;
 using Swyftly.Domain.Ledger;
+using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Persistence;
 
 namespace Swyftly.Infrastructure.Ledger;
@@ -205,6 +206,17 @@ public sealed class EfPayoutAdministrationService(
         if (string.Equals(payout.AvailableByUserId, request.ActorUserId.ToString(), StringComparison.OrdinalIgnoreCase))
         {
             return DualControlFailure("The user who made a payout available cannot process the same payout.");
+        }
+
+        var hasPendingPayoutProfileChange = await dbContext.SellerPayoutProfileChangeRequests.AnyAsync(
+            changeRequest => changeRequest.SellerId == payout.SellerId
+                && changeRequest.Status == SellerPayoutProfileChangeRequestStatus.PendingReview,
+            cancellationToken);
+        if (hasPendingPayoutProfileChange)
+        {
+            return Result<SellerPayoutResult>.Failure(Error.Conflict(
+                "Payouts.PayoutProfileChangePending",
+                "Payout processing is blocked while the seller has a pending payout profile change request."));
         }
 
         var balance = await GetRequiredBalanceAsync(payout, cancellationToken);

@@ -135,10 +135,22 @@ public static class PayoutEndpoints
         var payouts = await QueryPayouts(dbContext)
             .Where(payout => payout.Status == SellerPayoutStatus.Pending || payout.Status == SellerPayoutStatus.OnHold)
             .OrderBy(payout => payout.CreatedAtUtc)
-            .Select(payout => MapAdminPayout(payout))
             .ToListAsync(cancellationToken);
 
-        return HttpResults.Ok(payouts);
+        var sellerIds = payouts.Select(payout => payout.SellerId).Distinct().ToArray();
+        var pendingChangeRequests = await dbContext.SellerPayoutProfileChangeRequests
+            .AsNoTracking()
+            .Where(request => sellerIds.Contains(request.SellerId)
+                && request.Status == SellerPayoutProfileChangeRequestStatus.PendingReview)
+            .ToDictionaryAsync(request => request.SellerId, request => request.Id, cancellationToken);
+
+        var responses = payouts
+            .Select(payout => MapAdminPayout(
+                payout,
+                pendingChangeRequests.TryGetValue(payout.SellerId, out var requestId) ? requestId : null))
+            .ToList();
+
+        return HttpResults.Ok(responses);
     }
 
     private static async Task<IResult> HoldPayoutAsync(
@@ -314,7 +326,7 @@ public static class PayoutEndpoints
                     item.OrderId.HasValue ? "Order" : "Ledger"))
                 .ToArray());
 
-    private static AdminPayoutResponse MapAdminPayout(SellerPayout payout) =>
+    private static AdminPayoutResponse MapAdminPayout(SellerPayout payout, Guid? pendingPayoutProfileChangeRequestId = null) =>
         new(
             payout.Id,
             payout.SellerId,
@@ -326,6 +338,8 @@ public static class PayoutEndpoints
             payout.HoldReason,
             payout.ReleasedAtUtc,
             payout.ReleaseReason,
+            pendingPayoutProfileChangeRequestId.HasValue,
+            pendingPayoutProfileChangeRequestId,
             payout.Items
                 .OrderBy(item => item.CreatedAtUtc)
                 .Select(item => new AdminPayoutItemResponse(
@@ -407,6 +421,8 @@ public sealed record AdminPayoutResponse(
     string? HoldReason,
     DateTimeOffset? ReleasedAtUtc,
     string? ReleaseReason,
+    bool HasPendingPayoutProfileChange,
+    Guid? PendingPayoutProfileChangeRequestId,
     IReadOnlyCollection<AdminPayoutItemResponse> Items);
 
 public sealed record AdminPayoutItemResponse(

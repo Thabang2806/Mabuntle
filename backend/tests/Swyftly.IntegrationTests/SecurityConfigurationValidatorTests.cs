@@ -159,6 +159,18 @@ public sealed class SecurityConfigurationValidatorTests
         Assert.Contains("EmailDelivery:ProviderName", exception.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ValidateProductionConfiguration_RejectsFakeCarrierProvider()
+    {
+        var configuration = BuildValidProductionConfiguration();
+        configuration["CarrierProvider:ProviderName"] = "Fake";
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => SecurityConfigurationValidator.ValidateProductionConfiguration(configuration));
+
+        Assert.Contains("CarrierProvider:ProviderName", exception.Message, StringComparison.Ordinal);
+    }
+
     private static IConfigurationRoot BuildConfiguration(Dictionary<string, string?> values) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(values)

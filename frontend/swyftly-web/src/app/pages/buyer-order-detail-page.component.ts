@@ -77,6 +77,9 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 @if (order()!.deliveryMethodName) {
                   <div><dt>Delivery method</dt><dd>{{ order()!.deliveryMethodName }} - {{ deliveryEstimate(order()!) }}</dd></div>
                 }
+                @if (order()!.pickupPoint) {
+                  <div><dt>Pickup point</dt><dd>{{ order()!.pickupPoint!.name }}</dd></div>
+                }
                 <div><dt>Platform fee</dt><dd>{{ order()!.platformFeeAmount | currency:'ZAR':'symbol-narrow' }}</dd></div>
                 <div><dt>Discount</dt><dd>{{ order()!.discountAmount | currency:'ZAR':'symbol-narrow' }}</dd></div>
                 <div><dt>Total</dt><dd>{{ order()!.totalAmount | currency:'ZAR':'symbol-narrow' }}</dd></div>
@@ -93,11 +96,31 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   @if (order()!.deliveryAddress!.deliveryInstructions) {
                     <div><dt>Instructions</dt><dd>{{ order()!.deliveryAddress!.deliveryInstructions }}</dd></div>
                   }
+                  @if (order()!.deliveryAddress!.verificationStatus) {
+                    <div><dt>Address check</dt><dd>{{ order()!.deliveryAddress!.verificationStatus }}</dd></div>
+                  }
+                  @if ((order()!.deliveryAddress!.verificationWarnings?.length ?? 0) > 0) {
+                    <div><dt>Warnings</dt><dd>{{ order()!.deliveryAddress!.verificationWarnings!.join(' ') }}</dd></div>
+                  }
                 </dl>
               } @else {
                 <app-ui-alert tone="info">This older order does not have a saved delivery-address snapshot.</app-ui-alert>
               }
             </section>
+
+            @if (order()!.pickupPoint) {
+              <section class="buyer-panel">
+                <h2>Pickup point</h2>
+                <dl class="seller-facts">
+                  <div><dt>Name</dt><dd>{{ order()!.pickupPoint!.name }}</dd></div>
+                  <div><dt>Code</dt><dd>{{ order()!.pickupPoint!.code }}</dd></div>
+                  <div><dt>Address</dt><dd>{{ order()!.pickupPoint!.addressLine1 }}, {{ order()!.pickupPoint!.city }}, {{ order()!.pickupPoint!.province }}</dd></div>
+                  @if (order()!.pickupPoint!.openingHours) {
+                    <div><dt>Opening hours</dt><dd>{{ order()!.pickupPoint!.openingHours }}</dd></div>
+                  }
+                </dl>
+              </section>
+            }
 
             <section class="buyer-panel">
               <h2>After-sales options</h2>
@@ -246,6 +269,12 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                       }
                       @if (shipment.trackingUrl) {
                         <a [href]="shipment.trackingUrl" target="_blank" rel="noreferrer">Track shipment</a>
+                      }
+                      @if (shipment.providerStatus) {
+                        <small>Carrier status: {{ shipment.providerStatus }}</small>
+                      }
+                      @if (shipment.providerLastSyncedAtUtc) {
+                        <small>Synced {{ shipment.providerLastSyncedAtUtc | date:'short' }}</small>
                       }
                       @if (shipment.status === 'DeliveryFailed' || shipment.status === 'ReturnedToSender') {
                         <a routerLink="/account/support">Contact support</a>

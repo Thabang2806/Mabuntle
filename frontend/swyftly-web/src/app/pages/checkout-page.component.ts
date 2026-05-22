@@ -9,7 +9,7 @@ import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerPaymentRedirectService, BuyerPaymentService } from '../buyer/buyer-payment.service';
 import { BuyerDeliveryAddressResponse } from '../buyer/buyer-settings.models';
 import { BuyerSettingsService } from '../buyer/buyer-settings.service';
-import { CartResponse, CartShippingOptionResponse, OrderDeliveryAddressRequest } from '../cart/cart.models';
+import { CartAddressVerificationResponse, CartResponse, CartShippingOptionResponse, OrderDeliveryAddressRequest } from '../cart/cart.models';
 import { CartService } from '../cart/cart.service';
 import { EmptyStateComponent } from '../shared/ui/empty-state.component';
 import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
@@ -115,6 +115,12 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                     @if (selectedDeliveryAddress()!.deliveryInstructions) {
                       <span>Instructions: {{ selectedDeliveryAddress()!.deliveryInstructions }}</span>
                     }
+                    @if (selectedDeliveryAddress()!.verificationStatus) {
+                      <span>Verification: {{ selectedDeliveryAddress()!.verificationStatus }}</span>
+                    }
+                    @if ((selectedDeliveryAddress()!.verificationWarnings?.length ?? 0) > 0) {
+                      <span>Warnings: {{ selectedDeliveryAddress()!.verificationWarnings!.join(', ') }}</span>
+                    }
                   </div>
                 } @else {
                   <div class="form-grid">
@@ -202,6 +208,17 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </div>
                 <p>Delivery rates are managed by the seller and matched to the selected delivery address.</p>
 
+                @if (addressVerification(); as verification) {
+                  <app-ui-alert [tone]="verification.verificationStatus === 'Verified' ? 'success' : 'warning'">
+                    Address check: {{ verification.verificationStatus }}.
+                    @if (verification.verificationWarnings.length > 0) {
+                      {{ verification.verificationWarnings.join(' ') }}
+                    } @else {
+                      No local address warnings.
+                    }
+                  </app-ui-alert>
+                }
+
                 <button
                   mat-stroked-button
                   type="button"
@@ -226,6 +243,9 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                           @if (option.description) {
                             <small>{{ option.description }}</small>
                           }
+                          @if (option.requiresPickupPoint) {
+                            <small>Select a platform pickup point before checkout.</small>
+                          }
                         </span>
                         <span>
                           <strong>{{ option.shippingAmount | currency:'ZAR':'symbol-narrow' }}</strong>
@@ -234,6 +254,24 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                           }
                         </span>
                       </button>
+                      @if (option.requiresPickupPoint && selectedDeliveryMethodId() === option.deliveryMethodId) {
+                        <div class="checkout-pickup-options">
+                          @for (pickupPoint of option.pickupPoints ?? []; track pickupPoint.pickupPointId) {
+                            <button
+                              type="button"
+                              class="checkout-pickup-option"
+                              [class.is-selected]="selectedPickupPointId() === pickupPoint.pickupPointId"
+                              (click)="selectPickupPoint(pickupPoint.pickupPointId)"
+                            >
+                              <strong>{{ pickupPoint.name }}</strong>
+                              <span>{{ pickupPoint.addressLine1 }}, {{ pickupPoint.city }}, {{ pickupPoint.province }}</span>
+                              @if (pickupPoint.openingHours) {
+                                <small>{{ pickupPoint.openingHours }}</small>
+                              }
+                            </button>
+                          }
+                        </div>
+                      }
                     }
                   </div>
                 } @else {
@@ -300,6 +338,12 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   <span>Delivery method</span>
                   <strong>{{ option.name }} - {{ deliveryEstimate(option) }}</strong>
                 </div>
+                @if (selectedPickupPoint(option); as pickupPoint) {
+                  <div class="summary-row">
+                    <span>Pickup point</span>
+                    <strong>{{ pickupPoint.name }}</strong>
+                  </div>
+                }
               } @else {
                 <div class="summary-row">
                   <span>Delivery method</span>
@@ -358,6 +402,8 @@ export class CheckoutPageComponent implements OnInit {
   protected readonly useManualAddress = signal(true);
   protected readonly shippingOptions = signal<CartShippingOptionResponse[]>([]);
   protected readonly selectedDeliveryMethodId = signal<string | null>(null);
+  protected readonly selectedPickupPointId = signal<string | null>(null);
+  protected readonly addressVerification = signal<CartAddressVerificationResponse | null>(null);
   protected readonly isLoading = signal(true);
   protected readonly isLoadingShipping = signal(false);
   protected readonly isSubmitting = signal(false);
@@ -413,6 +459,12 @@ export class CheckoutPageComponent implements OnInit {
       return;
     }
 
+    const selectedShippingOption = this.selectedShippingOption();
+    if (selectedShippingOption?.requiresPickupPoint && !this.selectedPickupPointId()) {
+      this.errorMessage.set('Choose a pickup point before starting checkout.');
+      return;
+    }
+
     this.isSubmitting.set(true);
     this.errorMessage.set(null);
     let orderId: string | null = null;
@@ -422,7 +474,8 @@ export class CheckoutPageComponent implements OnInit {
         reservationMinutes: null,
         deliveryAddressId,
         deliveryAddress: deliveryAddressId ? null : this.createManualDeliveryAddress(),
-        deliveryMethodId: this.selectedDeliveryMethodId()
+        deliveryMethodId: this.selectedDeliveryMethodId(),
+        pickupPointId: selectedShippingOption?.requiresPickupPoint ? this.selectedPickupPointId() : null
       });
       orderId = order.orderId;
       const payment = await this.paymentService.initiatePayment(order.orderId);
@@ -480,9 +533,11 @@ export class CheckoutPageComponent implements OnInit {
         deliveryAddress: this.useManualAddress() ? this.createManualDeliveryAddress() : null
       });
       this.shippingOptions.set(response.options);
+      this.addressVerification.set(response.addressVerification ?? null);
       this.selectedDeliveryMethodId.set(response.options[0]?.deliveryMethodId ?? null);
     } catch (error) {
       this.shippingOptions.set([]);
+      this.addressVerification.set(null);
       this.errorMessage.set(getApiErrorMessage(error));
     } finally {
       this.isLoadingShipping.set(false);
@@ -491,11 +546,21 @@ export class CheckoutPageComponent implements OnInit {
 
   protected selectDeliveryMethod(deliveryMethodId: string): void {
     this.selectedDeliveryMethodId.set(deliveryMethodId);
+    this.selectedPickupPointId.set(null);
+  }
+
+  protected selectPickupPoint(pickupPointId: string): void {
+    this.selectedPickupPointId.set(pickupPointId);
   }
 
   protected selectedShippingOption(): CartShippingOptionResponse | null {
     const selectedId = this.selectedDeliveryMethodId();
     return this.shippingOptions().find(option => option.deliveryMethodId === selectedId) ?? null;
+  }
+
+  protected selectedPickupPoint(option = this.selectedShippingOption()) {
+    const selectedId = this.selectedPickupPointId();
+    return option?.pickupPoints?.find(pickupPoint => pickupPoint.pickupPointId === selectedId) ?? null;
   }
 
   protected orderTotal(): number {
@@ -538,6 +603,8 @@ export class CheckoutPageComponent implements OnInit {
   private resetShippingSelection(): void {
     this.shippingOptions.set([]);
     this.selectedDeliveryMethodId.set(null);
+    this.selectedPickupPointId.set(null);
+    this.addressVerification.set(null);
   }
 }
 

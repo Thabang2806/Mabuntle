@@ -1,4 +1,5 @@
 using Swyftly.Domain.Common;
+using Swyftly.Domain.Delivery;
 using Swyftly.Domain.Sellers;
 
 namespace Swyftly.Domain.Orders;
@@ -99,6 +100,42 @@ public sealed class Order : AuditableEntity
 
     public string? DeliveryInstructions { get; private set; }
 
+    public AddressVerificationStatus DeliveryVerificationStatus { get; private set; } = AddressVerificationStatus.Unverified;
+
+    public string? DeliveryVerificationProvider { get; private set; }
+
+    public string? DeliveryVerificationWarningsJson { get; private set; }
+
+    public DateTimeOffset? DeliveryVerifiedAtUtc { get; private set; }
+
+    public Guid? PickupPointId { get; private set; }
+
+    public string? PickupPointProviderName { get; private set; }
+
+    public string? PickupPointCode { get; private set; }
+
+    public string? PickupPointName { get; private set; }
+
+    public string? PickupPointAddressLine1 { get; private set; }
+
+    public string? PickupPointAddressLine2 { get; private set; }
+
+    public string? PickupPointSuburb { get; private set; }
+
+    public string? PickupPointCity { get; private set; }
+
+    public string? PickupPointProvince { get; private set; }
+
+    public string? PickupPointPostalCode { get; private set; }
+
+    public string? PickupPointCountryCode { get; private set; }
+
+    public decimal? PickupPointLatitude { get; private set; }
+
+    public decimal? PickupPointLongitude { get; private set; }
+
+    public string? PickupPointOpeningHours { get; private set; }
+
     public IReadOnlyCollection<OrderItem> Items => _items.AsReadOnly();
 
     public IReadOnlyCollection<OrderStatusHistory> StatusHistory => _statusHistory.AsReadOnly();
@@ -128,7 +165,38 @@ public sealed class Order : AuditableEntity
                     DeliveryProvince,
                     DeliveryPostalCode,
                     DeliveryCountryCode,
-                    DeliveryInstructions);
+                    DeliveryInstructions,
+                    DeliveryVerificationStatus,
+                    DeliveryVerificationProvider,
+                    DeliveryVerificationWarningsJson,
+                    DeliveryVerifiedAtUtc);
+
+    public PickupPointSnapshot? PickupPoint =>
+        PickupPointId is null
+            || PickupPointProviderName is null
+            || PickupPointCode is null
+            || PickupPointName is null
+            || PickupPointAddressLine1 is null
+            || PickupPointCity is null
+            || PickupPointProvince is null
+            || PickupPointPostalCode is null
+            || PickupPointCountryCode is null
+                ? null
+                : new PickupPointSnapshot(
+                    PickupPointId.Value,
+                    PickupPointProviderName,
+                    PickupPointCode,
+                    PickupPointName,
+                    PickupPointAddressLine1,
+                    PickupPointAddressLine2,
+                    PickupPointSuburb,
+                    PickupPointCity,
+                    PickupPointProvince,
+                    PickupPointPostalCode,
+                    PickupPointCountryCode,
+                    PickupPointLatitude,
+                    PickupPointLongitude,
+                    PickupPointOpeningHours);
 
     public void AddItem(
         Guid productId,
@@ -182,6 +250,10 @@ public sealed class Order : AuditableEntity
         DeliveryPostalCode = deliveryAddress?.PostalCode;
         DeliveryCountryCode = deliveryAddress?.CountryCode;
         DeliveryInstructions = deliveryAddress?.DeliveryInstructions;
+        DeliveryVerificationStatus = deliveryAddress?.VerificationStatus ?? AddressVerificationStatus.Unverified;
+        DeliveryVerificationProvider = deliveryAddress?.VerificationProvider;
+        DeliveryVerificationWarningsJson = deliveryAddress?.VerificationWarningsJson;
+        DeliveryVerifiedAtUtc = deliveryAddress?.VerifiedAtUtc;
     }
 
     public void SetDeliveryMethod(SellerDeliveryMethod deliveryMethod, decimal shippingAmount)
@@ -195,6 +267,24 @@ public sealed class Order : AuditableEntity
         DeliveryEstimatedMinDays = deliveryMethod.EstimatedMinDays;
         DeliveryEstimatedMaxDays = deliveryMethod.EstimatedMaxDays;
         ShippingAmount = shippingAmount;
+    }
+
+    public void SetPickupPoint(PickupPoint? pickupPoint)
+    {
+        PickupPointId = pickupPoint?.Id;
+        PickupPointProviderName = pickupPoint?.ProviderName;
+        PickupPointCode = pickupPoint?.Code;
+        PickupPointName = pickupPoint?.Name;
+        PickupPointAddressLine1 = pickupPoint?.AddressLine1;
+        PickupPointAddressLine2 = pickupPoint?.AddressLine2;
+        PickupPointSuburb = pickupPoint?.Suburb;
+        PickupPointCity = pickupPoint?.City;
+        PickupPointProvince = pickupPoint?.Province;
+        PickupPointPostalCode = pickupPoint?.PostalCode;
+        PickupPointCountryCode = pickupPoint?.CountryCode;
+        PickupPointLatitude = pickupPoint?.Latitude;
+        PickupPointLongitude = pickupPoint?.Longitude;
+        PickupPointOpeningHours = pickupPoint?.OpeningHours;
     }
 
     private void AddStatusHistory(
