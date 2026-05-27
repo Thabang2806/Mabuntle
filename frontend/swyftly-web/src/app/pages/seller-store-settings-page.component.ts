@@ -10,6 +10,7 @@ import {
 } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -28,10 +29,17 @@ import {
 } from '../seller/seller-onboarding.models';
 import { SellerOnboardingService } from '../seller/seller-onboarding.service';
 import {
+  SellerNotificationPreferenceCategory,
+  SellerNotificationPreferencesResponse
+} from '../seller/seller-notification.models';
+import { SellerNotificationService } from '../seller/seller-notification.service';
+import { SellerStorePolicyService } from '../seller/seller-store-policy.service';
+import {
   SellerPayoutProfileChangeRequestRequest,
   SellerPayoutProfileChangeStateResponse
 } from '../seller/seller-payout-profile-change.models';
 import { SellerPayoutProfileChangeService } from '../seller/seller-payout-profile-change.service';
+import { SellerPolicyResponse, SellerStorePolicyRequest } from '../shared/seller-policy.models';
 import { SellerWorkspaceNavComponent } from '../seller/seller-workspace-nav.component';
 import { PageHeaderComponent } from '../shared/ui/page-header.component';
 import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge.component';
@@ -42,6 +50,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     CurrencyPipe,
     MatButtonModule,
+    MatCheckboxModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
@@ -369,6 +378,70 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             </form>
           </section>
 
+          <section class="route-card wizard-form seller-store-policy-panel">
+            <span class="eyebrow">Store policies</span>
+            <h2>Buyer-facing policy context</h2>
+            <p>These policies appear on your storefront, product pages, and checkout-time order records. They guide return and support conversations, but Swyftly still reviews return, dispute, refund, and support workflows separately.</p>
+
+            @if (storePolicy(); as policy) {
+              <div class="settings-summary-list">
+                <div>
+                  <span>Policy completeness</span>
+                  <strong>{{ policy.isComplete ? 'Complete' : 'Needs detail' }}</strong>
+                </div>
+                <div>
+                  <span>Checkout snapshot</span>
+                  <strong>New orders copy the current policy at checkout</strong>
+                </div>
+              </div>
+              @if (!policy.isComplete) {
+                <app-ui-alert tone="warning">Missing context: {{ policy.missingFields.join(', ') }}.</app-ui-alert>
+              }
+            }
+
+            <form [formGroup]="policyForm" (ngSubmit)="saveStorePolicy()" class="seller-delivery-method-form" novalidate>
+              <mat-form-field appearance="outline">
+                <mat-label>Return window days</mat-label>
+                <input matInput type="number" min="0" max="365" formControlName="returnWindowDays" />
+                @if (policyForm.controls.returnWindowDays.invalid) {
+                  <mat-error>Use a return window from 0 to 365 days.</mat-error>
+                }
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Return policy</mat-label>
+                <textarea matInput rows="4" formControlName="returnPolicy"></textarea>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Exchange policy</mat-label>
+                <textarea matInput rows="4" formControlName="exchangePolicy"></textarea>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Fulfilment guidance</mat-label>
+                <textarea matInput rows="3" formControlName="fulfilmentPolicy"></textarea>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Support expectations</mat-label>
+                <textarea matInput rows="3" formControlName="supportPolicy"></textarea>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Product care notes</mat-label>
+                <textarea matInput rows="3" formControlName="careInstructions"></textarea>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Product disclaimer</mat-label>
+                <textarea matInput rows="3" formControlName="productDisclaimer"></textarea>
+              </mat-form-field>
+
+              <button mat-flat-button type="submit" [disabled]="isSaving()">Save store policies</button>
+            </form>
+          </section>
+
           <aside class="route-card seller-settings-readonly">
             <span class="eyebrow">Payout security</span>
             <h2>Payout profile changes</h2>
@@ -437,6 +510,31 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               </form>
             }
           </aside>
+
+          <section class="route-card wizard-form seller-notification-preferences">
+            <span class="eyebrow">Notifications</span>
+            <h2>Seller notification preferences</h2>
+            <p>Choose how Swyftly sends transactional updates about verification, listing reviews, revisions, and ad campaigns.</p>
+
+            <form [formGroup]="notificationPreferenceForm" (ngSubmit)="saveNotificationPreferences()" novalidate>
+              <div class="settings-summary-list notification-preference-list">
+                @for (category of notificationPreferenceCategories; track category.category) {
+                  <div class="notification-preference-row" [formGroupName]="category.category">
+                    <div>
+                      <strong>{{ category.label }}</strong>
+                      <span>{{ category.description }}</span>
+                    </div>
+                    <div class="notification-preference-controls">
+                      <mat-checkbox formControlName="isEnabled">In-app</mat-checkbox>
+                      <mat-checkbox formControlName="emailEnabled">Email</mat-checkbox>
+                    </div>
+                  </div>
+                }
+              </div>
+
+              <button mat-flat-button type="submit" [disabled]="isSaving()">Save notification preferences</button>
+            </form>
+          </section>
         </div>
       }
     </section>
@@ -445,12 +543,16 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 export class SellerStoreSettingsPageComponent implements OnInit {
   private readonly formBuilder = inject(NonNullableFormBuilder);
   private readonly deliveryMethodService = inject(SellerDeliveryMethodService);
+  private readonly notificationService = inject(SellerNotificationService);
   private readonly onboardingService = inject(SellerOnboardingService);
   private readonly payoutProfileChangeService = inject(SellerPayoutProfileChangeService);
+  private readonly storePolicyService = inject(SellerStorePolicyService);
 
   protected readonly onboarding = signal<SellerOnboardingResponse | null>(null);
   protected readonly deliveryMethods = signal<SellerDeliveryMethodResponse[]>([]);
   protected readonly payoutChangeState = signal<SellerPayoutProfileChangeStateResponse | null>(null);
+  protected readonly notificationPreferences = signal<SellerNotificationPreferencesResponse | null>(null);
+  protected readonly storePolicy = signal<SellerPolicyResponse | null>(null);
   protected readonly editingDeliveryMethodId = signal<string | null>(null);
   protected readonly isLoading = signal(true);
   protected readonly isSaving = signal(false);
@@ -509,6 +611,62 @@ export class SellerStoreSettingsPageComponent implements OnInit {
   protected readonly payoutChangeForm = this.formBuilder.group({
     payoutProviderReference: ['', [Validators.required]],
     reason: ['', [Validators.required]]
+  });
+
+  protected readonly policyForm = this.formBuilder.group({
+    returnWindowDays: [null as number | null, [Validators.min(0), Validators.max(365)]],
+    returnPolicy: [''],
+    exchangePolicy: [''],
+    fulfilmentPolicy: [''],
+    supportPolicy: [''],
+    careInstructions: [''],
+    productDisclaimer: ['']
+  });
+
+  protected readonly notificationPreferenceCategories: readonly {
+    category: SellerNotificationPreferenceCategory;
+    label: string;
+    description: string;
+  }[] = [
+    {
+      category: 'Verification',
+      label: 'Verification',
+      description: 'Seller approval, rejection, and suspension decisions.'
+    },
+    {
+      category: 'Products',
+      label: 'Products',
+      description: 'Product approval, rejection, and change-request outcomes.'
+    },
+    {
+      category: 'Revisions',
+      label: 'Revisions',
+      description: 'Published listing and variant revision review outcomes.'
+    },
+    {
+      category: 'Ads',
+      label: 'Ads',
+      description: 'Ad campaign approval and rejection decisions.'
+    }
+  ];
+
+  protected readonly notificationPreferenceForm = this.formBuilder.group({
+    Verification: this.formBuilder.group({
+      isEnabled: true,
+      emailEnabled: true
+    }),
+    Products: this.formBuilder.group({
+      isEnabled: true,
+      emailEnabled: true
+    }),
+    Revisions: this.formBuilder.group({
+      isEnabled: true,
+      emailEnabled: true
+    }),
+    Ads: this.formBuilder.group({
+      isEnabled: true,
+      emailEnabled: true
+    })
   });
 
   async ngOnInit(): Promise<void> {
@@ -670,6 +828,60 @@ export class SellerStoreSettingsPageComponent implements OnInit {
       'Payout profile change request cancelled.');
   }
 
+  protected async saveNotificationPreferences(): Promise<void> {
+    if (this.isSaving()) {
+      return;
+    }
+
+    const rawValue = this.notificationPreferenceForm.getRawValue();
+    this.isSaving.set(true);
+    this.errorMessage.set(null);
+    this.successMessage.set(null);
+
+    try {
+      this.setNotificationPreferences(await this.notificationService.updatePreferences({
+        preferences: this.notificationPreferenceCategories.map(item => ({
+          category: item.category,
+          isEnabled: rawValue[item.category].isEnabled,
+          emailEnabled: rawValue[item.category].emailEnabled
+        }))
+      }));
+      this.successMessage.set('Notification preferences saved.');
+    } catch (error) {
+      this.errorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isSaving.set(false);
+    }
+  }
+
+  protected async saveStorePolicy(): Promise<void> {
+    if (!this.ensureValid(this.policyForm)) {
+      return;
+    }
+
+    this.isSaving.set(true);
+    this.errorMessage.set(null);
+    this.successMessage.set(null);
+
+    try {
+      const value = this.policyForm.getRawValue();
+      this.setStorePolicy(await this.storePolicyService.updatePolicy({
+        returnWindowDays: value.returnWindowDays === null ? null : Number(value.returnWindowDays),
+        returnPolicy: emptyToNull(value.returnPolicy),
+        exchangePolicy: emptyToNull(value.exchangePolicy),
+        fulfilmentPolicy: emptyToNull(value.fulfilmentPolicy),
+        supportPolicy: emptyToNull(value.supportPolicy),
+        careInstructions: emptyToNull(value.careInstructions),
+        productDisclaimer: emptyToNull(value.productDisclaimer)
+      } satisfies SellerStorePolicyRequest));
+      this.successMessage.set('Store policies saved.');
+    } catch (error) {
+      this.errorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isSaving.set(false);
+    }
+  }
+
   protected verificationTone(): StatusBadgeTone {
     const status = this.onboarding()?.verificationStatus;
     if (status === 'Verified') {
@@ -688,12 +900,16 @@ export class SellerStoreSettingsPageComponent implements OnInit {
     this.errorMessage.set(null);
 
     try {
-      const [onboarding, deliveryMethods] = await Promise.all([
+      const [onboarding, deliveryMethods, notificationPreferences, storePolicy] = await Promise.all([
         this.onboardingService.getOnboarding(),
-        this.deliveryMethodService.list()
+        this.deliveryMethodService.list(),
+        this.notificationService.getPreferences(),
+        this.storePolicyService.getPolicy()
       ]);
       this.setOnboarding(onboarding);
       this.deliveryMethods.set(deliveryMethods);
+      this.setNotificationPreferences(notificationPreferences);
+      this.setStorePolicy(storePolicy);
       if (onboarding.verificationStatus === 'Verified') {
         this.setPayoutChangeState(await this.payoutProfileChangeService.getState());
       } else {
@@ -783,6 +999,29 @@ export class SellerStoreSettingsPageComponent implements OnInit {
     this.payoutChangeForm.patchValue({
       payoutProviderReference: editableRequest?.proposedPayoutProviderReference ?? '',
       reason: editableRequest?.reason ?? ''
+    });
+  }
+
+  private setNotificationPreferences(state: SellerNotificationPreferencesResponse): void {
+    this.notificationPreferences.set(state);
+    for (const preference of state.preferences) {
+      this.notificationPreferenceForm.controls[preference.category].patchValue({
+        isEnabled: preference.isEnabled,
+        emailEnabled: preference.emailEnabled
+      });
+    }
+  }
+
+  private setStorePolicy(policy: SellerPolicyResponse): void {
+    this.storePolicy.set(policy);
+    this.policyForm.patchValue({
+      returnWindowDays: policy.returnWindowDays,
+      returnPolicy: policy.returnPolicy ?? '',
+      exchangePolicy: policy.exchangePolicy ?? '',
+      fulfilmentPolicy: policy.fulfilmentPolicy ?? '',
+      supportPolicy: policy.supportPolicy ?? '',
+      careInstructions: policy.careInstructions ?? '',
+      productDisclaimer: policy.productDisclaimer ?? ''
     });
   }
 

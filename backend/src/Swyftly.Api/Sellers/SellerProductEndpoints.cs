@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using Swyftly.Api.Catalog;
 using Swyftly.Api.Results;
 using Swyftly.Api.Security;
 using Swyftly.Application.Abstractions;
@@ -189,6 +190,34 @@ public static class SellerProductEndpoints
             .WithName("CancelSellerProductListingRevision")
             .WithSummary("Cancels the active published product listing revision.")
             .Produces<SellerProductRevisionResponse>(StatusCodes.Status200OK)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{id:guid}/variant-revision", GetVariantRevisionAsync)
+            .WithName("GetSellerProductVariantRevision")
+            .WithSummary("Returns or creates the active seller variant and pricing revision for a published product.")
+            .Produces<SellerProductVariantRevisionResponse>(StatusCodes.Status200OK)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapPut("/{id:guid}/variant-revision", UpdateVariantRevisionAsync)
+            .WithName("UpdateSellerProductVariantRevision")
+            .WithSummary("Stages variant and pricing changes for a published product.")
+            .Produces<SellerProductVariantRevisionResponse>(StatusCodes.Status200OK)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{id:guid}/variant-revision/submit-review", SubmitVariantRevisionReviewAsync)
+            .WithName("SubmitSellerProductVariantRevision")
+            .WithSummary("Submits a published product variant and pricing revision for admin review.")
+            .Produces<SellerProductVariantRevisionResponse>(StatusCodes.Status200OK)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{id:guid}/variant-revision/cancel", CancelVariantRevisionAsync)
+            .WithName("CancelSellerProductVariantRevision")
+            .WithSummary("Cancels the active published product variant and pricing revision.")
+            .Produces<SellerProductVariantRevisionResponse>(StatusCodes.Status200OK)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
@@ -1158,6 +1187,168 @@ public static class SellerProductEndpoints
         return HttpResults.Ok(await CreateRevisionResponseAsync(revision.Id, dbContext, cancellationToken));
     }
 
+    private static async Task<IResult> GetVariantRevisionAsync(
+        Guid id,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var product = await GetOwnedProductAsync(id, principal, dbContext, cancellationToken);
+        if (product is null)
+        {
+            return ProductNotFound();
+        }
+
+        if (product.Status != ProductStatus.Published)
+        {
+            return Validation("product", "Variant and pricing revisions are available only for published products.");
+        }
+
+        var revision = await GetOrCreateActiveVariantRevisionAsync(product, dbContext, timeProvider, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return HttpResults.Ok(await CreateVariantRevisionResponseAsync(revision.Id, dbContext, cancellationToken));
+    }
+
+    private static async Task<IResult> UpdateVariantRevisionAsync(
+        Guid id,
+        UpsertSellerProductVariantRevisionRequest request,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var product = await GetOwnedProductAsync(id, principal, dbContext, cancellationToken);
+        if (product is null)
+        {
+            return ProductNotFound();
+        }
+
+        if (product.Status != ProductStatus.Published)
+        {
+            return Validation("product", "Variant and pricing revisions can be staged only for published products.");
+        }
+
+        var revision = await GetOrCreateActiveVariantRevisionAsync(product, dbContext, timeProvider, cancellationToken);
+        if (!revision.CanSellerEdit)
+        {
+            return Validation("revision", "A variant revision already submitted for review cannot be edited.");
+        }
+
+        var currentVariants = await dbContext.ProductVariants
+            .Where(variant => variant.ProductId == product.Id)
+            .ToDictionaryAsync(variant => variant.Id, cancellationToken);
+        var proposedItems = new List<ProductVariantRevisionItem>();
+        foreach (var requestItem in request.Items ?? [])
+        {
+            var itemResult = TryCreateVariantRevisionItem(revision.Id, requestItem, currentVariants);
+            if (itemResult.Error is not null)
+            {
+                return Validation("items", itemResult.Error);
+            }
+
+            proposedItems.Add(itemResult.Item!);
+        }
+
+        var validation = await ProductVariantRevisionRules.ValidateAsync(
+            product.Id,
+            proposedItems,
+            dbContext,
+            cancellationToken);
+        if (!validation.IsValid)
+        {
+            return HttpResults.ValidationProblem(validation.Errors);
+        }
+
+        var existingItems = await dbContext.ProductVariantRevisionItems
+            .Where(item => item.RevisionId == revision.Id)
+            .ToListAsync(cancellationToken);
+        dbContext.ProductVariantRevisionItems.RemoveRange(existingItems);
+        dbContext.ProductVariantRevisionItems.AddRange(proposedItems);
+
+        try
+        {
+            revision.UpdateSellerReason(request.SellerReason);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Validation("revision", exception.Message);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return HttpResults.Ok(await CreateVariantRevisionResponseAsync(revision.Id, dbContext, cancellationToken));
+    }
+
+    private static async Task<IResult> SubmitVariantRevisionReviewAsync(
+        Guid id,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var product = await GetOwnedProductAsync(id, principal, dbContext, cancellationToken);
+        if (product is null)
+        {
+            return ProductNotFound();
+        }
+
+        if (product.Status != ProductStatus.Published)
+        {
+            return Validation("product", "Only published products can submit variant and pricing revisions.");
+        }
+
+        var revision = await GetActiveVariantRevisionAsync(product.Id, dbContext, cancellationToken);
+        if (revision is null)
+        {
+            return Validation("revision", "Create a variant revision before submitting it for review.");
+        }
+
+        var items = await dbContext.ProductVariantRevisionItems
+            .Where(item => item.RevisionId == revision.Id)
+            .ToListAsync(cancellationToken);
+        var validation = await ProductVariantRevisionRules.ValidateAsync(product.Id, items, dbContext, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return HttpResults.ValidationProblem(validation.Errors);
+        }
+
+        try
+        {
+            revision.SubmitForReview(items.Count > 0, timeProvider.GetUtcNow());
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Validation("revision", exception.Message);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return HttpResults.Ok(await CreateVariantRevisionResponseAsync(revision.Id, dbContext, cancellationToken));
+    }
+
+    private static async Task<IResult> CancelVariantRevisionAsync(
+        Guid id,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var product = await GetOwnedProductAsync(id, principal, dbContext, cancellationToken);
+        if (product is null)
+        {
+            return ProductNotFound();
+        }
+
+        if (product.Status != ProductStatus.Published)
+        {
+            return Validation("product", "Only published products can cancel variant and pricing revisions.");
+        }
+
+        var revision = await GetOrCreateActiveVariantRevisionAsync(product, dbContext, timeProvider, cancellationToken);
+        revision.Cancel();
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return HttpResults.Ok(await CreateVariantRevisionResponseAsync(revision.Id, dbContext, cancellationToken));
+    }
+
     private static async Task<IResult> GenerateAiSuggestionAsync(
         Guid id,
         GenerateSellerAiSuggestionRequest request,
@@ -1538,6 +1729,96 @@ public static class SellerProductEndpoints
         return revision;
     }
 
+    private static async Task<ProductVariantRevision?> GetActiveVariantRevisionAsync(
+        Guid productId,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken) =>
+        await dbContext.ProductVariantRevisions
+            .Where(revision => revision.ProductId == productId
+                && (revision.Status == ProductVariantRevisionStatus.Draft
+                    || revision.Status == ProductVariantRevisionStatus.PendingReview
+                    || revision.Status == ProductVariantRevisionStatus.Rejected))
+            .OrderByDescending(revision => revision.UpdatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private static async Task<ProductVariantRevision> GetOrCreateActiveVariantRevisionAsync(
+        Product product,
+        SwyftlyDbContext dbContext,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var revision = await GetActiveVariantRevisionAsync(product.Id, dbContext, cancellationToken);
+        if (revision is not null)
+        {
+            return revision;
+        }
+
+        revision = new ProductVariantRevision(product.Id, product.SellerId);
+        dbContext.ProductVariantRevisions.Add(revision);
+        return revision;
+    }
+
+    private static (ProductVariantRevisionItem? Item, string? Error) TryCreateVariantRevisionItem(
+        Guid revisionId,
+        UpsertSellerProductVariantRevisionItemRequest request,
+        IReadOnlyDictionary<Guid, ProductVariant> currentVariants)
+    {
+        if (!Enum.TryParse<ProductVariantRevisionItemOperation>(request.Operation, ignoreCase: true, out var operation))
+        {
+            return (null, "Item operation must be Add, Update, or Deactivate.");
+        }
+
+        ProductVariant? source = null;
+        if (operation != ProductVariantRevisionItemOperation.Add)
+        {
+            if (!request.SourceVariantId.HasValue ||
+                !currentVariants.TryGetValue(request.SourceVariantId.Value, out source))
+            {
+                return (null, "Existing variant changes require a source variant owned by this product.");
+            }
+        }
+
+        var sku = operation == ProductVariantRevisionItemOperation.Deactivate
+            ? source!.Sku
+            : request.Sku;
+        var size = operation == ProductVariantRevisionItemOperation.Deactivate
+            ? source!.Size
+            : request.Size;
+        var colour = operation == ProductVariantRevisionItemOperation.Deactivate
+            ? source!.Colour
+            : request.Colour;
+        var price = operation == ProductVariantRevisionItemOperation.Deactivate
+            ? source!.Price
+            : request.Price;
+
+        if (price is null)
+        {
+            return (null, "Price is required for staged variant additions and updates.");
+        }
+
+        try
+        {
+            return (new ProductVariantRevisionItem(
+                revisionId,
+                operation,
+                operation == ProductVariantRevisionItemOperation.Add ? null : request.SourceVariantId,
+                sku ?? string.Empty,
+                size ?? string.Empty,
+                colour ?? string.Empty,
+                price.Value,
+                operation == ProductVariantRevisionItemOperation.Deactivate ? source!.CompareAtPrice : request.CompareAtPrice,
+                operation == ProductVariantRevisionItemOperation.Add ? request.InitialStockQuantity : null,
+                operation == ProductVariantRevisionItemOperation.Deactivate
+                    ? ProductVariantStatus.Inactive
+                    : source?.Status ?? ProductVariantStatus.Active,
+                operation == ProductVariantRevisionItemOperation.Deactivate ? source!.Barcode : request.Barcode), null);
+        }
+        catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
+        {
+            return (null, exception.Message);
+        }
+    }
+
     private static async Task ClearPrimaryRevisionImagesAsync(
         Guid revisionId,
         Guid? exceptImageId,
@@ -1637,6 +1918,11 @@ public static class SellerProductEndpoints
                 image.IsPrimary,
                 image.CreatedAtUtc))
             .ToListAsync(cancellationToken);
+        var moderationEvents = await GetSellerModerationEventsAsync(
+            "ProductListingRevision",
+            revision.Id,
+            dbContext,
+            cancellationToken);
 
         return new SellerProductRevisionResponse(
             revision.Id,
@@ -1655,7 +1941,97 @@ public static class SellerProductEndpoints
             revision.FullDescription,
             ReadStringArray(revision.TagsJson),
             ReadRevisionAttributes(revision.AttributesJson),
-            images);
+            images,
+            moderationEvents);
+    }
+
+    private static async Task<SellerProductVariantRevisionResponse> CreateVariantRevisionResponseAsync(
+        Guid revisionId,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var revision = await dbContext.ProductVariantRevisions.SingleAsync(
+            item => item.Id == revisionId,
+            cancellationToken);
+        var currentVariants = await dbContext.ProductVariants
+            .Where(variant => variant.ProductId == revision.ProductId)
+            .OrderBy(variant => variant.Size)
+            .ThenBy(variant => variant.Colour)
+            .Select(variant => new SellerProductVariantRevisionFinalVariantResponse(
+                variant.Id,
+                "Live",
+                variant.Sku,
+                variant.Size,
+                variant.Colour,
+                variant.Price,
+                variant.CompareAtPrice,
+                variant.StockQuantity,
+                variant.ReservedQuantity,
+                variant.Status.ToString(),
+                variant.Barcode,
+                variant.AvailableQuantity))
+            .ToListAsync(cancellationToken);
+        var items = await dbContext.ProductVariantRevisionItems
+            .Where(item => item.RevisionId == revision.Id)
+            .OrderBy(item => item.Operation)
+            .ThenBy(item => item.Size)
+            .ThenBy(item => item.Colour)
+            .Select(item => new SellerProductVariantRevisionItemResponse(
+                item.Id,
+                item.Operation.ToString(),
+                item.SourceVariantId,
+                item.Sku,
+                item.Size,
+                item.Colour,
+                item.Price,
+                item.CompareAtPrice,
+                item.InitialStockQuantity,
+                item.ProposedStatus.ToString(),
+                item.Barcode))
+            .ToListAsync(cancellationToken);
+        var rawItems = await dbContext.ProductVariantRevisionItems
+            .Where(item => item.RevisionId == revision.Id)
+            .ToListAsync(cancellationToken);
+        var validation = await ProductVariantRevisionRules.ValidateAsync(
+            revision.ProductId,
+            rawItems,
+            dbContext,
+            cancellationToken);
+        var proposedFinalVariants = validation.FinalVariants
+            .Select(variant => new SellerProductVariantRevisionFinalVariantResponse(
+                variant.SourceVariantId,
+                variant.ChangeType,
+                variant.Sku,
+                variant.Size,
+                variant.Colour,
+                variant.Price,
+                variant.CompareAtPrice,
+                variant.StockQuantity,
+                variant.ReservedQuantity,
+                variant.Status.ToString(),
+                variant.Barcode,
+                variant.AvailableQuantity))
+            .ToArray();
+        var moderationEvents = await GetSellerModerationEventsAsync(
+            "ProductVariantRevision",
+            revision.Id,
+            dbContext,
+            cancellationToken);
+
+        return new SellerProductVariantRevisionResponse(
+            revision.Id,
+            revision.ProductId,
+            revision.SellerId,
+            revision.Status.ToString(),
+            revision.CanSellerEdit,
+            revision.SellerReason,
+            revision.RejectionReason,
+            revision.SubmittedAtUtc,
+            revision.ReviewedAtUtc,
+            currentVariants,
+            items,
+            proposedFinalVariants,
+            moderationEvents);
     }
 
     private static async Task<IResult?> ValidateCategoryAsync(
@@ -2317,6 +2693,11 @@ public static class SellerProductEndpoints
                 attribute => attribute.ValueJson,
                 StringComparer.OrdinalIgnoreCase,
                 cancellationToken);
+        var moderationEvents = await GetSellerModerationEventsAsync(
+            "Product",
+            product.Id,
+            dbContext,
+            cancellationToken);
 
         return new SellerProductDetailResponse(
             product.Id,
@@ -2335,8 +2716,26 @@ public static class SellerProductEndpoints
             product.PublishedAtUtc,
             attributes,
             variants,
-            images);
+            images,
+            moderationEvents);
     }
+
+    private static async Task<IReadOnlyCollection<SellerModerationEventResponse>> GetSellerModerationEventsAsync(
+        string entityType,
+        Guid entityId,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken) =>
+        await dbContext.AuditLogs
+            .AsNoTracking()
+            .Where(auditLog => auditLog.EntityType == entityType && auditLog.EntityId == entityId.ToString())
+            .OrderByDescending(auditLog => auditLog.CreatedAtUtc)
+            .Select(auditLog => new SellerModerationEventResponse(
+                auditLog.Id,
+                auditLog.ActionType,
+                auditLog.ActorRole,
+                auditLog.Reason,
+                auditLog.CreatedAtUtc))
+            .ToArrayAsync(cancellationToken);
 
     private static IResult Validation(string key, string message) =>
         HttpResults.ValidationProblem(new Dictionary<string, string[]>
@@ -2411,6 +2810,21 @@ public sealed record UpsertSellerProductRevisionRequest(
     IReadOnlyCollection<string>? Tags,
     IReadOnlyDictionary<string, JsonElement>? Attributes);
 
+public sealed record UpsertSellerProductVariantRevisionRequest(
+    string? SellerReason,
+    IReadOnlyCollection<UpsertSellerProductVariantRevisionItemRequest>? Items);
+
+public sealed record UpsertSellerProductVariantRevisionItemRequest(
+    string Operation,
+    Guid? SourceVariantId,
+    string? Sku,
+    string? Size,
+    string? Colour,
+    decimal? Price,
+    decimal? CompareAtPrice,
+    int? InitialStockQuantity,
+    string? Barcode);
+
 public sealed record GenerateSellerAiSuggestionRequest(
     string? SellerNotes,
     string? ProductTypeHint,
@@ -2448,7 +2862,8 @@ public sealed record SellerProductDetailResponse(
     DateTimeOffset? PublishedAtUtc,
     IReadOnlyDictionary<string, string> Attributes,
     IReadOnlyCollection<SellerProductVariantResponse> Variants,
-    IReadOnlyCollection<SellerProductImageResponse> Images);
+    IReadOnlyCollection<SellerProductImageResponse> Images,
+    IReadOnlyCollection<SellerModerationEventResponse> ModerationEvents);
 
 public sealed record SellerProductVariantResponse(
     Guid VariantId,
@@ -2489,7 +2904,8 @@ public sealed record SellerProductRevisionResponse(
     string? FullDescription,
     IReadOnlyCollection<string> Tags,
     IReadOnlyDictionary<string, string> Attributes,
-    IReadOnlyCollection<SellerProductRevisionImageResponse> Images);
+    IReadOnlyCollection<SellerProductRevisionImageResponse> Images,
+    IReadOnlyCollection<SellerModerationEventResponse> ModerationEvents);
 
 public sealed record SellerProductRevisionImageResponse(
     Guid RevisionImageId,
@@ -2500,6 +2916,48 @@ public sealed record SellerProductRevisionImageResponse(
     int SortOrder,
     bool IsPrimary,
     DateTimeOffset CreatedAtUtc);
+
+public sealed record SellerProductVariantRevisionResponse(
+    Guid RevisionId,
+    Guid ProductId,
+    Guid SellerId,
+    string Status,
+    bool CanEdit,
+    string? SellerReason,
+    string? RejectionReason,
+    DateTimeOffset? SubmittedAtUtc,
+    DateTimeOffset? ReviewedAtUtc,
+    IReadOnlyCollection<SellerProductVariantRevisionFinalVariantResponse> CurrentVariants,
+    IReadOnlyCollection<SellerProductVariantRevisionItemResponse> Items,
+    IReadOnlyCollection<SellerProductVariantRevisionFinalVariantResponse> ProposedFinalVariants,
+    IReadOnlyCollection<SellerModerationEventResponse> ModerationEvents);
+
+public sealed record SellerProductVariantRevisionItemResponse(
+    Guid RevisionItemId,
+    string Operation,
+    Guid? SourceVariantId,
+    string Sku,
+    string Size,
+    string Colour,
+    decimal Price,
+    decimal? CompareAtPrice,
+    int? InitialStockQuantity,
+    string ProposedStatus,
+    string? Barcode);
+
+public sealed record SellerProductVariantRevisionFinalVariantResponse(
+    Guid? SourceVariantId,
+    string ChangeType,
+    string Sku,
+    string Size,
+    string Colour,
+    decimal Price,
+    decimal? CompareAtPrice,
+    int StockQuantity,
+    int ReservedQuantity,
+    string Status,
+    string? Barcode,
+    int AvailableQuantity);
 
 public sealed record SellerAiSuggestionResponse(
     Guid SuggestionId,

@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
-import { AdminProductSummaryResponse } from '../admin/admin-product.models';
+import { AdminProductSummaryResponse, AdminProductVariantRevisionSummaryResponse } from '../admin/admin-product.models';
 import { AdminProductService } from '../admin/admin-product.service';
 import { AdminProductsPageComponent } from './admin-products-page.component';
 
@@ -10,9 +10,14 @@ describe('AdminProductsPageComponent', () => {
   let adminProductService: jasmine.SpyObj<AdminProductService>;
 
   beforeEach(async () => {
-    adminProductService = jasmine.createSpyObj<AdminProductService>('AdminProductService', ['getPendingReviewProducts', 'getPendingRevisions']);
+    adminProductService = jasmine.createSpyObj<AdminProductService>('AdminProductService', [
+      'getPendingReviewProducts',
+      'getPendingRevisions',
+      'getPendingVariantRevisions'
+    ]);
     adminProductService.getPendingReviewProducts.and.resolveTo([createProductSummary()]);
     adminProductService.getPendingRevisions.and.resolveTo([]);
+    adminProductService.getPendingVariantRevisions.and.resolveTo([]);
 
     await TestBed.configureTestingModule({
       imports: [AdminProductsPageComponent],
@@ -85,6 +90,21 @@ describe('AdminProductsPageComponent', () => {
 
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('No products pending review');
   });
+
+  it('renders pending variant revisions with a review link', async () => {
+    adminProductService.getPendingVariantRevisions.and.resolveTo([createVariantRevisionSummary()]);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Variant and pricing edits');
+    expect(compiled.textContent).toContain('2 staged changes');
+    const reviewLink = Array.from(compiled.querySelectorAll('a'))
+      .find(link => link.getAttribute('href') === '/admin/products/variant-revisions/variant-revision-id');
+    expect(reviewLink).toBeTruthy();
+  });
 });
 
 function createProductSummary(overrides: Partial<AdminProductSummaryResponse> = {}): AdminProductSummaryResponse {
@@ -97,6 +117,24 @@ function createProductSummary(overrides: Partial<AdminProductSummaryResponse> = 
     categoryPath: 'Women > Clothing > Dresses',
     status: 'PendingReview',
     highRiskFlagCount: 1,
+    updatedAtUtc: '2026-05-18T12:00:00Z',
+    ...overrides
+  };
+}
+
+function createVariantRevisionSummary(
+  overrides: Partial<AdminProductVariantRevisionSummaryResponse> = {}
+): AdminProductVariantRevisionSummaryResponse {
+  return {
+    revisionId: 'variant-revision-id',
+    productId: 'product-id',
+    sellerId: 'seller-id',
+    sellerDisplayName: 'Seller Store',
+    sellerVerificationStatus: 'Verified',
+    productTitle: 'Summer Dress',
+    status: 'PendingReview',
+    itemCount: 2,
+    submittedAtUtc: '2026-05-18T12:00:00Z',
     updatedAtUtc: '2026-05-18T12:00:00Z',
     ...overrides
   };

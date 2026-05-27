@@ -7,10 +7,12 @@ using Swyftly.Application.Common.Validation;
 using Swyftly.Application.Payments;
 using Swyftly.Application.Refunds;
 using Swyftly.Domain.Ledger;
+using Swyftly.Domain.Inventory;
 using Swyftly.Domain.Orders;
 using Swyftly.Domain.Payments;
 using Swyftly.Domain.Refunds;
 using Swyftly.Domain.Returns;
+using Swyftly.Infrastructure.Inventory;
 using Swyftly.Infrastructure.Payments;
 using Swyftly.Infrastructure.Persistence;
 
@@ -140,11 +142,14 @@ public sealed class EfRefundWorkflowService(
         }
 
         var order = await dbContext.Orders
+            .Include(existing => existing.Items)
             .Include(existing => existing.StatusHistory)
             .SingleAsync(existing => existing.Id == refund.OrderId, cancellationToken);
         var payment = await dbContext.Payments.SingleAsync(existing => existing.Id == refund.PaymentId, cancellationToken);
         var returnRequest = refund.ReturnRequestId.HasValue
-            ? await dbContext.ReturnRequests.SingleOrDefaultAsync(existing => existing.Id == refund.ReturnRequestId.Value, cancellationToken)
+            ? await dbContext.ReturnRequests
+                .Include(existing => existing.Items)
+                .SingleOrDefaultAsync(existing => existing.Id == refund.ReturnRequestId.Value, cancellationToken)
             : null;
 
         try
@@ -291,11 +296,14 @@ public sealed class EfRefundWorkflowService(
         }
 
         var order = await dbContext.Orders
+            .Include(existing => existing.Items)
             .Include(existing => existing.StatusHistory)
             .SingleAsync(existing => existing.Id == refund.OrderId, cancellationToken);
         var payment = await dbContext.Payments.SingleAsync(existing => existing.Id == refund.PaymentId, cancellationToken);
         var returnRequest = refund.ReturnRequestId.HasValue
-            ? await dbContext.ReturnRequests.SingleOrDefaultAsync(existing => existing.Id == refund.ReturnRequestId.Value, cancellationToken)
+            ? await dbContext.ReturnRequests
+                .Include(existing => existing.Items)
+                .SingleOrDefaultAsync(existing => existing.Id == refund.ReturnRequestId.Value, cancellationToken)
             : null;
 
         var completionResult = await CompleteRefundAccountingAsync(
@@ -360,7 +368,60 @@ public sealed class EfRefundWorkflowService(
             return Validation("refund", exception.Message);
         }
 
+        await RecordRefundCompletedInventoryMovementsAsync(
+            refund,
+            payment,
+            order,
+            returnRequest,
+            refundedAtUtc,
+            cancellationToken);
+
         return Result<RefundResult>.Success(Map(refund));
+    }
+
+    private async Task RecordRefundCompletedInventoryMovementsAsync(
+        Refund refund,
+        Payment payment,
+        Order order,
+        ReturnRequest? returnRequest,
+        DateTimeOffset refundedAtUtc,
+        CancellationToken cancellationToken)
+    {
+        var variantIds = returnRequest is not null
+            ? returnRequest.Items.Select(item => item.ProductVariantId).Distinct().ToArray()
+            : order.Items.Select(item => item.ProductVariantId).Distinct().ToArray();
+
+        foreach (var variantId in variantIds)
+        {
+            var alreadyRecorded = await dbContext.InventoryMovements.AnyAsync(
+                movement => movement.MovementType == InventoryMovementType.RefundCompleted
+                    && movement.RefundId == refund.Id
+                    && movement.ProductVariantId == variantId,
+                cancellationToken);
+            if (alreadyRecorded)
+            {
+                continue;
+            }
+
+            var snapshot = await InventoryMovementRecorder.LoadSnapshotAsync(dbContext, variantId, cancellationToken);
+            if (snapshot is null)
+            {
+                continue;
+            }
+
+            dbContext.InventoryMovements.Add(InventoryMovementRecorder.CreateContext(
+                snapshot,
+                InventoryMovementType.RefundCompleted,
+                "RefundWorkflow",
+                "Refund completed; stock and reserved quantities were not changed automatically.",
+                refund.ApprovedByUserId,
+                batchReference: null,
+                occurredAtUtc: refundedAtUtc,
+                orderId: order.Id,
+                paymentId: payment.Id,
+                returnRequestId: returnRequest?.Id,
+                refundId: refund.Id));
+        }
     }
 
     private async Task CreateLedgerReversalsAndAdjustBalancesAsync(

@@ -80,6 +80,10 @@ public sealed class EfInventoryReservationService(SwyftlyDbContext dbContext) : 
 
         foreach (var reservation in existingActiveReservations)
         {
+            var beforeRelease = await InventoryMovementRecorder.LoadSnapshotAsync(
+                dbContext,
+                reservation.ProductVariantId,
+                cancellationToken);
             var released = await TryReleaseVariantReservationAsync(
                 reservation.ProductVariantId,
                 reservation.Quantity,
@@ -94,6 +98,24 @@ public sealed class EfInventoryReservationService(SwyftlyDbContext dbContext) : 
             }
 
             reservation.Cancel(request.StartedAtUtc);
+            if (beforeRelease is not null)
+            {
+                var afterRelease = beforeRelease with
+                {
+                    ReservedQuantity = beforeRelease.ReservedQuantity - reservation.Quantity
+                };
+                dbContext.InventoryMovements.Add(InventoryMovementRecorder.Create(
+                    beforeRelease,
+                    afterRelease,
+                    InventoryMovementType.ReservationReleased,
+                    "CheckoutReservationRefresh",
+                    "Existing checkout reservation was released before refreshing cart stock holds.",
+                    actorUserId: null,
+                    batchReference: null,
+                    occurredAtUtc: request.StartedAtUtc,
+                    cartId: cart.Id,
+                    reservationId: reservation.Id));
+            }
         }
 
         var expiresAtUtc = request.StartedAtUtc.Add(request.ReservationDuration);
@@ -102,6 +124,10 @@ public sealed class EfInventoryReservationService(SwyftlyDbContext dbContext) : 
         foreach (var item in cart.Items)
         {
             var variant = variants[item.ProductVariantId];
+            var beforeReserve = await InventoryMovementRecorder.LoadSnapshotAsync(
+                dbContext,
+                variant.Id,
+                cancellationToken);
             var reserved = await TryReserveVariantAsync(
                 variant.Id,
                 item.Quantity,
@@ -120,6 +146,24 @@ public sealed class EfInventoryReservationService(SwyftlyDbContext dbContext) : 
                 expiresAtUtc,
                 request.StartedAtUtc);
             dbContext.InventoryReservations.Add(reservation);
+            if (beforeReserve is not null)
+            {
+                var afterReserve = beforeReserve with
+                {
+                    ReservedQuantity = beforeReserve.ReservedQuantity + item.Quantity
+                };
+                dbContext.InventoryMovements.Add(InventoryMovementRecorder.Create(
+                    beforeReserve,
+                    afterReserve,
+                    InventoryMovementType.ReservationCreated,
+                    "CheckoutReservation",
+                    "Cart checkout reserved stock while payment is pending.",
+                    actorUserId: null,
+                    batchReference: null,
+                    occurredAtUtc: request.StartedAtUtc,
+                    cartId: cart.Id,
+                    reservationId: reservation.Id));
+            }
             results.Add(Map(reservation));
         }
 
@@ -143,6 +187,10 @@ public sealed class EfInventoryReservationService(SwyftlyDbContext dbContext) : 
 
         foreach (var reservation in reservations)
         {
+            var beforeRelease = await InventoryMovementRecorder.LoadSnapshotAsync(
+                dbContext,
+                reservation.ProductVariantId,
+                cancellationToken);
             var released = await TryReleaseVariantReservationAsync(
                 reservation.ProductVariantId,
                 reservation.Quantity,
@@ -157,6 +205,24 @@ public sealed class EfInventoryReservationService(SwyftlyDbContext dbContext) : 
             }
 
             reservation.Expire(utcNow);
+            if (beforeRelease is not null)
+            {
+                var afterRelease = beforeRelease with
+                {
+                    ReservedQuantity = beforeRelease.ReservedQuantity - reservation.Quantity
+                };
+                dbContext.InventoryMovements.Add(InventoryMovementRecorder.Create(
+                    beforeRelease,
+                    afterRelease,
+                    InventoryMovementType.ReservationExpired,
+                    "ReservationExpiryWorker",
+                    "Checkout reservation expired before payment confirmation.",
+                    actorUserId: null,
+                    batchReference: null,
+                    occurredAtUtc: utcNow,
+                    cartId: reservation.CartId,
+                    reservationId: reservation.Id));
+            }
             results.Add(Map(reservation));
         }
 

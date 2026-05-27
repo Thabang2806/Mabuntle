@@ -7,6 +7,7 @@ import { BuyerOrderService } from '../buyer/buyer-order.service';
 import { BuyerReturnService } from '../buyer/buyer-return.service';
 import { BuyerSupportService } from '../buyer/buyer-support.service';
 import { AccountPageComponent } from './account-page.component';
+import { createSellerPolicySnapshot } from './shop-page.component.spec';
 
 describe('AccountPageComponent', () => {
   let fixture: ComponentFixture<AccountPageComponent>;
@@ -108,7 +109,8 @@ function createReturn() {
     disputedAtUtc: null,
     disputeReason: null,
     items: [],
-    messages: []
+    messages: [],
+    sellerPolicySnapshot: createSellerPolicySnapshot()
   };
 }
 

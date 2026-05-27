@@ -14,6 +14,8 @@ using Swyftly.Api.Returns;
 using Swyftly.Application.Identity;
 using Swyftly.Application.Notifications;
 using Swyftly.Application.Returns;
+using Swyftly.Domain.Catalog;
+using Swyftly.Domain.Inventory;
 using Swyftly.Domain.Ledger;
 using Swyftly.Domain.Orders;
 using Swyftly.Domain.Sellers;
@@ -53,6 +55,8 @@ public sealed class ReturnTests
         Assert.NotNull(returnRequest);
         Assert.Equal("AwaitingSellerResponse", returnRequest!.Status);
         Assert.Single(returnRequest.Items);
+        Assert.NotNull(returnRequest.SellerPolicySnapshot);
+        Assert.Equal(14, returnRequest.SellerPolicySnapshot!.ReturnWindowDays);
 
         using (var scope = factory.Services.CreateScope())
         {
@@ -63,6 +67,11 @@ public sealed class ReturnTests
             Assert.Equal(875m, balance.HeldBalance);
             Assert.Equal(SellerPayoutStatus.OnHold, payout.Status);
             Assert.Equal(1, await dbContext.AuditLogs.CountAsync(auditLog => auditLog.ActionType == "PayoutHeld"));
+            var movement = await dbContext.InventoryMovements.SingleAsync(movement => movement.ReturnRequestId == returnRequest.ReturnRequestId);
+            Assert.Equal(InventoryMovementType.ReturnRequested, movement.MovementType);
+            Assert.Equal(order.OrderId, movement.OrderId);
+            Assert.Equal(0, movement.QuantityDelta);
+            Assert.Equal(0, movement.ReservedQuantityAfter - movement.ReservedQuantityBefore);
         }
 
         using var sellerResponse = await sellerClient.PostAsJsonAsync(
@@ -73,6 +82,7 @@ public sealed class ReturnTests
         var approved = await sellerResponse.Content.ReadFromJsonAsync<ReturnRequestResult>();
         Assert.NotNull(approved);
         Assert.Equal("Approved", approved!.Status);
+        Assert.Equal("Returns are reviewed for delivered items in original condition.", approved.SellerPolicySnapshot!.ReturnPolicy);
         Assert.Contains(approved.Messages, message => message.SenderRole == "Seller");
 
         using var notificationsResponse = await buyerClient.GetAsync("/api/buyer/notifications");
@@ -102,6 +112,126 @@ public sealed class ReturnTests
                 ]));
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SellerCanRecordRestockDecisionForApprovedReturn()
+    {
+        await using var factory = new ReturnTestFactory();
+        using var buyerClient = factory.CreateClient();
+        using var sellerClient = factory.CreateClient();
+        var sellerAuth = await RegisterAndLoginAsync(sellerClient, "seller-restock-return@example.test", SwyftlyRoles.Seller);
+        var buyerAuth = await RegisterAndLoginAsync(buyerClient, "buyer-restock-return@example.test", SwyftlyRoles.Buyer);
+        var sellerId = await GetSellerIdAsync(factory, sellerAuth.UserId);
+        var buyerId = await GetBuyerIdAsync(factory, buyerAuth.UserId);
+        var order = await SeedDeliveredOrderAsync(factory, buyerId, sellerId);
+
+        using var createResponse = await buyerClient.PostAsJsonAsync(
+            $"/api/buyer/orders/{order.OrderId}/returns",
+            new CreateReturnRequestApiRequest(
+                "WrongSize",
+                "The fit did not work.",
+                [
+                    new CreateReturnItemApiRequest(order.OrderItemId, 1, "WrongSize", false, null)
+                ]));
+        createResponse.EnsureSuccessStatusCode();
+        var returnRequest = await createResponse.Content.ReadFromJsonAsync<ReturnRequestResult>();
+        Assert.NotNull(returnRequest);
+
+        using var approveResponse = await sellerClient.PostAsJsonAsync(
+            $"/api/seller/returns/{returnRequest!.ReturnRequestId}/approve",
+            new SellerReturnResponseApiRequest("Approved after checking the order."));
+        approveResponse.EnsureSuccessStatusCode();
+
+        using var restockResponse = await sellerClient.PostAsJsonAsync(
+            $"/api/seller/returns/{returnRequest.ReturnRequestId}/restock-decisions",
+            new SellerReturnRestockDecisionApiRequest(
+            [
+                new SellerReturnRestockDecisionItemApiRequest(
+                    returnRequest.Items.Single().ReturnItemId,
+                    1,
+                    "Sellable",
+                    "Inspected and returned to sellable stock.")
+            ]));
+
+        restockResponse.EnsureSuccessStatusCode();
+        var decisions = await restockResponse.Content.ReadFromJsonAsync<SellerReturnRestockDecisionResponse[]>();
+        Assert.NotNull(decisions);
+        var decision = Assert.Single(decisions!);
+        Assert.Equal(1, decision.QuantityRestocked);
+        Assert.Equal("Sellable", decision.Condition);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+            var variant = await dbContext.ProductVariants.SingleAsync(variant => variant.Id == order.ProductVariantId);
+            Assert.Equal(6, variant.StockQuantity);
+            Assert.Equal(1, await dbContext.ReturnRestockDecisions.CountAsync(item => item.ReturnRequestId == returnRequest.ReturnRequestId));
+            var movement = await dbContext.InventoryMovements.SingleAsync(
+                movement => movement.ReturnRequestId == returnRequest.ReturnRequestId
+                    && movement.MovementType == InventoryMovementType.ReturnRestocked);
+            Assert.Equal(order.OrderId, movement.OrderId);
+            Assert.Equal(1, movement.QuantityDelta);
+            Assert.Equal(0, movement.ReservedQuantityAfter - movement.ReservedQuantityBefore);
+            Assert.Equal(1, await dbContext.AuditLogs.CountAsync(auditLog => auditLog.ActionType == "SellerReturnRestockDecisionRecorded"));
+        }
+    }
+
+    [Fact]
+    public async Task SellerRestockDecisionIsOnePerReturnItem()
+    {
+        await using var factory = new ReturnTestFactory();
+        using var buyerClient = factory.CreateClient();
+        using var sellerClient = factory.CreateClient();
+        var sellerAuth = await RegisterAndLoginAsync(sellerClient, "seller-restock-duplicate@example.test", SwyftlyRoles.Seller);
+        var buyerAuth = await RegisterAndLoginAsync(buyerClient, "buyer-restock-duplicate@example.test", SwyftlyRoles.Buyer);
+        var sellerId = await GetSellerIdAsync(factory, sellerAuth.UserId);
+        var buyerId = await GetBuyerIdAsync(factory, buyerAuth.UserId);
+        var order = await SeedDeliveredOrderAsync(factory, buyerId, sellerId);
+
+        using var createResponse = await buyerClient.PostAsJsonAsync(
+            $"/api/buyer/orders/{order.OrderId}/returns",
+            new CreateReturnRequestApiRequest(
+                "WrongSize",
+                "The fit did not work.",
+                [
+                    new CreateReturnItemApiRequest(order.OrderItemId, 1, "WrongSize", false, null)
+                ]));
+        createResponse.EnsureSuccessStatusCode();
+        var returnRequest = await createResponse.Content.ReadFromJsonAsync<ReturnRequestResult>();
+        Assert.NotNull(returnRequest);
+
+        using var approveResponse = await sellerClient.PostAsJsonAsync(
+            $"/api/seller/returns/{returnRequest!.ReturnRequestId}/approve",
+            new SellerReturnResponseApiRequest("Approved after checking the order."));
+        approveResponse.EnsureSuccessStatusCode();
+
+        var request = new SellerReturnRestockDecisionApiRequest(
+        [
+            new SellerReturnRestockDecisionItemApiRequest(
+                returnRequest.Items.Single().ReturnItemId,
+                0,
+                "Damaged",
+                "Item is not sellable.")
+        ]);
+        using var firstResponse = await sellerClient.PostAsJsonAsync(
+            $"/api/seller/returns/{returnRequest.ReturnRequestId}/restock-decisions",
+            request);
+        firstResponse.EnsureSuccessStatusCode();
+
+        using var duplicateResponse = await sellerClient.PostAsJsonAsync(
+            $"/api/seller/returns/{returnRequest.ReturnRequestId}/restock-decisions",
+            request);
+
+        Assert.Equal(HttpStatusCode.Conflict, duplicateResponse.StatusCode);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        var variant = await dbContext.ProductVariants.SingleAsync(variant => variant.Id == order.ProductVariantId);
+        Assert.Equal(5, variant.StockQuantity);
+        Assert.Equal(1, await dbContext.ReturnRestockDecisions.CountAsync(item => item.ReturnRequestId == returnRequest.ReturnRequestId));
+        Assert.False(await dbContext.InventoryMovements.AnyAsync(
+            movement => movement.ReturnRequestId == returnRequest.ReturnRequestId
+                && movement.MovementType == InventoryMovementType.ReturnRestocked));
     }
 
     [Fact]
@@ -213,8 +343,21 @@ public sealed class ReturnTests
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
         var now = DateTimeOffset.Parse("2026-05-18T12:00:00Z");
+        var product = new Product(sellerId);
+        var variant = new ProductVariant(product.Id, "SKU-RETURN", "M", "Black", 1000m, 1200m, 5);
         var order = new Order(buyerId, sellerId, Guid.NewGuid(), now);
-        order.AddItem(Guid.NewGuid(), Guid.NewGuid(), "Returned Item", "SKU-RETURN", "M", "Black", 1000m, 1);
+        order.SetSellerPolicySnapshot(
+            new SellerStorePolicy(
+                sellerId,
+                14,
+                "Returns are reviewed for delivered items in original condition.",
+                "Exchanges depend on stock availability.",
+                "Orders are usually dispatched within 2-3 business days.",
+                "Message support with order issues and product questions.",
+                "Follow product care notes on each item.",
+                "Colour and fit may vary slightly by screen and size."),
+            now);
+        order.AddItem(product.Id, variant.Id, "Returned Item", variant.Sku, variant.Size, variant.Colour, variant.Price, 1);
         if (status != OrderStatus.PendingPayment)
         {
             order.ChangeStatus(OrderStatus.Paid, now.AddMinutes(1), "TestPaid");
@@ -230,9 +373,11 @@ public sealed class ReturnTests
             order.ChangeStatus(OrderStatus.Delivered, now.AddMinutes(3), "TestDelivered");
         }
 
+        dbContext.Products.Add(product);
+        dbContext.ProductVariants.Add(variant);
         dbContext.Orders.Add(order);
         await dbContext.SaveChangesAsync();
-        return new SeededOrder(order.Id, order.Items.Single().Id);
+        return new SeededOrder(order.Id, order.Items.Single().Id, variant.Id);
     }
 
     private static async Task SeedPayoutAsync(
@@ -296,7 +441,7 @@ public sealed class ReturnTests
         return auth!.AccessToken;
     }
 
-    private sealed record SeededOrder(Guid OrderId, Guid OrderItemId);
+    private sealed record SeededOrder(Guid OrderId, Guid OrderItemId, Guid ProductVariantId);
 
     private sealed class ReturnTestFactory : WebApplicationFactory<Program>
     {

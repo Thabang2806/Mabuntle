@@ -128,6 +128,77 @@ POST /api/seller/onboarding/submit-verification
 
 `POST /api/seller/onboarding/submit-verification` returns `400` until profile, storefront, address, and payout placeholder fields are complete. A successful submission changes the seller verification status to `UnderReview`; admin approval is not part of this endpoint set.
 
+`GET /api/seller/onboarding` also returns additive seller-facing review context when available:
+
+```json
+{
+  "latestVerificationReview": {
+    "submittedAtUtc": "2026-05-26T10:00:00Z",
+    "reviewedAtUtc": "2026-05-26T12:00:00Z",
+    "rejectionReason": "Storefront details need more evidence.",
+    "suspensionReason": null
+  }
+}
+```
+
+The review context is scoped to the authenticated seller. Rejection data comes from existing seller verification records; suspension reason comes from existing seller-profile audit logs.
+
+Seller verification evidence endpoints are optional review-context uploads for onboarding. Evidence does not change submit-verification eligibility; existing profile, storefront, address, and payout completeness remain the gate.
+
+```http
+GET /api/seller/verification-evidence
+POST /api/seller/verification-evidence/upload
+DELETE /api/seller/verification-evidence/{evidenceId}
+GET /api/seller/verification-evidence/{evidenceId}/download
+```
+
+Upload accepts multipart fields `file`, `evidenceType`, and optional `note`. Supported evidence types are `BusinessRegistration`, `IdentityOrRepresentative`, `FulfilmentAddress`, `BrandAuthorization`, `ProductAuthenticity`, and `Other`. Supported file types are PDF, JPEG, PNG, and WebP. Empty files, unsupported or mismatched file signatures, oversized files, invalid evidence types, overlong notes, scanner rejections, and more than the configured active-file limit are rejected. Sellers can upload/remove evidence while `PendingVerification`, `UnderReview`, or `Rejected`; verified or suspended sellers can read/download their existing evidence but cannot mutate it.
+
+Response:
+
+```json
+{
+  "evidenceId": "00000000-0000-0000-0000-000000000000",
+  "evidenceType": "BusinessRegistration",
+  "originalFileName": "registration.pdf",
+  "contentType": "application/pdf",
+  "byteSize": 123456,
+  "note": "CIPC registration document",
+  "uploadedAtUtc": "2026-05-26T10:00:00Z",
+  "removedAtUtc": null
+}
+```
+
+Evidence files are stored privately through API-managed storage and are never exposed through public product or storefront APIs. Seller upload/remove and admin download actions write audit logs.
+
+## Seller Store Policies
+
+Seller store policy endpoints require a seller JWT role and operate on the authenticated seller's single buyer-facing policy row.
+
+```http
+GET /api/seller/store-policy
+PUT /api/seller/store-policy
+```
+
+Request/response:
+
+```json
+{
+  "returnWindowDays": 14,
+  "returnPolicy": "Returns are reviewed for delivered items in original condition.",
+  "exchangePolicy": "Exchanges depend on stock availability.",
+  "fulfilmentPolicy": "Orders are usually dispatched within 2-3 business days.",
+  "supportPolicy": "Message support with order issues and product questions.",
+  "careInstructions": "Follow product care notes on each item.",
+  "productDisclaimer": "Colour and fit may vary slightly by screen and size.",
+  "isComplete": true,
+  "missingFields": [],
+  "updatedAtUtc": "2026-05-26T10:00:00+00:00"
+}
+```
+
+`PUT` validates a non-negative return window up to 365 days and bounded policy text lengths. Updates write seller audit-log entries. Store policies are informational marketplace context only; they do not automatically approve/reject returns, refunds, disputes, or seller verification.
+
 ## Admin Seller Approval
 
 Admin seller approval endpoints require an `Admin` or `SuperAdmin` JWT role.
@@ -135,6 +206,7 @@ Admin seller approval endpoints require an `Admin` or `SuperAdmin` JWT role.
 ```http
 GET /api/admin/sellers/pending
 GET /api/admin/sellers/{sellerId}
+GET /api/admin/sellers/{sellerId}/verification-evidence/{evidenceId}/download
 POST /api/admin/sellers/{sellerId}/approve
 POST /api/admin/sellers/{sellerId}/reject
 POST /api/admin/sellers/{sellerId}/suspend
@@ -148,9 +220,9 @@ POST /api/admin/sellers/{sellerId}/suspend
 }
 ```
 
-Admin actions write audit-log entries and seller detail responses include `auditTrail`.
+Admin actions write audit-log entries, create best-effort seller notifications after successful state changes, and seller detail responses include `storePolicy`, `verificationEvidence`, and `auditTrail`. Admin evidence downloads require `Admin` or `SuperAdmin`, stream the private file through the API, and write `SellerVerificationEvidenceDownloaded` audit-log entries.
 
-Angular admin seller routes `/admin/sellers` and `/admin/sellers/{sellerId}` use these endpoints unchanged. The queue applies client-side search/status/storefront filters over the loaded pending-seller response, while the detail screen presents profile, storefront, address, payout setup, completeness indicators, review actions, and audit trail without changing request payloads.
+Angular admin seller routes `/admin/sellers` and `/admin/sellers/{sellerId}` use these endpoints unchanged. The queue applies client-side search/status/storefront filters over the loaded pending-seller response, while the detail screen presents profile, storefront, address, payout setup, store policy completeness, optional verification evidence, review actions, and audit trail without changing request payloads.
 
 ## Admin Audit Logs
 
@@ -705,11 +777,11 @@ Response:
 
 Out-of-stock handling is explicit through `inStock`: by default, published products can appear even if all active variants are unavailable; `inStock=true` restricts results to products with at least one active variant where stock exceeds reserved quantity. Public product search and detail only expose products whose seller is verified and whose storefront is published.
 
-`GET /api/products/{slug}` returns public product detail with images, variants, attributes, and the product card payload. It returns `404` for products from unverified, suspended, rejected, pending, or unpublished-storefront sellers. Current product slugs are seller-scoped in persistence, so duplicate public slugs are still a known future routing issue.
+`GET /api/products/{slug}` returns public product detail with images, variants, attributes, the product card payload, and the current seller `sellerPolicy` snippets when present. It returns `404` for products from unverified, suspended, rejected, pending, or unpublished-storefront sellers. Current product slugs are seller-scoped in persistence, so duplicate public slugs are still a known future routing issue.
 
 `GET /api/products/{slug}/reviews` and `GET /api/products/{slug}/review-summary` return only published verified-buyer reviews. They do not require authentication and do not change the existing product detail/search response shapes.
 
-`GET /api/sellers/{storeSlug}` returns `404` unless the storefront is published and the seller is verified.
+`GET /api/sellers/{storeSlug}` returns `404` unless the storefront is published and the seller is verified. Successful responses include the seller's current `sellerPolicy` context.
 
 Search indexing is prepared behind `ISearchIndexService` and `IProductSearchIndexer`. Published products are indexed after admin approval into the current local in-memory placeholder. If the search index has no usable data, public search falls back to PostgreSQL.
 
@@ -872,6 +944,12 @@ GET /api/buyer/notifications
 GET /api/buyer/notifications/unread-count
 POST /api/buyer/notifications/{notificationId}/read
 POST /api/buyer/notifications/read-all
+GET /api/seller/notification-preferences
+PUT /api/seller/notification-preferences
+GET /api/seller/notifications
+GET /api/seller/notifications/unread-count
+POST /api/seller/notifications/{notificationId}/read
+POST /api/seller/notifications/read-all
 ```
 
 Wishlist actions are idempotent per buyer/product and only accept products that are publicly visible: published product, verified seller, published storefront, and sellable active variant data.
@@ -964,7 +1042,13 @@ Verify-address response:
 }
 ```
 
-Notifications are persisted records created through backend workflows via `INotificationService`. Buyer notification APIs list in-app-visible records and update read state. Category-level preferences independently control future in-app and email delivery for `Orders`, `Returns`, `Reviews`, and `Support`; missing preference rows default both channels to enabled, and existing visible notifications remain visible. Email delivery uses a durable worker-processed outbox with `LogOnly` as the local default and `Smtp` as the first real provider option. Buyer real-time in-app delivery uses SignalR as a convenience channel after persistence; REST remains the durable source of truth. There is no SMS, push, marketing automation, seller/admin email workflow, or public send-email endpoint. Current workflow notifications cover review approval/rejection, seller return approval/rejection, support public replies, order tracking updates, ready-to-ship, shipped, delivered, delivery-failed, and returned-to-sender order events.
+Notifications are persisted records created through backend workflows via `INotificationService`. Buyer and seller notification APIs list in-app-visible records scoped to the authenticated user and update read state. Buyer category-level preferences independently control future in-app and email delivery for `Orders`, `Returns`, `Reviews`, and `Support`; seller preferences do the same for `Verification`, `Products`, `Revisions`, and `Ads`. Missing preference rows default both channels to enabled, and existing visible notifications remain visible. Email delivery uses a durable worker-processed outbox with `LogOnly` as the local default and `Smtp` as the first real provider option. Buyer and seller real-time in-app delivery use SignalR as a convenience channel after persistence; REST remains the durable source of truth. There is no SMS, push, marketing automation, admin email workflow, public send-email endpoint, or admin realtime hub. Current buyer workflow notifications cover review approval/rejection, seller return approval/rejection, support public replies, order tracking updates, ready-to-ship, shipped, delivered, delivery-failed, and returned-to-sender order events. Current seller workflow notifications cover seller verification approval/rejection/suspension, product approval/rejection/change requests, published listing revision approval/rejection, published variant/pricing revision approval/rejection, and ad campaign approval/rejection.
+
+Seller notification responses reuse the existing notification result shape. Related entity links are intentionally coarse and route sellers back to the relevant workspace area:
+
+- `SellerProfile` -> `/seller`
+- `Product` -> `/seller/products/{productId}/edit`
+- `AdCampaign` -> `/seller/ads/{adCampaignId}`
 
 Unread-count response:
 
@@ -974,13 +1058,13 @@ Unread-count response:
 }
 ```
 
-Buyer real-time hub:
+Real-time notification hub:
 
 ```http
 /hubs/notifications
 ```
 
-The hub requires a buyer JWT access token. Browser clients pass the access token through the SignalR `access_token` query string during hub negotiation/transport only; the API reads that query token only for `/hubs/notifications`. Server-to-client events are:
+The hub requires a buyer or seller JWT access token. Browser clients pass the access token through the SignalR `access_token` query string during hub negotiation/transport only; the API reads that query token only for `/hubs/notifications`. Server-to-client events are:
 
 - `notificationCreated`: existing `NotificationResult` shape for persisted in-app-visible notifications.
 - `notificationRead`: `{ "notificationId": "00000000-0000-0000-0000-000000000000", "readAtUtc": "2026-05-21T10:00:00Z" }`.
@@ -1002,6 +1086,19 @@ Notification preference request:
 ```
 
 Older clients may omit `emailEnabled` in update requests; the backend preserves an existing email setting when present and defaults new rows to email enabled.
+
+Seller notification preference request uses the same shape with seller categories:
+
+```json
+{
+  "preferences": [
+    { "category": "Verification", "isEnabled": true, "emailEnabled": true },
+    { "category": "Products", "isEnabled": true, "emailEnabled": true },
+    { "category": "Revisions", "isEnabled": true, "emailEnabled": false },
+    { "category": "Ads", "isEnabled": false, "emailEnabled": false }
+  ]
+}
+```
 
 Email delivery configuration keys:
 
@@ -1101,7 +1198,7 @@ Request:
 }
 ```
 
-`cartId` is optional; when omitted, the buyer's active cart is used. `reservationMinutes` is optional and defaults to 15 minutes. New orders require exactly one delivery address source: either an owned saved `deliveryAddressId` or an inline one-off `deliveryAddress`, plus an active seller delivery method that serves that address. The backend recomputes shipping from the selected delivery method and cart subtotal; Angular does not send `shippingAmount`. If the selected method type is `PickupPoint`, `pickupPointId` is required and must refer to an active platform pickup point matching the checkout address country/province. Non-pickup methods reject `pickupPointId`. The selected/inline address, address verification result, selected delivery method/rate, and selected pickup point are copied to the order as snapshots; later saved-address, seller delivery-method, or pickup-point edits do not change historical orders. Older orders can return `deliveryAddress: null`, nullable delivery-method snapshot fields, and `pickupPoint: null`.
+`cartId` is optional; when omitted, the buyer's active cart is used. `reservationMinutes` is optional and defaults to 15 minutes. New orders require exactly one delivery address source: either an owned saved `deliveryAddressId` or an inline one-off `deliveryAddress`, plus an active seller delivery method that serves that address. The backend recomputes shipping from the selected delivery method and cart subtotal; Angular does not send `shippingAmount`. If the selected method type is `PickupPoint`, `pickupPointId` is required and must refer to an active platform pickup point matching the checkout address country/province. Non-pickup methods reject `pickupPointId`. The selected/inline address, address verification result, selected delivery method/rate, selected pickup point, and current seller policy are copied to the order as snapshots; later saved-address, seller delivery-method, pickup-point, or seller policy edits do not change historical orders. Older orders can return `deliveryAddress: null`, nullable delivery-method snapshot fields, `pickupPoint: null`, and `sellerPolicySnapshot: null`.
 
 Inline delivery-address request:
 
@@ -1184,6 +1281,16 @@ Response:
     "latitude": null,
     "longitude": null,
     "openingHours": "Mon-Fri 09:00-17:00"
+  },
+  "sellerPolicySnapshot": {
+    "returnWindowDays": 14,
+    "returnPolicy": "Returns are reviewed for delivered items in original condition.",
+    "exchangePolicy": "Exchanges depend on stock availability.",
+    "fulfilmentPolicy": "Orders are usually dispatched within 2-3 business days.",
+    "supportPolicy": "Message support with order issues and product questions.",
+    "careInstructions": "Follow product care notes on each item.",
+    "productDisclaimer": "Colour and fit may vary slightly by screen and size.",
+    "snapshotAtUtc": "2026-05-26T10:00:00+00:00"
   },
   "statusHistory": [
     {
@@ -1309,6 +1416,8 @@ GET /api/seller/returns
 GET /api/seller/returns/{returnRequestId}
 POST /api/seller/returns/{returnRequestId}/approve
 POST /api/seller/returns/{returnRequestId}/reject
+GET /api/seller/returns/{returnRequestId}/restock-decisions
+POST /api/seller/returns/{returnRequestId}/restock-decisions
 GET /api/admin/returns/disputed
 ```
 
@@ -1347,11 +1456,21 @@ Return response:
   "disputedAtUtc": null,
   "disputeReason": null,
   "items": [],
-  "messages": []
+  "messages": [],
+  "sellerPolicySnapshot": {
+    "returnWindowDays": 14,
+    "returnPolicy": "Returns are reviewed for delivered items in original condition.",
+    "exchangePolicy": "Exchanges depend on stock availability.",
+    "fulfilmentPolicy": "Orders are usually dispatched within 2-3 business days.",
+    "supportPolicy": "Message support with order issues and product questions.",
+    "careInstructions": "Follow product care notes on each item.",
+    "productDisclaimer": "Colour and fit may vary slightly by screen and size.",
+    "snapshotAtUtc": "2026-05-26T10:00:00+00:00"
+  }
 }
 ```
 
-Creating a valid return changes the order to `ReturnRequested` and places linked pending/available seller payouts on hold. The current opened/unsealed rule blocks changed-mind returns for opened or unsealed items; category-specific beauty policy remains a later refinement.
+Creating a valid return changes the order to `ReturnRequested` and places linked pending/available seller payouts on hold. Return responses include the checkout-time seller policy snapshot where available so buyers and sellers can see the policy context, but policies are not an automated rules engine. The current opened/unsealed rule blocks changed-mind returns for opened or unsealed items; category-specific beauty policy remains a later refinement.
 
 Seller approve/reject requests use:
 
@@ -1367,6 +1486,48 @@ Reject requires a message. Buyers can dispute only rejected returns:
 {
   "reason": "Please review the listing photos."
 }
+```
+
+Seller restock decisions are explicit stock-traceability records. They are available only to the owning seller after a return is approved, returned, refunded, or closed. Recording a decision does not change return, refund, payment, payout, order, cart, or reservation state. A positive `quantityRestocked` increments the live variant `stockQuantity` and writes a `ReturnRestocked` inventory movement; `quantityRestocked: 0` records the inspection decision without a stock movement. Each return item can have one restock decision.
+
+Restock request:
+
+```json
+{
+  "items": [
+    {
+      "returnItemId": "00000000-0000-0000-0000-000000000000",
+      "quantityRestocked": 1,
+      "condition": "Sellable",
+      "reason": "Inspected and returned to sellable stock."
+    }
+  ]
+}
+```
+
+Supported restock conditions are `Sellable`, `Damaged`, `OpenedOrUsed`, `Missing`, and `Other`.
+
+Restock response:
+
+```json
+[
+  {
+    "restockDecisionId": "00000000-0000-0000-0000-000000000000",
+    "returnRequestId": "00000000-0000-0000-0000-000000000000",
+    "returnItemId": "00000000-0000-0000-0000-000000000000",
+    "productId": "00000000-0000-0000-0000-000000000000",
+    "productVariantId": "00000000-0000-0000-0000-000000000000",
+    "sku": "DRESS-M-BLACK",
+    "size": "M",
+    "colour": "Black",
+    "quantityReturned": 1,
+    "quantityRestocked": 1,
+    "condition": "Sellable",
+    "reason": "Inspected and returned to sellable stock.",
+    "actorUserId": "00000000-0000-0000-0000-000000000000",
+    "createdAtUtc": "2026-05-27T10:00:00+00:00"
+  }
+]
 ```
 
 Angular buyer return routes:
@@ -1634,6 +1795,8 @@ Campaign creation and updates validate seller/product eligibility. The current e
 
 `POST /submit-review` moves an eligible draft/rejected campaign to `PendingReview`. Campaigns become `Active` only through the admin ad campaign review workflow below. Pause/resume endpoints are present for the campaign state model but only work once a campaign is active/paused.
 
+Seller ad campaign responses include a seller-safe `moderationEvents` collection derived from campaign audit logs. The seller ad detail UI uses it with the existing status and rejection reason fields to show approval/rejection history clearly.
+
 ## Admin Ad Campaign Review
 
 Admin ad campaign review endpoints require an `Admin` or `SuperAdmin` JWT role.
@@ -1647,7 +1810,7 @@ POST /api/admin/ad-campaigns/{id}/reject
 
 `GET /pending` returns campaigns in `PendingReview`. Campaign detail responses include seller details, promoted products, budget, current eligibility results, and campaign audit trail entries.
 
-`POST /approve` re-runs campaign eligibility before activation. If the seller or promoted products no longer qualify, the endpoint returns a validation problem and leaves the campaign in `PendingReview`. Successful approval moves the campaign to `Active`, records the approving admin user id, and writes an `AdCampaignApproved` audit-log entry.
+`POST /approve` re-runs campaign eligibility before activation. If the seller or promoted products no longer qualify, the endpoint returns a validation problem and leaves the campaign in `PendingReview`. Successful approval moves the campaign to `Active`, records the approving admin user id, writes an `AdCampaignApproved` audit-log entry, and creates a best-effort seller notification.
 
 `POST /reject` requires a reason:
 
@@ -1657,7 +1820,7 @@ POST /api/admin/ad-campaigns/{id}/reject
 }
 ```
 
-Rejecting moves the campaign to `Rejected`, stores the rejection reason, and writes an `AdCampaignRejected` audit-log entry.
+Rejecting moves the campaign to `Rejected`, stores the rejection reason, writes an `AdCampaignRejected` audit-log entry, and creates a best-effort seller notification.
 
 Angular admin routes:
 
@@ -1745,6 +1908,75 @@ Angular seller advertising routes:
 
 The seller ads UI lists campaigns, creates draft campaigns, selects products to promote, submits campaigns for admin review, shows eligibility warnings returned by the API, displays campaign metrics, and exposes pause/resume/cancel actions where the current campaign status allows them.
 
+## Seller Dashboard Summary
+
+Seller dashboard summary endpoints require the `Seller` JWT role. The summary is available only to verified sellers; unverified sellers receive `409` and users without a seller profile receive `404`. The endpoint is read-only and uses current database state rather than cached projections.
+
+```http
+GET /api/seller/dashboard/summary
+```
+
+Representative response:
+
+```json
+{
+  "sellerId": "00000000-0000-0000-0000-000000000000",
+  "generatedAtUtc": "2026-05-26T16:30:00Z",
+  "fromUtc": "2026-04-26T16:30:00Z",
+  "salesLast30Days": 12450.00,
+  "ordersLast30Days": 18,
+  "paidOrderCount": 2,
+  "processingOrderCount": 1,
+  "readyToShipOrderCount": 1,
+  "pendingFulfilmentOrders": 4,
+  "deliveryExceptionOrderCount": 1,
+  "draftProductCount": 3,
+  "pendingReviewProductCount": 2,
+  "publishedProductCount": 8,
+  "changesRequestedProductCount": 1,
+  "pendingListingRevisionCount": 1,
+  "pendingVariantRevisionCount": 1,
+  "lowStockProductCount": 3,
+  "outOfStockVariantCount": 2,
+  "reservedStockCount": 5,
+  "openReturnCount": 1,
+  "returnsAwaitingSellerResponseCount": 1,
+  "openSupportTicketCount": 2,
+  "activeDisputeCount": 1,
+  "pendingPayoutAmount": 3400.00,
+  "availablePayoutAmount": 1200.00,
+  "heldPayoutAmount": 0.00,
+  "pendingPayoutCount": 1,
+  "processingPayoutCount": 0,
+  "hasPendingPayoutProfileChange": true,
+  "activeAdCampaignCount": 2,
+  "pendingAdReviewCount": 1,
+  "adSpendLast30Days": 480.00,
+  "adRevenueLast30Days": 1600.00,
+  "unreadNotificationCount": 5,
+  "alerts": [
+    {
+      "severity": "danger",
+      "title": "Delivery exceptions need review",
+      "message": "Failed or returned shipments need seller follow-up.",
+      "route": "/seller/orders",
+      "count": 1
+    }
+  ],
+  "recentActivity": [
+    {
+      "type": "Order",
+      "title": "Order abc12345",
+      "status": "ReadyToShip",
+      "occurredAtUtc": "2026-05-26T13:00:00Z",
+      "route": "/seller/orders/00000000-0000-0000-0000-000000000000"
+    }
+  ]
+}
+```
+
+The `/seller` Angular dashboard calls this endpoint only after the onboarding response confirms `Verified`. If the summary request fails, the dashboard shows a non-blocking error and keeps workspace navigation links available.
+
 ## Seller Analytics
 
 Seller analytics endpoints require the `Seller` JWT role and return only aggregate seller-owned data. Buyer identities and personal details are not included.
@@ -1804,6 +2036,65 @@ Response:
 ```
 
 `totalSales` is gross sales from paid-or-later seller order states, excluding pending-payment and cancelled/refunded orders. Refund and return rates are count-based against seller paid-or-later order count. `conversionRatePlaceholder` remains zero until a dedicated storefront/session conversion model exists.
+
+Richer seller analytics are exposed as additive read-only endpoints. `fromUtc` and `toUtc` default to the last 30 days, the maximum range is 366 days, and `bucket` defaults to `Day`. Supported buckets are `Day` and `Week`.
+
+```http
+GET /api/seller/analytics/performance?fromUtc=2026-05-01T00:00:00.000Z&toUtc=2026-05-31T23:59:59.000Z&bucket=Day
+GET /api/seller/analytics/export.csv?report=Products&fromUtc=2026-05-01T00:00:00.000Z&toUtc=2026-05-31T23:59:59.000Z&bucket=Day
+```
+
+Performance response:
+
+```json
+{
+  "sellerId": "00000000-0000-0000-0000-000000000000",
+  "fromUtc": "2026-05-01T00:00:00Z",
+  "toUtc": "2026-05-31T23:59:59Z",
+  "bucket": "Day",
+  "salesTrend": [
+    {
+      "periodStartUtc": "2026-05-01T00:00:00Z",
+      "periodEndUtc": "2026-05-02T00:00:00Z",
+      "orderCount": 1,
+      "grossSales": 998.00,
+      "refundedAmount": 100.00,
+      "netSales": 898.00,
+      "unitsSold": 2
+    }
+  ],
+  "productPerformance": [
+    {
+      "productId": "00000000-0000-0000-0000-000000000000",
+      "productTitle": "Seller One Product",
+      "productSlug": "seller-one-product",
+      "status": "Published",
+      "unitsSold": 2,
+      "grossSales": 998.00,
+      "refundedAmount": 100.00,
+      "returnCount": 1,
+      "returnRate": 0.5,
+      "stockQuantity": 3,
+      "reservedQuantity": 0,
+      "availableQuantity": 3
+    }
+  ],
+  "inventoryPerformance": [],
+  "adPerformance": [],
+  "customerCareSummary": {
+    "returnCount": 1,
+    "openReturnCount": 1,
+    "refundCount": 1,
+    "refundedAmount": 100.00,
+    "supportTicketCount": 1,
+    "openSupportTicketCount": 1,
+    "disputeCount": 1,
+    "activeDisputeCount": 1
+  }
+}
+```
+
+CSV reports return `text/csv` with stable headers. Supported report values are `Sales`, `Products`, `Inventory`, `Ads`, and `Returns`. These exports are evidence views only; they do not mutate orders, payments, ads, inventory, returns, refunds, or payouts.
 
 Angular seller analytics route:
 
@@ -2106,6 +2397,10 @@ GET /api/admin/products/pending-revisions
 GET /api/admin/products/revisions/{revisionId}
 POST /api/admin/products/revisions/{revisionId}/approve
 POST /api/admin/products/revisions/{revisionId}/reject
+GET /api/admin/products/pending-variant-revisions
+GET /api/admin/products/variant-revisions/{revisionId}
+POST /api/admin/products/variant-revisions/{revisionId}/approve
+POST /api/admin/products/variant-revisions/{revisionId}/reject
 ```
 
 `GET /pending-review` returns products in `PendingReview` or `NeedsAdminReview`. Product detail responses include seller status, attributes, variants, images, AI moderation results, and product audit trail entries.
@@ -2126,11 +2421,13 @@ POST /api/admin/products/revisions/{revisionId}/reject
 }
 ```
 
-Rejecting moves the product to `Rejected`; requesting changes moves it to `ChangesRequested`, which remains seller-editable so the seller can fix and resubmit the listing. Every approval, rejection, and change request writes an audit-log entry.
+Rejecting moves the product to `Rejected`; requesting changes moves it to `ChangesRequested`, which remains seller-editable so the seller can fix and resubmit the listing. Every approval, rejection, and change request writes an audit-log entry and creates a best-effort seller notification.
 
 Angular admin product routes `/admin/products` and `/admin/products/{productId}` use these endpoints unchanged. The queue applies client-side search/status/seller/risk filters over the pending-review response. The detail screen presents seller context, listing data, image review with thumbnail selection and fallback, attributes, variants, AI moderation flags, unchanged review-action payloads, and audit trail.
 
-Published listing revisions are reviewed separately from initial product submissions. `GET /pending-revisions` returns seller-submitted revisions for live published products. Admin approval applies the staged listing fields, attributes, tags, and proposed final image set to the live product, writes an audit log, and refreshes search indexing and embeddings. Admin rejection stores the rejection reason, writes an audit log, and leaves the live buyer-visible product unchanged.
+Published listing revisions are reviewed separately from initial product submissions. `GET /pending-revisions` returns seller-submitted revisions for live published products. Admin approval applies the staged listing fields, attributes, tags, and proposed final image set to the live product, writes an audit log, refreshes search indexing and embeddings, and creates a best-effort seller notification. Admin rejection stores the rejection reason, writes an audit log, creates a best-effort seller notification, and leaves the live buyer-visible product unchanged.
+
+Published variant/pricing revisions are reviewed separately from listing/image revisions. `GET /pending-variant-revisions` returns seller-submitted SKU, size, colour, price, compare-at price, barcode, new-variant, and deactivation changes for published products. Admin approval applies the staged variant changes atomically, refreshes active cart item snapshots for changed SKU/size/colour/price fields, writes audit logs, refreshes search indexing and embeddings, and creates a best-effort seller notification. Historical order items remain unchanged because they already snapshot purchased variant data. Admin rejection stores the rejection reason, writes audit logs, creates a best-effort seller notification, and leaves live variants unchanged.
 
 ## Seller Product Drafts
 
@@ -2157,6 +2454,10 @@ PUT /api/seller/products/{id}/revision/images/{revisionImageId}
 DELETE /api/seller/products/{id}/revision/images/{revisionImageId}
 POST /api/seller/products/{id}/revision/submit-review
 POST /api/seller/products/{id}/revision/cancel
+GET /api/seller/products/{id}/variant-revision
+PUT /api/seller/products/{id}/variant-revision
+POST /api/seller/products/{id}/variant-revision/submit-review
+POST /api/seller/products/{id}/variant-revision/cancel
 ```
 
 Product drafts support category-specific attributes as a JSON object. Stored product image records reference uploaded images by URL/storage key; image binary data is not stored in PostgreSQL. New uploads create `media_assets` metadata plus `thumb`, `card`, and `detail` WebP variants, and product image URLs point at the `detail` variant. The legacy image-reference endpoint remains for compatibility, while the Angular editor uses multipart upload.
@@ -2179,6 +2480,31 @@ Response: the existing `SellerProductDetailResponse`.
 
 Published product listing changes use the revision endpoints instead of mutating the live product directly. A seller-owned published product can have one active revision where proposed title, slug, category, brand, descriptions, tags, category attributes, and final image set are staged. Uploading revision images uses the same media validation, scanning, storage, and variant generation path as draft uploads. Submitting a revision moves it to admin review; cancelling leaves the published product unchanged.
 
+Published product variant and pricing changes use the separate `variant-revision` endpoints. A seller-owned published product can have one active draft, pending, or rejected variant revision. The request stores a seller reason plus staged items:
+
+```json
+{
+  "sellerReason": "Seasonal pricing update.",
+  "items": [
+    {
+      "operation": "Update",
+      "sourceVariantId": "00000000-0000-0000-0000-000000000000",
+      "sku": "DRESS-M-BLACK",
+      "size": "M",
+      "colour": "Black",
+      "price": 699.99,
+      "compareAtPrice": 899.99,
+      "initialStockQuantity": null,
+      "barcode": "6000000000001"
+    }
+  ]
+}
+```
+
+Supported operations are `Add`, `Update`, and `Deactivate`. Existing variant stock and reserved quantity cannot be changed through this workflow; use seller inventory for stock. New variants require non-negative `initialStockQuantity`. Validation keeps final SKU and size/colour combinations unique, requires positive prices, requires compare-at price above price when present, blocks deactivation for variants with active reservations or active cart items, and requires at least one final active sellable variant.
+
+Seller product detail and revision responses include a seller-safe `moderationEvents` collection derived from product and revision audit logs. The events expose action type, reviewer role, reason, and timestamp so the seller editor can show rejection, change-request, and revision review context without exposing admin-only internals.
+
 Media storage configuration is backend-only. `ImageStorage__ProviderName` supports `Local` and `S3`; local storage is served by the API under `ImageStorage__PublicBasePath`, while S3-compatible storage uses bucket/service/public-CDN settings. `MediaScanning__ProviderName=TrustLocalClean` is the local/test scanner. `MediaScanning__RequireExternalScannerInProduction=true` makes readiness fail in production unless a non-local scanner is configured. `MediaCleanup__GracePeriodHours` and `MediaCleanup__BatchSize` control worker cleanup of pending-delete or unreferenced media assets.
 
 Submission requires:
@@ -2199,17 +2525,19 @@ Seller inventory endpoints require a seller JWT role and always operate on produ
 GET /api/seller/inventory
 GET /api/seller/inventory/export.csv
 GET /api/seller/inventory/import-template.csv
+GET /api/seller/inventory/history
+GET /api/seller/inventory/{variantId}/history
 POST /api/seller/inventory/import/preview
 POST /api/seller/inventory/bulk-adjust
 POST /api/seller/inventory/{variantId}/adjust
 ```
 
-`GET /api/seller/inventory` returns flattened variant rows with product title/status/slug, primary image, SKU, size, colour, price, stock quantity, reserved quantity, available quantity, variant status, and updated timestamp.
+`GET /api/seller/inventory` returns flattened variant rows with product title/status/slug, primary image, SKU, barcode, size, colour, price, stock quantity, reserved quantity, available quantity, variant status, and updated timestamp.
 
 CSV export/template columns:
 
 ```text
-variantId,sku,productTitle,productSlug,size,colour,price,reservedQuantity,availableQuantity,stockQuantity,status,updatedAtUtc
+variantId,sku,barcode,productTitle,productSlug,size,colour,price,reservedQuantity,availableQuantity,stockQuantity,status,updatedAtUtc
 ```
 
 Adjustment request:
@@ -2233,6 +2561,7 @@ Bulk inventory import is stocktake-only. The preview endpoint accepts multipart 
     {
       "variantId": "00000000-0000-0000-0000-000000000000",
       "sku": "DRESS-M-BLACK",
+      "barcode": "6001000000012",
       "stockQuantity": 12,
       "status": "Active"
     }
@@ -2240,7 +2569,19 @@ Bulk inventory import is stocktake-only. The preview endpoint accepts multipart 
 }
 ```
 
-Rows match by `variantId` when present, otherwise by seller-owned `sku`. If both are present, they must refer to the same variant. Preview/apply responses include total, valid, error, changed, and unchanged row counts plus per-row current/proposed values and validation messages. Bulk apply rejects invalid rows and applies valid batches all-or-nothing; each changed variant writes a `SellerInventoryBulkAdjusted` audit-log entry. Batches are capped at 500 rows. Bulk import does not change price, SKU, size, colour, product content, variant structure, or reservations.
+Rows match by `variantId` when present, otherwise by seller-owned `sku` or `barcode`. If multiple identifiers are present, they must refer to the same variant. Preview/apply responses include total, valid, error, changed, and unchanged row counts plus per-row current/proposed values and validation messages. Bulk apply rejects invalid rows and applies valid batches all-or-nothing; each changed variant writes a `SellerInventoryBulkAdjusted` audit-log entry and a structured `BulkImportAdjustment` inventory movement. Single-row adjustments write `SellerInventoryAdjusted` audit logs and `SellerAdjustment` inventory movements. Batches are capped at 500 rows. Bulk import does not change price, SKU, size, colour, barcode, product content, variant structure, or reservations.
+
+`GET /api/seller/inventory/history` returns seller-scoped stock ledger history and supports optional `productId`, `variantId`, `sku`, `barcode`, `movementType`, `orderId`, `cartId`, `reservationId`, `paymentId`, `returnRequestId`, `refundId`, `fromUtc`, and `toUtc` query filters. `GET /api/seller/inventory/{variantId}/history` returns movement history for one owned variant or `404` for another seller's variant. Movement responses include product/variant context, movement type, stock and reserved before/after values, `quantityDelta`, computed `reservedQuantityDelta`, status before/after, source, reason, actor id, optional batch reference, related ids, an optional seller `relatedRoute`, and occurrence timestamp.
+
+Supported inventory movement types are `SellerAdjustment`, `BulkImportAdjustment`, `ReservationCreated`, `ReservationReleased`, `ReservationExpired`, `ReservationConfirmed`, `PaymentFailedReservationReleased`, `ReturnRequested`, `RefundCompleted`, and `ReturnRestocked`. Reservation/payment/return/refund movements are traceability rows only: paid webhooks confirm reservations but do not deduct `stockQuantity`, returns/refunds do not automatically restock variants, and `ReturnRestocked` appears only after an explicit seller restock decision.
+
+Admin stock-ledger maintenance:
+
+```http
+POST /api/admin/inventory-ledger/backfill
+```
+
+The backfill endpoint is admin-only and inserts missing historical `inventory_movements` for derivable reservation, return, and refund records. It supports `dryRun`, optional `sellerId`, `fromUtc`, `toUtc`, and `batchSize` up to `2000`. Dry runs report what would be created without writing rows. Apply runs are idempotent, write an `InventoryLedgerBackfilled` audit log, skip existing movements, and report ambiguous records instead of mutating stock, reservations, orders, payments, refunds, returns, carts, payouts, or ledger entries.
 
 Angular seller routes:
 
@@ -2249,7 +2590,7 @@ Angular seller routes:
 /seller/settings/store
 ```
 
-`/seller/inventory` uses these inventory endpoints for searchable/filterable stock operations, CSV export/template download, import preview, and bulk apply. `/seller/settings/store` reuses the existing seller onboarding profile, storefront, and address endpoints for post-verification store settings and exposes the verified-seller payout-profile change request workflow.
+`/seller/inventory` uses these inventory endpoints for searchable/filterable stock operations, SKU/barcode lookup, CSV export/template download, import preview, bulk apply, and movement-history inspection. `/seller/settings/store` reuses the existing seller onboarding profile, storefront, and address endpoints for post-verification store settings, manages seller store policies through `/api/seller/store-policy`, and exposes the verified-seller payout-profile change request workflow.
 
 Seller payout-profile change endpoints:
 
@@ -2415,7 +2756,7 @@ Supported `fieldsToApply` values are `title`, `shortDescription`, `fullDescripti
 
 ## Current Scope
 
-Health/readiness, identity foundation with HttpOnly refresh cookies, seller onboarding, seller inventory adjustment and bulk CSV import/export, seller delivery-method/rate management including pickup-point delivery methods, seller store settings UI with payout-profile change re-verification, admin seller payout-profile change review, admin seller approval and Angular moderation polish, admin product review and Angular moderation polish, admin buyer-review moderation, admin audit-log UI polish, admin dashboard summary, admin category/attribute catalog management, admin platform pickup-point management, admin marketplace finance reports, admin order/payment read APIs and Angular read screens, public product search, public verified-buyer product review reads, buyer-facing shop/category/product/seller/cart/checkout/assistant/visual-search pages, buyer account order/return/dispute/support/wishlist/review/notification/settings Angular routes, buyer profile settings, saved delivery addresses with local address verification, delivery instructions, order delivery-address verification snapshots, order delivery-method and pickup-point snapshots, fulfilment exception tracking, in-app notification preferences, buyer transactional email notification outbox delivery, and buyer SignalR notification live updates, seller product draft endpoints with production-hardened media uploads and image metadata updates, S3-compatible image storage configuration, media scanning abstraction, WebP image variants, media cleanup, moderation-aware published listing revisions, polished seller product editor UX, buyer cart endpoints with saved-for-later wishlist moves, product image metadata, and seller shipping-option quotes, buyer wishlist/review/notification backend APIs with saved-state hydration and wishlist-to-cart moves, inventory reservation services, order creation from cart, provider-neutral carrier booking/tracking with Manual and Fake providers, carrier provider comparison notes, payment provider abstractions with fake and PayFast providers, local payment persistence with retryable checkout URLs, idempotent payment webhook handling including duplicate race fallback and paid-cart cleanup, payment reconciliation review evidence, seller delivery confirmation, successful-payment ledger entries, seller balance/payout read APIs, admin payout hold/release/make-available/process/reconcile with a fake payout provider, refund workflow with ledger reversals, payout adjustments, and manual PayFast refund confirmation, finance dual-control policies, dispute workflow with evidence/messages/admin resolution, admin finance Angular routes for refunds/payouts/disputes, support ticket workflow with private internal notes and Angular support queue/detail routes, seller ad campaign draft/submission API and Angular dashboard, seller analytics dashboard, admin ad campaign review, ad event tracking and seller campaign metrics, product moderation, AI suggestion persistence/DTOs, the backend AI listing assistant service abstraction, seller AI suggestion generation/apply endpoints, the Angular seller AI assistant UI, buyer AI shopping intent extraction/recommendations, buyer visual search with a fake vision provider, and private product embedding generation exist. PayFast sandbox verification, payment-provider status-query settlement, automatic PayFast refunds, real payout provider integration, real carrier provider integration, carrier-provided rate calculation, external address verification/geocoding, pickup-network APIs, variant/pricing revision workflows, production vision AI, buyer-favoured dispute money movement, admin order/payment mutation workflows, SMS/push notification delivery, seller/admin email workflows, hard-delete taxonomy operations, bulk category import, and taxonomy versioning are intentionally not implemented yet.
+Health/readiness, identity foundation with HttpOnly refresh cookies, seller onboarding, seller inventory adjustment and bulk CSV import/export, seller delivery-method/rate management including pickup-point delivery methods, seller store settings UI with payout-profile change re-verification and seller notification preferences, admin seller payout-profile change review, admin seller approval and Angular moderation polish, admin product review and Angular moderation polish, admin buyer-review moderation, admin audit-log UI polish, admin dashboard summary, admin category/attribute catalog management, admin platform pickup-point management, admin marketplace finance reports, admin order/payment read APIs and Angular read screens, public product search, public verified-buyer product review reads, buyer-facing shop/category/product/seller/cart/checkout/assistant/visual-search pages, buyer account order/return/dispute/support/wishlist/review/notification/settings Angular routes, buyer profile settings, saved delivery addresses with local address verification, delivery instructions, order delivery-address verification snapshots, order delivery-method and pickup-point snapshots, fulfilment exception tracking, in-app notification preferences, buyer transactional email notification outbox delivery, buyer SignalR notification live updates, seller transactional in-app/email notifications, seller SignalR notification live updates, and seller notification UI, seller product draft endpoints with production-hardened media uploads and image metadata updates, S3-compatible image storage configuration, media scanning abstraction, WebP image variants, media cleanup, moderation-aware published listing revisions, polished seller product editor UX, buyer cart endpoints with saved-for-later wishlist moves, product image metadata, and seller shipping-option quotes, buyer wishlist/review/notification backend APIs with saved-state hydration and wishlist-to-cart moves, inventory reservation services, order creation from cart, provider-neutral carrier booking/tracking with Manual and Fake providers, carrier provider comparison notes, payment provider abstractions with fake and PayFast providers, local payment persistence with retryable checkout URLs, idempotent payment webhook handling including duplicate race fallback and paid-cart cleanup, payment reconciliation review evidence, seller delivery confirmation, successful-payment ledger entries, seller balance/payout read APIs, admin payout hold/release/make-available/process/reconcile with a fake payout provider, refund workflow with ledger reversals, payout adjustments, and manual PayFast refund confirmation, finance dual-control policies, dispute workflow with evidence/messages/admin resolution, admin finance Angular routes for refunds/payouts/disputes, support ticket workflow with private internal notes and Angular support queue/detail routes, seller ad campaign draft/submission API and Angular dashboard, seller analytics dashboard, admin ad campaign review, ad event tracking and seller campaign metrics, product moderation, AI suggestion persistence/DTOs, the backend AI listing assistant service abstraction, seller AI suggestion generation/apply endpoints, the Angular seller AI assistant UI, buyer AI shopping intent extraction/recommendations, buyer visual search with a fake vision provider, and private product embedding generation exist. PayFast sandbox verification, payment-provider status-query settlement, automatic PayFast refunds, real payout provider integration, real carrier provider integration, carrier-provided rate calculation, external address verification/geocoding, pickup-network APIs, production vision AI, buyer-favoured dispute money movement, admin order/payment mutation workflows, SMS/push notification delivery, admin email workflows, hard-delete taxonomy operations, bulk category import, and taxonomy versioning are intentionally not implemented yet.
 
 ## API Rules
 

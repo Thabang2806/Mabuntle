@@ -80,6 +80,23 @@ public sealed class CartItem : AuditableEntity
         SetQuantity(quantity);
     }
 
+    public void RefreshVariantSnapshot(
+        string sku,
+        string size,
+        string colour,
+        decimal unitPrice)
+    {
+        if (unitPrice <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(unitPrice), "Unit price must be positive.");
+        }
+
+        Sku = Required(sku, nameof(sku));
+        Size = Required(size, nameof(size));
+        Colour = Required(colour, nameof(colour));
+        UnitPrice = unitPrice;
+    }
+
     private void SetQuantity(int quantity)
     {
         if (quantity <= 0)

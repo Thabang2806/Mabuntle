@@ -63,6 +63,17 @@ describe('AdminSellerService', () => {
     await expectAsync(rejectPromise).toBeResolved();
     await expectAsync(suspendPromise).toBeResolved();
   });
+
+  it('downloads seller verification evidence as a blob', async () => {
+    const promise = service.downloadVerificationEvidence('seller-id', 'evidence-id');
+
+    const request = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/admin/sellers/seller-id/verification-evidence/evidence-id/download`);
+    expect(request.request.method).toBe('GET');
+    expect(request.request.responseType).toBe('blob');
+    request.flush(new Blob(['evidence'], { type: 'application/pdf' }));
+
+    await expectAsync(promise).toBeResolved();
+  });
 });
 
 function createSellerSummary() {
@@ -108,6 +119,18 @@ function createSellerDetail(overrides: Record<string, unknown> = {}) {
       hasSubmittedPlaceholder: true,
       isAdminApproved: false
     },
+    storePolicy: {
+      returnWindowDays: null,
+      returnPolicy: null,
+      exchangePolicy: null,
+      fulfilmentPolicy: null,
+      supportPolicy: null,
+      careInstructions: null,
+      productDisclaimer: null,
+      isComplete: false,
+      missingFields: ['returnPolicy']
+    },
+    verificationEvidence: [],
     auditTrail: [],
     ...overrides
   };

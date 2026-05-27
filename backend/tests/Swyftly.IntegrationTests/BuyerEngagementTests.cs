@@ -397,7 +397,7 @@ public sealed class BuyerEngagementTests
     }
 
     [Fact]
-    public async Task NotificationHub_NegotiateRequiresBuyerAuthentication()
+    public async Task NotificationHub_NegotiateRequiresBuyerOrSellerAuthentication()
     {
         using var factory = new BuyerEngagementTestFactory();
         using var client = factory.CreateClient();
@@ -410,6 +410,12 @@ public sealed class BuyerEngagementTests
 
         using var buyerResponse = await client.PostAsync("/hubs/notifications/negotiate?negotiateVersion=1", null);
         buyerResponse.EnsureSuccessStatusCode();
+
+        var sellerToken = await RegisterAndLoginAsync(client, "hub-seller@example.test", SwyftlyRoles.Seller);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sellerToken);
+
+        using var sellerResponse = await client.PostAsync("/hubs/notifications/negotiate?negotiateVersion=1", null);
+        sellerResponse.EnsureSuccessStatusCode();
     }
 
     [Fact]

@@ -44,6 +44,7 @@ export interface SellerProductDetailResponse {
   attributes: Record<string, string>;
   variants: SellerProductVariantResponse[];
   images: SellerProductImageResponse[];
+  moderationEvents: SellerModerationEventResponse[];
 }
 
 export interface SellerProductVariantResponse {
@@ -88,6 +89,15 @@ export interface SellerProductRevisionResponse {
   tags: string[];
   attributes: Record<string, string>;
   images: SellerProductRevisionImageResponse[];
+  moderationEvents: SellerModerationEventResponse[];
+}
+
+export interface SellerModerationEventResponse {
+  auditLogId: string;
+  actionType: string;
+  actorRole: string | null;
+  reason: string | null;
+  createdAtUtc: string;
 }
 
 export interface SellerProductRevisionImageResponse {
@@ -99,6 +109,51 @@ export interface SellerProductRevisionImageResponse {
   sortOrder: number;
   isPrimary: boolean;
   createdAtUtc: string;
+}
+
+export interface SellerProductVariantRevisionResponse {
+  revisionId: string;
+  productId: string;
+  sellerId: string;
+  status: string;
+  canEdit: boolean;
+  sellerReason: string | null;
+  rejectionReason: string | null;
+  submittedAtUtc: string | null;
+  reviewedAtUtc: string | null;
+  currentVariants: SellerProductVariantRevisionFinalVariantResponse[];
+  items: SellerProductVariantRevisionItemResponse[];
+  proposedFinalVariants: SellerProductVariantRevisionFinalVariantResponse[];
+  moderationEvents: SellerModerationEventResponse[];
+}
+
+export interface SellerProductVariantRevisionItemResponse {
+  revisionItemId: string;
+  operation: 'Add' | 'Update' | 'Deactivate' | string;
+  sourceVariantId: string | null;
+  sku: string;
+  size: string;
+  colour: string;
+  price: number;
+  compareAtPrice: number | null;
+  initialStockQuantity: number | null;
+  proposedStatus: 'Active' | 'Inactive' | 'OutOfStock' | string;
+  barcode: string | null;
+}
+
+export interface SellerProductVariantRevisionFinalVariantResponse {
+  sourceVariantId: string | null;
+  changeType: string;
+  sku: string;
+  size: string;
+  colour: string;
+  price: number;
+  compareAtPrice: number | null;
+  stockQuantity: number;
+  reservedQuantity: number;
+  status: string;
+  barcode: string | null;
+  availableQuantity: number;
 }
 
 export interface UpsertSellerProductRequest {
@@ -124,6 +179,23 @@ export interface UpsertSellerProductVariantRequest {
   stockQuantity: number;
   reservedQuantity: number;
   status: 'Active' | 'Inactive' | 'OutOfStock';
+  barcode: string | null;
+}
+
+export interface UpsertSellerProductVariantRevisionRequest {
+  sellerReason: string | null;
+  items: UpsertSellerProductVariantRevisionItemRequest[];
+}
+
+export interface UpsertSellerProductVariantRevisionItemRequest {
+  operation: 'Add' | 'Update' | 'Deactivate';
+  sourceVariantId: string | null;
+  sku: string | null;
+  size: string | null;
+  colour: string | null;
+  price: number | null;
+  compareAtPrice: number | null;
+  initialStockQuantity: number | null;
   barcode: string | null;
 }
 

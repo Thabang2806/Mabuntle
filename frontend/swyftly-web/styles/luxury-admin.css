@@ -1623,6 +1623,37 @@
   top: 96px;
 }
 
+.admin-evidence-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.admin-evidence-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.875rem;
+  border: 1px solid rgb(232 214 199 / 100%);
+  background: rgb(255 255 255 / 88%);
+}
+
+.admin-evidence-row h3,
+.admin-evidence-row p {
+  margin: 0;
+}
+
+.admin-evidence-row h3 {
+  margin-top: 0.35rem;
+  color: var(--swyftly-ink);
+  font-family: var(--swyftly-editorial-font);
+  font-weight: 400;
+}
+
+.admin-evidence-row small {
+  color: var(--swyftly-muted);
+}
+
 .hf-admin-card-heading {
   display: flex;
   gap: 1rem;

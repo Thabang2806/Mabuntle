@@ -41,6 +41,10 @@ import { getApiErrorMessage } from '../auth/api-error';
           <p class="auth-alert success" role="status">{{ successMessage() }}</p>
         }
 
+        @if (campaign()?.rejectionReason) {
+          <p class="auth-alert error" role="status">{{ campaign()?.rejectionReason }}</p>
+        }
+
         @if (metrics(); as metric) {
           <div class="dashboard-metrics" aria-label="Campaign metrics">
             <div class="dashboard-metric-card"><span>Impressions</span><strong>{{ metric.impressions }}</strong></div>
@@ -97,6 +101,28 @@ import { getApiErrorMessage } from '../auth/api-error';
                   </div>
                 }
               </div>
+            </article>
+
+            <article class="route-card admin-detail-card seller-moderation-card">
+              <h2>Review history</h2>
+              <p>Admin decisions and seller-facing reasons for this campaign.</p>
+              @if ((campaign()?.moderationEvents?.length ?? 0) === 0) {
+                <p class="form-helper">No admin review decisions have been recorded yet.</p>
+              } @else {
+                <div class="admin-audit-list">
+                  @for (event of campaign()?.moderationEvents ?? []; track event.auditLogId) {
+                    <div>
+                      <span class="status-pill">{{ moderationLabel(event.actionType) }}</span>
+                      <strong>{{ event.createdAtUtc | date:'medium' }}</strong>
+                      @if (event.reason) {
+                        <p>{{ event.reason }}</p>
+                      } @else {
+                        <p>No seller action is required from this decision.</p>
+                      }
+                    </div>
+                  }
+                </div>
+              }
             </article>
           </div>
 
@@ -186,6 +212,10 @@ export class SellerAdCampaignDetailPageComponent implements OnInit {
 
   protected productStatus(productId: string): string {
     return this.products().find(product => product.productId === productId)?.status ?? 'Unknown';
+  }
+
+  protected moderationLabel(actionType: string): string {
+    return actionType.replace(/([a-z])([A-Z])/g, '$1 $2');
   }
 
   private async runAction(

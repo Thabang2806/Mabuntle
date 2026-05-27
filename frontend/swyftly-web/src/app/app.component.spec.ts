@@ -7,10 +7,13 @@ import { AuthRole } from './auth/auth.models';
 import { AppComponent } from './app.component';
 import { BuyerNotificationResponse } from './buyer/buyer-engagement.models';
 import { BuyerNotificationRealtimeService } from './buyer/buyer-notification-realtime.service';
+import { SellerNotificationResponse } from './seller/seller-notification.models';
+import { SellerNotificationRealtimeService } from './seller/seller-notification-realtime.service';
 
 describe('AppComponent', () => {
   let authService: jasmine.SpyObj<Pick<AuthService, 'initialize' | 'logout' | 'hasAnyRole' | 'isAuthenticated'>>;
   let notificationRealtime: Pick<BuyerNotificationRealtimeService, 'unreadCount' | 'latestNotification' | 'dismissLatestNotification'>;
+  let sellerNotificationRealtime: Pick<SellerNotificationRealtimeService, 'unreadCount' | 'latestNotification' | 'dismissLatestNotification'>;
 
   beforeEach(async () => {
     sessionStorage.clear();
@@ -24,6 +27,11 @@ describe('AppComponent', () => {
       latestNotification: signal<BuyerNotificationResponse | null>(null),
       dismissLatestNotification: jasmine.createSpy('dismissLatestNotification')
     };
+    sellerNotificationRealtime = {
+      unreadCount: signal(0),
+      latestNotification: signal<SellerNotificationResponse | null>(null),
+      dismissLatestNotification: jasmine.createSpy('dismissLatestNotification')
+    };
 
     await TestBed.configureTestingModule({
       imports: [AppComponent],
@@ -31,7 +39,8 @@ describe('AppComponent', () => {
         provideNoopAnimations(),
         provideRouter([]),
         { provide: AuthService, useValue: authService },
-        { provide: BuyerNotificationRealtimeService, useValue: notificationRealtime }
+        { provide: BuyerNotificationRealtimeService, useValue: notificationRealtime },
+        { provide: SellerNotificationRealtimeService, useValue: sellerNotificationRealtime }
       ]
     }).compileComponents();
   });
@@ -54,7 +63,19 @@ describe('AppComponent', () => {
     expect(compiled.querySelector('.brand-mark')?.textContent?.trim()).toBe('S');
     expect(compiled.querySelector('.header-search')?.textContent).toContain('Search fashion');
     expect(compiled.querySelector('.nav-link--featured')?.textContent).toContain('AI Style Finder');
+    expect(compiled.querySelector('a[href="/sell"]')?.textContent).toContain('Sell');
     expect(compiled.querySelector('app-mobile-bottom-nav')).not.toBeNull();
+  });
+
+  it('routes unauthenticated sell links to the seller landing page', () => {
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const sellLinks = Array.from(compiled.querySelectorAll('a[href="/sell"]'));
+
+    expect(sellLinks.length).toBeGreaterThan(0);
+    expect(sellLinks.some(link => link.textContent?.includes('Sell'))).toBeTrue();
   });
 
   it('should prioritize admin mobile navigation for multi-role users', () => {
@@ -93,5 +114,30 @@ describe('AppComponent', () => {
     expect(compiled.querySelector('.nav-badge')?.textContent?.trim()).toBe('3');
     expect(compiled.querySelector('.notification-toast')?.textContent).toContain('Order shipped');
     expect(compiled.querySelector('.notification-toast a')?.getAttribute('href')).toBe('/account/orders/order-id');
+  });
+
+  it('should render seller notification badge and toast', () => {
+    authService.hasAnyRole.and.callFake((roles: readonly AuthRole[]) => roles.includes('Seller'));
+    authService.isAuthenticated.and.returnValue(true);
+    sellerNotificationRealtime.unreadCount.set(2);
+    sellerNotificationRealtime.latestNotification.set({
+      notificationId: 'seller-notification-id',
+      recipientUserId: 'seller-user-id',
+      type: 'ProductApproved',
+      title: 'Product approved',
+      message: 'Your product was approved.',
+      relatedEntityType: 'Product',
+      relatedEntityId: 'product-id',
+      readAtUtc: null,
+      createdAtUtc: '2026-05-26T10:00:00Z'
+    });
+
+    const fixture = TestBed.createComponent(AppComponent);
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('.nav-badge')?.textContent?.trim()).toBe('2');
+    expect(compiled.querySelector('.notification-toast')?.textContent).toContain('Product approved');
+    expect(compiled.querySelector('.notification-toast a')?.getAttribute('href')).toBe('/seller/products/product-id/edit');
   });
 });

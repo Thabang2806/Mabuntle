@@ -25,6 +25,19 @@ export interface AdminProductRevisionSummaryResponse {
   updatedAtUtc: string;
 }
 
+export interface AdminProductVariantRevisionSummaryResponse {
+  revisionId: string;
+  productId: string;
+  sellerId: string;
+  sellerDisplayName: string | null;
+  sellerVerificationStatus: string | null;
+  productTitle: string | null;
+  status: string;
+  itemCount: number;
+  submittedAtUtc: string | null;
+  updatedAtUtc: string;
+}
+
 export interface AdminProductDetailResponse {
   productId: string;
   sellerId: string;
@@ -61,6 +74,54 @@ export interface AdminProductRevisionDetailResponse {
   current: AdminProductListingSnapshotResponse;
   proposed: AdminProductListingSnapshotResponse;
   auditTrail: AdminAuditLogResponse[];
+}
+
+export interface AdminProductVariantRevisionDetailResponse {
+  revisionId: string;
+  productId: string;
+  sellerId: string;
+  seller: AdminProductSellerResponse;
+  productTitle: string | null;
+  productSlug: string | null;
+  status: string;
+  sellerReason: string | null;
+  rejectionReason: string | null;
+  submittedAtUtc: string | null;
+  reviewedAtUtc: string | null;
+  currentVariants: AdminProductVariantRevisionFinalVariantResponse[];
+  items: AdminProductVariantRevisionItemResponse[];
+  proposedFinalVariants: AdminProductVariantRevisionFinalVariantResponse[];
+  validationErrors: Record<string, string[]>;
+  auditTrail: AdminAuditLogResponse[];
+}
+
+export interface AdminProductVariantRevisionItemResponse {
+  revisionItemId: string;
+  operation: string;
+  sourceVariantId: string | null;
+  sku: string;
+  size: string;
+  colour: string;
+  price: number;
+  compareAtPrice: number | null;
+  initialStockQuantity: number | null;
+  proposedStatus: string;
+  barcode: string | null;
+}
+
+export interface AdminProductVariantRevisionFinalVariantResponse {
+  sourceVariantId: string | null;
+  changeType: string;
+  sku: string;
+  size: string;
+  colour: string;
+  price: number;
+  compareAtPrice: number | null;
+  stockQuantity: number;
+  reservedQuantity: number;
+  status: string;
+  barcode: string | null;
+  availableQuantity: number;
 }
 
 export interface AdminProductListingSnapshotResponse {

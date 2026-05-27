@@ -15,10 +15,13 @@ using Swyftly.Application.Identity;
 using Swyftly.Domain.Advertising;
 using Swyftly.Domain.Ai;
 using Swyftly.Domain.Catalog;
+using Swyftly.Domain.Disputes;
+using Swyftly.Domain.Inventory;
 using Swyftly.Domain.Orders;
 using Swyftly.Domain.Refunds;
 using Swyftly.Domain.Returns;
 using Swyftly.Domain.Sellers;
+using Swyftly.Domain.Support;
 using Swyftly.Infrastructure.Identity;
 using Swyftly.Infrastructure.Persistence;
 
@@ -75,6 +78,88 @@ public sealed class SellerAnalyticsTests
         Assert.Equal(1, analytics.AiUsage.FailedRequests);
     }
 
+    [Fact]
+    public async Task SellerAnalyticsPerformance_ReturnsSellerScopedTrendAndBreakdowns()
+    {
+        using var factory = new SellerAnalyticsTestFactory();
+        using var client = factory.CreateClient();
+        var sellerOne = await CreateSellerUserAsync(factory, client, "analytics-performance-one@example.test");
+        var sellerTwo = await CreateSellerUserAsync(factory, client, "analytics-performance-two@example.test");
+        await SeedAnalyticsDataAsync(factory, sellerOne.SellerId, sellerTwo.SellerId);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sellerOne.AccessToken);
+        var fromUtc = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-7).ToString("O"));
+        var toUtc = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(1).ToString("O"));
+
+        using var response = await client.GetAsync($"/api/seller/analytics/performance?fromUtc={fromUtc}&toUtc={toUtc}&bucket=Day");
+
+        response.EnsureSuccessStatusCode();
+        var analytics = await response.Content.ReadFromJsonAsync<SellerAnalyticsPerformanceResponse>();
+        Assert.NotNull(analytics);
+        Assert.Equal(sellerOne.SellerId, analytics!.SellerId);
+        Assert.Equal("Day", analytics.Bucket);
+        Assert.Equal(1, analytics.SalesTrend.Sum(bucket => bucket.OrderCount));
+        Assert.Equal(998m, analytics.SalesTrend.Sum(bucket => bucket.GrossSales));
+        Assert.Equal(100m, analytics.SalesTrend.Sum(bucket => bucket.RefundedAmount));
+        Assert.Contains(analytics.ProductPerformance, product =>
+            product.ProductTitle == "Seller One Product"
+            && product.UnitsSold == 2
+            && product.ReturnCount == 1
+            && product.StockQuantity == 3);
+        Assert.DoesNotContain(analytics.ProductPerformance, product => product.ProductTitle == "Other Seller Product");
+        Assert.Contains(analytics.InventoryPerformance, item =>
+            item.Sku == "SKU-1"
+            && item.Barcode == "BARCODE-1"
+            && item.IsLowStock);
+        Assert.Single(analytics.AdPerformance);
+        Assert.Equal(1, analytics.CustomerCareSummary.ReturnCount);
+        Assert.Equal(1, analytics.CustomerCareSummary.RefundCount);
+        Assert.Equal(1, analytics.CustomerCareSummary.SupportTicketCount);
+        Assert.Equal(1, analytics.CustomerCareSummary.DisputeCount);
+    }
+
+    [Fact]
+    public async Task SellerAnalyticsExport_ReturnsCsvForRequestedReport()
+    {
+        using var factory = new SellerAnalyticsTestFactory();
+        using var client = factory.CreateClient();
+        var sellerOne = await CreateSellerUserAsync(factory, client, "analytics-export-one@example.test");
+        var sellerTwo = await CreateSellerUserAsync(factory, client, "analytics-export-two@example.test");
+        await SeedAnalyticsDataAsync(factory, sellerOne.SellerId, sellerTwo.SellerId);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sellerOne.AccessToken);
+        var fromUtc = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-7).ToString("O"));
+        var toUtc = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(1).ToString("O"));
+
+        using var response = await client.GetAsync($"/api/seller/analytics/export.csv?report=Products&fromUtc={fromUtc}&toUtc={toUtc}");
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("text/csv", response.Content.Headers.ContentType?.MediaType);
+        var csv = await response.Content.ReadAsStringAsync();
+        Assert.Contains("\"productId\",\"productTitle\",\"productSlug\"", csv);
+        Assert.Contains("Seller One Product", csv);
+        Assert.DoesNotContain("Other Seller Product", csv);
+    }
+
+    [Fact]
+    public async Task SellerAnalyticsPerformance_RejectsInvalidFilters()
+    {
+        using var factory = new SellerAnalyticsTestFactory();
+        using var client = factory.CreateClient();
+        var seller = await CreateSellerUserAsync(factory, client, "analytics-invalid@example.test");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", seller.AccessToken);
+        var fromUtc = Uri.EscapeDataString(DateTimeOffset.UtcNow.ToString("O"));
+        var toUtc = Uri.EscapeDataString(DateTimeOffset.UtcNow.AddDays(-1).ToString("O"));
+
+        using var badRange = await client.GetAsync($"/api/seller/analytics/performance?fromUtc={fromUtc}&toUtc={toUtc}");
+        using var badBucket = await client.GetAsync("/api/seller/analytics/performance?bucket=Month");
+        using var badReport = await client.GetAsync("/api/seller/analytics/export.csv?report=Unknown");
+
+        Assert.Equal(HttpStatusCode.BadRequest, badRange.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, badBucket.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, badReport.StatusCode);
+    }
+
     private static async Task RegisterAsync(HttpClient client, string email, string role)
     {
         using var response = await client.PostAsJsonAsync(
@@ -127,8 +212,8 @@ public sealed class SellerAnalyticsTests
         var buyerId = Guid.NewGuid();
         var sellerOneProduct = CreatePublishedProduct(sellerOneId, "Seller One Product");
         var sellerTwoProduct = CreatePublishedProduct(sellerTwoId, "Other Seller Product");
-        var sellerOneVariant = new ProductVariant(sellerOneProduct.Id, "SKU-1", "M", "Black", 499m, null, 3);
-        var sellerTwoVariant = new ProductVariant(sellerTwoProduct.Id, "SKU-2", "M", "Black", 999m, null, 10);
+        var sellerOneVariant = new ProductVariant(sellerOneProduct.Id, "SKU-1", "M", "Black", 499m, null, 3, barcode: "BARCODE-1");
+        var sellerTwoVariant = new ProductVariant(sellerTwoProduct.Id, "SKU-2", "M", "Black", 999m, null, 10, barcode: "BARCODE-2");
 
         var sellerOneOrder = new Order(buyerId, sellerOneId, Guid.NewGuid(), DateTimeOffset.UtcNow.AddDays(-2));
         sellerOneOrder.AddItem(sellerOneProduct.Id, sellerOneVariant.Id, sellerOneProduct.Title, sellerOneVariant.Sku, sellerOneVariant.Size, sellerOneVariant.Colour, sellerOneVariant.Price, 2);
@@ -144,6 +229,14 @@ public sealed class SellerAnalyticsTests
             ReturnReason.DamagedItem,
             "Damaged on arrival.",
             DateTimeOffset.UtcNow);
+        returnRequest.AddItem(
+            sellerOneOrder.Items.Single().Id,
+            sellerOneProduct.Id,
+            sellerOneVariant.Id,
+            1,
+            ReturnReason.DamagedItem,
+            isOpenedOrUnsealed: false,
+            "Box crushed.");
         returnRequest.MarkAwaitingSellerResponse(DateTimeOffset.UtcNow);
         var refund = new Refund(sellerOneOrder.Id, Guid.NewGuid(), buyerId, sellerOneId, returnRequest.Id, 100m, "ZAR", "Return approved.", DateTimeOffset.UtcNow);
         refund.Approve(Guid.NewGuid(), "Approved.", DateTimeOffset.UtcNow);
@@ -161,12 +254,51 @@ public sealed class SellerAnalyticsTests
         campaign.SubmitForReview(DateTimeOffset.UtcNow.AddDays(-1));
         campaign.Approve(Guid.NewGuid(), DateTimeOffset.UtcNow.AddDays(-1));
         var click = new AdClick(campaign.Id, sellerOneProduct.Id, buyerId, null, DateTimeOffset.UtcNow);
+        var supportTicket = new SupportTicket(
+            Guid.NewGuid(),
+            "Seller",
+            null,
+            sellerOneId,
+            SupportTicketCategory.OrderIssue,
+            "Order dispatch question",
+            "Need help with dispatch.",
+            sellerOneOrder.Id,
+            sellerOneProduct.Id,
+            sellerOneId,
+            null,
+            DateTimeOffset.UtcNow);
+        var dispute = new Dispute(
+            sellerOneOrder.Id,
+            returnRequest.Id,
+            buyerId,
+            sellerOneId,
+            buyerId,
+            "Return evidence dispute.",
+            DateTimeOffset.UtcNow);
 
         dbContext.Products.AddRange(sellerOneProduct, sellerTwoProduct);
         dbContext.ProductVariants.AddRange(sellerOneVariant, sellerTwoVariant);
         dbContext.Orders.AddRange(sellerOneOrder, sellerTwoOrder);
         dbContext.ReturnRequests.Add(returnRequest);
         dbContext.Refunds.Add(refund);
+        dbContext.InventoryMovements.Add(new InventoryMovement(
+            sellerOneId,
+            sellerOneProduct.Id,
+            sellerOneVariant.Id,
+            InventoryMovementType.SellerAdjustment,
+            2,
+            3,
+            0,
+            0,
+            ProductVariantStatus.Active,
+            ProductVariantStatus.Active,
+            "TestSeed",
+            "Seed low-stock movement.",
+            null,
+            null,
+            DateTimeOffset.UtcNow));
+        dbContext.SupportTickets.Add(supportTicket);
+        dbContext.Disputes.Add(dispute);
         dbContext.AdCampaigns.Add(campaign);
         dbContext.AdBudgets.Add(new AdBudget(campaign.Id, "ZAR", 100m, 1000m, 5m, DateTimeOffset.UtcNow));
         dbContext.AdImpressions.Add(new AdImpression(campaign.Id, sellerOneProduct.Id, "shop-grid", "visitor-1", DateTimeOffset.UtcNow));

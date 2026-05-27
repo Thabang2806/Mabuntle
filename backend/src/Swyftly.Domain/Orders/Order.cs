@@ -136,6 +136,22 @@ public sealed class Order : AuditableEntity
 
     public string? PickupPointOpeningHours { get; private set; }
 
+    public int? SellerPolicyReturnWindowDays { get; private set; }
+
+    public string? SellerPolicyReturnPolicy { get; private set; }
+
+    public string? SellerPolicyExchangePolicy { get; private set; }
+
+    public string? SellerPolicyFulfilmentPolicy { get; private set; }
+
+    public string? SellerPolicySupportPolicy { get; private set; }
+
+    public string? SellerPolicyCareInstructions { get; private set; }
+
+    public string? SellerPolicyProductDisclaimer { get; private set; }
+
+    public DateTimeOffset? SellerPolicySnapshotAtUtc { get; private set; }
+
     public IReadOnlyCollection<OrderItem> Items => _items.AsReadOnly();
 
     public IReadOnlyCollection<OrderStatusHistory> StatusHistory => _statusHistory.AsReadOnly();
@@ -197,6 +213,26 @@ public sealed class Order : AuditableEntity
                     PickupPointLatitude,
                     PickupPointLongitude,
                     PickupPointOpeningHours);
+
+    public OrderSellerPolicySnapshot? SellerPolicySnapshot =>
+        SellerPolicySnapshotAtUtc is null
+            && SellerPolicyReturnWindowDays is null
+            && SellerPolicyReturnPolicy is null
+            && SellerPolicyExchangePolicy is null
+            && SellerPolicyFulfilmentPolicy is null
+            && SellerPolicySupportPolicy is null
+            && SellerPolicyCareInstructions is null
+            && SellerPolicyProductDisclaimer is null
+                ? null
+                : new OrderSellerPolicySnapshot(
+                    SellerPolicyReturnWindowDays,
+                    SellerPolicyReturnPolicy,
+                    SellerPolicyExchangePolicy,
+                    SellerPolicyFulfilmentPolicy,
+                    SellerPolicySupportPolicy,
+                    SellerPolicyCareInstructions,
+                    SellerPolicyProductDisclaimer,
+                    SellerPolicySnapshotAtUtc);
 
     public void AddItem(
         Guid productId,
@@ -285,6 +321,18 @@ public sealed class Order : AuditableEntity
         PickupPointLatitude = pickupPoint?.Latitude;
         PickupPointLongitude = pickupPoint?.Longitude;
         PickupPointOpeningHours = pickupPoint?.OpeningHours;
+    }
+
+    public void SetSellerPolicySnapshot(SellerStorePolicy? policy, DateTimeOffset snapshotAtUtc)
+    {
+        SellerPolicyReturnWindowDays = policy?.ReturnWindowDays;
+        SellerPolicyReturnPolicy = policy?.ReturnPolicy;
+        SellerPolicyExchangePolicy = policy?.ExchangePolicy;
+        SellerPolicyFulfilmentPolicy = policy?.FulfilmentPolicy;
+        SellerPolicySupportPolicy = policy?.SupportPolicy;
+        SellerPolicyCareInstructions = policy?.CareInstructions;
+        SellerPolicyProductDisclaimer = policy?.ProductDisclaimer;
+        SellerPolicySnapshotAtUtc = policy is null ? null : snapshotAtUtc;
     }
 
     private void AddStatusHistory(

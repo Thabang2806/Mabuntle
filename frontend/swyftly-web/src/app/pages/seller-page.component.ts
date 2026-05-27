@@ -13,6 +13,8 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { RouterLink } from '@angular/router';
 import { getApiErrorMessage } from '../auth/api-error';
+import { SellerDashboardSummaryResponse } from '../seller/seller-dashboard.models';
+import { SellerDashboardService } from '../seller/seller-dashboard.service';
 import { SellerWorkspaceNavComponent } from '../seller/seller-workspace-nav.component';
 import {
   SellerOnboardingResponse,
@@ -22,6 +24,11 @@ import {
   UpdateSellerStorefrontRequest
 } from '../seller/seller-onboarding.models';
 import { SellerOnboardingService } from '../seller/seller-onboarding.service';
+import {
+  SellerVerificationEvidenceResponse,
+  SellerVerificationEvidenceType
+} from '../seller/seller-verification-evidence.models';
+import { SellerVerificationEvidenceService } from '../seller/seller-verification-evidence.service';
 import { DashboardCardComponent } from '../shared/ui/dashboard-card.component';
 import { MetricTileComponent } from '../shared/ui/metric-tile.component';
 import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge.component';
@@ -56,8 +63,13 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
             <p>{{ isVerified() ? 'Manage daily operations, listing quality, payouts, support, ads, and analytics from one seller workspace.' : 'Complete the required setup details before submitting your seller profile for review.' }}</p>
           </div>
           <div class="auth-actions">
-            <a mat-flat-button routerLink="/seller/products/new">Create product</a>
-            <a mat-stroked-button routerLink="/seller/orders">Orders</a>
+            @if (isVerified()) {
+              <a mat-flat-button routerLink="/seller/products/new">Create product</a>
+              <a mat-stroked-button routerLink="/seller/orders">Orders</a>
+            } @else {
+              <a mat-flat-button routerLink="/seller/products">Prepare drafts</a>
+              <a mat-stroked-button routerLink="/sell">Seller guide</a>
+            }
           </div>
         </div>
 
@@ -72,8 +84,8 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
           <div class="route-card">Loading seller onboarding...</div>
         } @else if (isVerified()) {
           <div class="seller-dashboard hf-seller-dashboard">
-            @if (errorMessage()) {
-              <p class="auth-alert error" role="alert">{{ errorMessage() }}</p>
+            @if (dashboardErrorMessage()) {
+              <p class="auth-alert error" role="alert">{{ dashboardErrorMessage() }}</p>
             }
 
             <section class="seller-dashboard-hero hf-seller-dashboard-hero">
@@ -100,6 +112,10 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
               }
             </section>
 
+            @if (isDashboardLoading()) {
+              <div class="route-card">Loading live seller summary...</div>
+            }
+
             <section class="hf-seller-dashboard-layout">
               <div class="hf-seller-queue-card">
                 <div class="seller-products-header">
@@ -110,12 +126,54 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
                   <a mat-stroked-button routerLink="/seller/orders">View orders</a>
                 </div>
 
-                @for (item of operationHighlights; track item.route) {
+                @for (item of operationHighlights(); track item.route) {
                   <a class="hf-seller-queue-row" [routerLink]="item.route">
                     <span>{{ item.label }}</span>
                     <strong>{{ item.heading }}</strong>
                     <small>{{ item.description }}</small>
                   </a>
+                }
+              </div>
+
+              <aside class="hf-seller-opportunity-card hf-seller-alert-panel">
+                <span class="eyebrow">Operational alerts</span>
+                <h2>Attention needed</h2>
+                @if (dashboardSummary()?.alerts?.length) {
+                  <div class="hf-seller-alert-list">
+                    @for (alert of dashboardSummary()!.alerts; track alert.title) {
+                      <a class="hf-seller-alert-row severity-{{ alert.severity }}" [routerLink]="alert.route">
+                        <span>{{ alert.count }}</span>
+                        <strong>{{ alert.title }}</strong>
+                        <small>{{ alert.message }}</small>
+                      </a>
+                    }
+                  </div>
+                } @else {
+                  <p>No urgent operational alerts. Keep checking orders, inventory, and support as new buyer activity arrives.</p>
+                }
+              </aside>
+            </section>
+
+            <section class="hf-seller-dashboard-layout">
+              <div class="hf-seller-queue-card">
+                <div class="seller-products-header">
+                  <div>
+                    <span class="eyebrow">Recent activity</span>
+                    <h2>Latest seller events</h2>
+                  </div>
+                  <a mat-stroked-button routerLink="/seller/notifications">Notifications</a>
+                </div>
+
+                @if (dashboardSummary()?.recentActivity?.length) {
+                  @for (activity of dashboardSummary()!.recentActivity; track activity.type + activity.route + activity.occurredAtUtc) {
+                    <a class="hf-seller-queue-row" [routerLink]="activity.route">
+                      <span>{{ activity.type }}</span>
+                      <strong>{{ activity.title }}</strong>
+                      <small>{{ activity.status }} - {{ formatDate(activity.occurredAtUtc) }}</small>
+                    </a>
+                  }
+                } @else {
+                  <p class="supporting-copy">No seller activity has been recorded yet. New orders, support tickets, product changes, returns, and ads will appear here.</p>
                 }
               </div>
 
@@ -145,7 +203,117 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
             <p class="auth-alert success" role="status">{{ successMessage() }}</p>
           }
 
-          <div class="wizard-layout">
+          <section class="seller-verification-state-card state-{{ verificationStatusKey() }}">
+            <div>
+              <span class="eyebrow">{{ verificationEyebrow() }}</span>
+              <h2>{{ verificationHeading() }}</h2>
+              <p>{{ verificationDescription() }}</p>
+              @if (verificationReason()) {
+                <p class="auth-alert warning" role="status">{{ verificationReason() }}</p>
+              }
+              @if (verificationTimeline()) {
+                <p class="seller-verification-timeline">{{ verificationTimeline() }}</p>
+              }
+            </div>
+            <div class="seller-verification-actions">
+              @if (canPrepareDrafts()) {
+                <a mat-flat-button routerLink="/seller/products">Prepare product drafts</a>
+              }
+              <a mat-stroked-button routerLink="/seller/support">Contact support</a>
+              <a mat-stroked-button routerLink="/seller/notifications">Notifications</a>
+            </div>
+          </section>
+
+          <section class="seller-readiness-grid" aria-label="Seller onboarding readiness">
+            @for (item of onboardingReadinessItems(); track item.label) {
+              <article class="seller-readiness-card" [class.complete]="item.complete">
+                <span>{{ item.complete ? 'Complete' : 'Needed' }}</span>
+                <h3>{{ item.label }}</h3>
+                <p>{{ item.summary }}</p>
+              </article>
+            }
+          </section>
+
+          <section class="route-card seller-evidence-card">
+            <div class="seller-products-header">
+              <div>
+                <span class="eyebrow">Verification evidence</span>
+                <h2>Supporting documents</h2>
+                <p>Optional evidence helps reviewers understand business registration, identity, fulfilment address, and brand or product authenticity context.</p>
+              </div>
+              <app-status-badge
+                [label]="verificationEvidence().length ? verificationEvidence().length + ' uploaded' : 'Optional'"
+                [tone]="verificationEvidence().length ? 'success' : 'neutral'"
+              />
+            </div>
+
+            @if (evidenceErrorMessage()) {
+              <p class="auth-alert error" role="alert">{{ evidenceErrorMessage() }}</p>
+            }
+            @if (evidenceSuccessMessage()) {
+              <p class="auth-alert success" role="status">{{ evidenceSuccessMessage() }}</p>
+            }
+
+            @if (canMutateEvidence()) {
+              <form [formGroup]="evidenceForm" (ngSubmit)="uploadEvidence()" class="wizard-form evidence-upload-form" novalidate>
+                <div class="form-grid">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Evidence type</mat-label>
+                    <mat-select formControlName="evidenceType">
+                      @for (type of evidenceTypes; track type.value) {
+                        <mat-option [value]="type.value">{{ type.label }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Note for reviewer</mat-label>
+                    <input matInput formControlName="note" maxlength="500" />
+                    @if (evidenceForm.controls.note.hasError('maxlength')) {
+                      <mat-error>Note cannot exceed 500 characters.</mat-error>
+                    }
+                  </mat-form-field>
+                </div>
+
+                <label class="seller-evidence-file-control">
+                  <span>{{ selectedEvidenceFile()?.name ?? 'Choose PDF, JPEG, PNG, or WebP evidence file' }}</span>
+                  <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" (change)="onEvidenceFileSelected($event)" />
+                </label>
+
+                <button mat-flat-button type="submit" [disabled]="isEvidenceSaving() || !selectedEvidenceFile()">Upload evidence</button>
+              </form>
+            } @else {
+              <p class="supporting-copy">Evidence is read-only for {{ onboarding()?.verificationStatus }} seller accounts.</p>
+            }
+
+            @if (isEvidenceLoading()) {
+              <p class="supporting-copy">Loading evidence...</p>
+            } @else if (verificationEvidence().length === 0) {
+              <p class="supporting-copy">No evidence has been uploaded. This does not block submission, but it can help reviewers resolve questions faster.</p>
+            } @else {
+              <div class="seller-evidence-list">
+                @for (item of verificationEvidence(); track item.evidenceId) {
+                  <article class="seller-evidence-row">
+                    <div>
+                      <span>{{ evidenceTypeLabel(item.evidenceType) }}</span>
+                      <h3>{{ item.originalFileName }}</h3>
+                      <p>{{ item.note ?? 'No reviewer note provided.' }}</p>
+                      <small>{{ formatFileSize(item.byteSize) }} - uploaded {{ formatDate(item.uploadedAtUtc) }}</small>
+                    </div>
+                    <div class="auth-actions">
+                      <button mat-stroked-button type="button" (click)="downloadEvidence(item)">Download</button>
+                      @if (canMutateEvidence()) {
+                        <button mat-stroked-button type="button" [disabled]="isEvidenceSaving()" (click)="removeEvidence(item)">Remove</button>
+                      }
+                    </div>
+                  </article>
+                }
+              </div>
+            }
+          </section>
+
+          @if (showOnboardingWizard()) {
+            <div class="wizard-layout">
             <nav class="wizard-steps" aria-label="Seller onboarding steps">
               @for (step of steps; track step.index) {
                 <button
@@ -325,7 +493,7 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
                   <div class="review-panel">
                   <h2>Review and submit</h2>
                   <div class="review-grid">
-                    @for (item of reviewItems(); track item.label) {
+                    @for (item of onboardingReadinessItems(); track item.label) {
                       <article class="route-card">
                         <span class="status-pill">{{ item.complete ? 'Complete' : 'Missing' }}</span>
                         <h2>{{ item.label }}</h2>
@@ -351,6 +519,20 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
               }
             </div>
           </div>
+          } @else {
+            <div class="route-card seller-locked-status-card">
+              <span class="status-pill">{{ onboarding()?.verificationStatus }}</span>
+              <h2>{{ lockedStatusHeading() }}</h2>
+              <p>{{ lockedStatusDescription() }}</p>
+              <div class="auth-secondary">
+                @if (canPrepareDrafts()) {
+                  <a routerLink="/seller/products">Prepare drafts</a>
+                }
+                <a routerLink="/seller/support">Open seller support</a>
+                <a routerLink="/sell">Review seller requirements</a>
+              </div>
+            </div>
+          }
         }
       </app-workspace-shell>
     </section>
@@ -359,12 +541,23 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
 export class SellerPageComponent implements OnInit {
   private readonly formBuilder = inject(NonNullableFormBuilder);
   private readonly onboardingService = inject(SellerOnboardingService);
+  private readonly dashboardService = inject(SellerDashboardService);
+  private readonly evidenceService = inject(SellerVerificationEvidenceService);
 
   protected readonly onboarding = signal<SellerOnboardingResponse | null>(null);
+  protected readonly dashboardSummary = signal<SellerDashboardSummaryResponse | null>(null);
+  protected readonly verificationEvidence = signal<SellerVerificationEvidenceResponse[]>([]);
+  protected readonly selectedEvidenceFile = signal<File | null>(null);
   protected readonly currentStep = signal<WizardStep>(0);
   protected readonly isLoading = signal(true);
+  protected readonly isDashboardLoading = signal(false);
+  protected readonly isEvidenceLoading = signal(false);
+  protected readonly isEvidenceSaving = signal(false);
   protected readonly isSaving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
+  protected readonly dashboardErrorMessage = signal<string | null>(null);
+  protected readonly evidenceErrorMessage = signal<string | null>(null);
+  protected readonly evidenceSuccessMessage = signal<string | null>(null);
   protected readonly successMessage = signal<string | null>(null);
 
   protected readonly steps: readonly { index: WizardStep; label: string }[] = [
@@ -373,6 +566,15 @@ export class SellerPageComponent implements OnInit {
     { index: 2, label: 'Address' },
     { index: 3, label: 'Payout' },
     { index: 4, label: 'Review' }
+  ];
+
+  protected readonly evidenceTypes: readonly { value: SellerVerificationEvidenceType; label: string }[] = [
+    { value: 'BusinessRegistration', label: 'Business registration' },
+    { value: 'IdentityOrRepresentative', label: 'Identity or representative' },
+    { value: 'FulfilmentAddress', label: 'Fulfilment address' },
+    { value: 'BrandAuthorization', label: 'Brand authorization' },
+    { value: 'ProductAuthenticity', label: 'Product authenticity' },
+    { value: 'Other', label: 'Other evidence' }
   ];
 
   protected readonly dashboardCards: readonly {
@@ -440,38 +642,6 @@ export class SellerPageComponent implements OnInit {
     }
   ];
 
-  protected readonly operationHighlights: readonly {
-    label: string;
-    heading: string;
-    description: string;
-    route: string;
-  }[] = [
-    {
-      label: 'Orders',
-      heading: 'Fulfil paid orders',
-      description: 'Add tracking, mark shipped, and confirm delivery from the order workspace.',
-      route: '/seller/orders'
-    },
-    {
-      label: 'Inventory',
-      heading: 'Check low-stock variants',
-      description: 'Keep published products sellable without reopening listing review.',
-      route: '/seller/inventory'
-    },
-    {
-      label: 'Returns',
-      heading: 'Review buyer requests',
-      description: 'Respond clearly so refunds and disputes do not drift.',
-      route: '/seller/returns'
-    },
-    {
-      label: 'Support',
-      heading: 'Keep tickets moving',
-      description: 'Use support threads for operational issues and buyer follow-up.',
-      route: '/seller/support'
-    }
-  ];
-
   protected readonly isVerified = computed(() => this.onboarding()?.verificationStatus === 'Verified');
 
   protected readonly completionLabel = computed(() => {
@@ -518,6 +688,36 @@ export class SellerPageComponent implements OnInit {
     tone: StatusBadgeTone;
   }[]>(() => {
     const onboarding = this.onboarding();
+    const summary = this.dashboardSummary();
+    if (summary) {
+      return [
+        {
+          label: 'Sales 30d',
+          value: this.formatCurrency(summary.salesLast30Days),
+          badge: `${summary.ordersLast30Days} orders`,
+          tone: 'success'
+        },
+        {
+          label: 'Fulfilment',
+          value: summary.pendingFulfilmentOrders.toString(),
+          badge: `${summary.deliveryExceptionOrderCount} exceptions`,
+          tone: summary.deliveryExceptionOrderCount > 0 ? 'warning' : 'accent'
+        },
+        {
+          label: 'Inventory',
+          value: summary.lowStockProductCount.toString(),
+          badge: `${summary.outOfStockVariantCount} out of stock`,
+          tone: summary.lowStockProductCount > 0 || summary.outOfStockVariantCount > 0 ? 'warning' : 'neutral'
+        },
+        {
+          label: 'Care',
+          value: (summary.openReturnCount + summary.openSupportTicketCount + summary.activeDisputeCount).toString(),
+          badge: 'returns, support, disputes',
+          tone: summary.activeDisputeCount > 0 ? 'warning' : 'neutral'
+        }
+      ];
+    }
+
     return [
       {
         label: 'Setup',
@@ -546,6 +746,184 @@ export class SellerPageComponent implements OnInit {
     ];
   });
 
+  protected readonly operationHighlights = computed<readonly {
+    label: string;
+    heading: string;
+    description: string;
+    route: string;
+  }[]>(() => {
+    const summary = this.dashboardSummary();
+    if (!summary) {
+      return [
+        {
+          label: 'Orders',
+          heading: 'Fulfil paid orders',
+          description: 'Add tracking, mark shipped, and confirm delivery from the order workspace.',
+          route: '/seller/orders'
+        },
+        {
+          label: 'Inventory',
+          heading: 'Check low-stock variants',
+          description: 'Keep published products sellable without reopening listing review.',
+          route: '/seller/inventory'
+        },
+        {
+          label: 'Returns',
+          heading: 'Review buyer requests',
+          description: 'Respond clearly so refunds and disputes do not drift.',
+          route: '/seller/returns'
+        },
+        {
+          label: 'Support',
+          heading: 'Keep tickets moving',
+          description: 'Use support threads for operational issues and buyer follow-up.',
+          route: '/seller/support'
+        }
+      ];
+    }
+
+    return [
+      {
+        label: 'Orders',
+        heading: `${summary.pendingFulfilmentOrders} orders need fulfilment`,
+        description: `${summary.paidOrderCount} paid, ${summary.processingOrderCount} processing, ${summary.readyToShipOrderCount} ready to ship, ${summary.deliveryExceptionOrderCount} exceptions.`,
+        route: '/seller/orders'
+      },
+      {
+        label: 'Inventory',
+        heading: `${summary.lowStockProductCount} low-stock products`,
+        description: `${summary.outOfStockVariantCount} variants are out of stock and ${summary.reservedStockCount} units are reserved.`,
+        route: '/seller/inventory'
+      },
+      {
+        label: 'Returns',
+        heading: `${summary.returnsAwaitingSellerResponseCount} returns await response`,
+        description: `${summary.openReturnCount} open returns and ${summary.activeDisputeCount} active disputes across the seller account.`,
+        route: '/seller/returns'
+      },
+      {
+        label: 'Support',
+        heading: `${summary.openSupportTicketCount} support tickets open`,
+        description: 'Keep buyer and operational support threads moving from the support queue.',
+        route: '/seller/support'
+      },
+      {
+        label: 'Updates',
+        heading: `${summary.unreadNotificationCount} unread seller updates`,
+        description: `${summary.pendingAdReviewCount} ad campaigns are in review. Use updates to catch moderation and approval outcomes.`,
+        route: summary.unreadNotificationCount > 0 ? '/seller/notifications' : '/seller/ads'
+      }
+    ];
+  });
+
+  protected showOnboardingWizard(): boolean {
+    const status = this.onboarding()?.verificationStatus;
+    return status === 'PendingVerification' || status === 'Rejected';
+  }
+
+  protected canPrepareDrafts(): boolean {
+    return this.onboarding()?.verificationStatus !== 'Suspended';
+  }
+
+  protected verificationStatusKey(): string {
+    return (this.onboarding()?.verificationStatus ?? 'loading').toLowerCase();
+  }
+
+  protected verificationEyebrow(): string {
+    const status = this.onboarding()?.verificationStatus;
+    if (status === 'UnderReview') {
+      return 'Application submitted';
+    }
+
+    if (status === 'Rejected') {
+      return 'Action required';
+    }
+
+    if (status === 'Suspended') {
+      return 'Account restricted';
+    }
+
+    return 'Application setup';
+  }
+
+  protected verificationHeading(): string {
+    const status = this.onboarding()?.verificationStatus;
+    if (status === 'UnderReview') {
+      return 'Your seller profile is under review';
+    }
+
+    if (status === 'Rejected') {
+      return 'Update your application and resubmit';
+    }
+
+    if (status === 'Suspended') {
+      return 'Seller account suspended';
+    }
+
+    return 'Complete onboarding to apply';
+  }
+
+  protected verificationDescription(): string {
+    const status = this.onboarding()?.verificationStatus;
+    if (status === 'UnderReview') {
+      return 'Swyftly is reviewing your storefront, fulfilment details, and payout reference. You can prepare product drafts now, but product submission, publishing, and ads unlock after verification.';
+    }
+
+    if (status === 'Rejected') {
+      return 'Review the reason below, update the relevant onboarding sections, then submit again when the application is ready.';
+    }
+
+    if (status === 'Suspended') {
+      return 'This seller account cannot publish products, run ads, or receive new operational privileges until support or admin review resolves the restriction.';
+    }
+
+    return 'Add the minimum seller details Swyftly needs to review your storefront before products and ads can go live.';
+  }
+
+  protected verificationReason(): string | null {
+    const review = this.onboarding()?.latestVerificationReview;
+    const status = this.onboarding()?.verificationStatus;
+    if (status === 'Rejected' && review?.rejectionReason) {
+      return `Review reason: ${review.rejectionReason}`;
+    }
+
+    if (status === 'Suspended' && review?.suspensionReason) {
+      return `Suspension reason: ${review.suspensionReason}`;
+    }
+
+    return null;
+  }
+
+  protected verificationTimeline(): string | null {
+    const review = this.onboarding()?.latestVerificationReview;
+    const status = this.onboarding()?.verificationStatus;
+    if (!review) {
+      return null;
+    }
+
+    if (status === 'UnderReview' && review.submittedAtUtc) {
+      return `Submitted for review on ${this.formatDate(review.submittedAtUtc)}.`;
+    }
+
+    if ((status === 'Rejected' || status === 'Verified') && review.reviewedAtUtc) {
+      return `Reviewed on ${this.formatDate(review.reviewedAtUtc)}.`;
+    }
+
+    return null;
+  }
+
+  protected lockedStatusHeading(): string {
+    return this.onboarding()?.verificationStatus === 'Suspended'
+      ? 'Contact support before continuing'
+      : 'Verification is the publishing gate';
+  }
+
+  protected lockedStatusDescription(): string {
+    return this.onboarding()?.verificationStatus === 'Suspended'
+      ? 'Use seller support to resolve the account restriction. Existing notifications remain available for review.'
+      : 'Your submitted profile is waiting for admin review. Draft preparation remains available, but marketplace publishing stays locked until approval.';
+  }
+
   protected readonly profileForm = this.formBuilder.group({
     displayName: ['', [Validators.required]],
     contactEmail: ['', [Validators.required, Validators.email]],
@@ -573,6 +951,11 @@ export class SellerPageComponent implements OnInit {
 
   protected readonly payoutForm = this.formBuilder.group({
     payoutProviderReference: ['', [Validators.required]]
+  });
+
+  protected readonly evidenceForm = this.formBuilder.group({
+    evidenceType: ['BusinessRegistration' as SellerVerificationEvidenceType, [Validators.required]],
+    note: ['', [Validators.maxLength(500)]]
   });
 
   async ngOnInit(): Promise<void> {
@@ -651,6 +1034,106 @@ export class SellerPageComponent implements OnInit {
       'Seller profile submitted for verification.');
   }
 
+  protected formatCurrency(amount: number): string {
+    return new Intl.NumberFormat('en-ZA', {
+      style: 'currency',
+      currency: 'ZAR',
+      maximumFractionDigits: 2
+    }).format(amount);
+  }
+
+  protected formatDate(value: string): string {
+    return new Intl.DateTimeFormat('en-ZA', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(value));
+  }
+
+  protected formatFileSize(bytes: number): string {
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+
+    if (bytes < 1024 * 1024) {
+      return `${Math.round(bytes / 1024)} KB`;
+    }
+
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  protected evidenceTypeLabel(type: SellerVerificationEvidenceType): string {
+    return this.evidenceTypes.find(item => item.value === type)?.label ?? type;
+  }
+
+  protected canMutateEvidence(): boolean {
+    const status = this.onboarding()?.verificationStatus;
+    return status === 'PendingVerification' || status === 'UnderReview' || status === 'Rejected';
+  }
+
+  protected onEvidenceFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.selectedEvidenceFile.set(input.files?.[0] ?? null);
+    this.evidenceErrorMessage.set(null);
+    this.evidenceSuccessMessage.set(null);
+  }
+
+  protected async uploadEvidence(): Promise<void> {
+    if (!this.ensureValid(this.evidenceForm) || this.isEvidenceSaving()) {
+      return;
+    }
+
+    const file = this.selectedEvidenceFile();
+    if (!file) {
+      this.evidenceErrorMessage.set('Choose an evidence file before uploading.');
+      return;
+    }
+
+    const value = this.evidenceForm.getRawValue();
+    this.isEvidenceSaving.set(true);
+    this.evidenceErrorMessage.set(null);
+    this.evidenceSuccessMessage.set(null);
+
+    try {
+      await this.evidenceService.upload(file, value.evidenceType, emptyToNull(value.note));
+      this.selectedEvidenceFile.set(null);
+      this.evidenceForm.patchValue({ note: '' });
+      this.evidenceSuccessMessage.set('Evidence uploaded for admin review context.');
+      await this.loadEvidence();
+    } catch (error) {
+      this.evidenceErrorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isEvidenceSaving.set(false);
+    }
+  }
+
+  protected async removeEvidence(item: SellerVerificationEvidenceResponse): Promise<void> {
+    this.isEvidenceSaving.set(true);
+    this.evidenceErrorMessage.set(null);
+    this.evidenceSuccessMessage.set(null);
+
+    try {
+      await this.evidenceService.remove(item.evidenceId);
+      this.evidenceSuccessMessage.set('Evidence removed.');
+      await this.loadEvidence();
+    } catch (error) {
+      this.evidenceErrorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isEvidenceSaving.set(false);
+    }
+  }
+
+  protected async downloadEvidence(item: SellerVerificationEvidenceResponse): Promise<void> {
+    this.evidenceErrorMessage.set(null);
+    try {
+      const blob = await this.evidenceService.download(item.evidenceId);
+      triggerBrowserDownload(blob, item.originalFileName);
+    } catch (error) {
+      this.evidenceErrorMessage.set(getApiErrorMessage(error));
+    }
+  }
+
   protected isStepComplete(step: WizardStep): boolean {
     const onboarding = this.onboarding();
     if (!onboarding) {
@@ -666,8 +1149,10 @@ export class SellerPageComponent implements OnInit {
     ][step];
   }
 
-  protected reviewItems(): readonly { label: string; complete: boolean; summary: string }[] {
+  protected onboardingReadinessItems(): readonly { label: string; complete: boolean; summary: string }[] {
     const onboarding = this.onboarding();
+    const submitted = onboarding?.verificationStatus === 'UnderReview'
+      || onboarding?.verificationStatus === 'Verified';
 
     return [
       {
@@ -689,6 +1174,13 @@ export class SellerPageComponent implements OnInit {
         label: 'Payout',
         complete: onboarding?.isPayoutPlaceholderComplete ?? false,
         summary: onboarding?.payout?.payoutProviderReference ?? 'A provider reference is required.'
+      },
+      {
+        label: 'Review',
+        complete: submitted,
+        summary: submitted
+          ? 'Your seller application has been submitted for Swyftly review.'
+          : 'Submit the completed application when every setup section is ready.'
       }
     ];
   }
@@ -700,6 +1192,10 @@ export class SellerPageComponent implements OnInit {
     try {
       const onboarding = await this.onboardingService.getOnboarding();
       this.setOnboarding(onboarding);
+      await this.loadEvidence();
+      if (onboarding.verificationStatus === 'Verified') {
+        await this.loadDashboardSummary();
+      }
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
     } finally {
@@ -719,6 +1215,9 @@ export class SellerPageComponent implements OnInit {
     try {
       const onboarding = await action();
       this.setOnboarding(onboarding);
+      if (onboarding.verificationStatus === 'Verified') {
+        await this.loadDashboardSummary();
+      }
       this.currentStep.set(nextStep);
       this.successMessage.set(successMessage);
     } catch (error) {
@@ -730,6 +1229,10 @@ export class SellerPageComponent implements OnInit {
 
   private setOnboarding(onboarding: SellerOnboardingResponse): void {
     this.onboarding.set(onboarding);
+    if (onboarding.verificationStatus !== 'Verified') {
+      this.dashboardSummary.set(null);
+      this.dashboardErrorMessage.set(null);
+    }
 
     this.profileForm.patchValue({
       displayName: onboarding.profile.displayName ?? '',
@@ -763,6 +1266,34 @@ export class SellerPageComponent implements OnInit {
     });
   }
 
+  private async loadDashboardSummary(): Promise<void> {
+    this.isDashboardLoading.set(true);
+    this.dashboardErrorMessage.set(null);
+
+    try {
+      this.dashboardSummary.set(await this.dashboardService.getSummary());
+    } catch (error) {
+      this.dashboardSummary.set(null);
+      this.dashboardErrorMessage.set(`${getApiErrorMessage(error)} Workspace links remain available below.`);
+    } finally {
+      this.isDashboardLoading.set(false);
+    }
+  }
+
+  private async loadEvidence(): Promise<void> {
+    this.isEvidenceLoading.set(true);
+    this.evidenceErrorMessage.set(null);
+
+    try {
+      this.verificationEvidence.set(await this.evidenceService.list());
+    } catch (error) {
+      this.verificationEvidence.set([]);
+      this.evidenceErrorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isEvidenceLoading.set(false);
+    }
+  }
+
   private ensureValid(control: AbstractControl): boolean {
     if (control.invalid || this.isSaving()) {
       control.markAllAsTouched();
@@ -787,4 +1318,17 @@ function businessNameRequiredValidator(): ValidatorFn {
 function emptyToNull(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
+}
+
+function triggerBrowserDownload(blob: Blob, fileName: string): void {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

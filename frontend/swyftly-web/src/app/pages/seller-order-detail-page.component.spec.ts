@@ -2,15 +2,19 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { convertToParamMap, ActivatedRoute } from '@angular/router';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
+import { SellerInventoryService } from '../seller/seller-inventory.service';
 import { SellerOrderService } from '../seller/seller-order.service';
 import { SellerOrderDetailPageComponent } from './seller-order-detail-page.component';
 import { createOrder } from './seller-orders-page.component.spec';
 
 describe('SellerOrderDetailPageComponent', () => {
   let fixture: ComponentFixture<SellerOrderDetailPageComponent>;
+  let inventoryService: jasmine.SpyObj<SellerInventoryService>;
   let orderService: jasmine.SpyObj<SellerOrderService>;
 
   beforeEach(async () => {
+    inventoryService = jasmine.createSpyObj<SellerInventoryService>('SellerInventoryService', ['listHistory']);
+    inventoryService.listHistory.and.resolveTo([]);
     orderService = jasmine.createSpyObj<SellerOrderService>(
       'SellerOrderService',
       ['getOrder', 'markProcessing', 'addTracking', 'markReadyToShip', 'markShipped', 'markDelivered', 'markDeliveryFailed', 'markReturnedToSender', 'bookCarrier', 'syncCarrierTracking']);
@@ -76,6 +80,7 @@ describe('SellerOrderDetailPageComponent', () => {
       providers: [
         provideNoopAnimations(),
         provideRouter([]),
+        { provide: SellerInventoryService, useValue: inventoryService },
         { provide: SellerOrderService, useValue: orderService },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ orderId: 'order-id' }) } } }
       ]
@@ -98,6 +103,7 @@ describe('SellerOrderDetailPageComponent', () => {
     await fixture.whenStable();
 
     expect(orderService.markProcessing).toHaveBeenCalledWith('order-id');
+    expect(inventoryService.listHistory).toHaveBeenCalledWith({ orderId: 'order-id' });
   });
 
   it('calls mark delivered for shipped in-transit orders', async () => {

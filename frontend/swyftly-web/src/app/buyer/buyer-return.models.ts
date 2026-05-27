@@ -1,3 +1,5 @@
+import { SellerPolicySnapshotResponse } from '../shared/seller-policy.models';
+
 export interface BuyerReturnRequestResult {
   returnRequestId: string;
   orderId: string;
@@ -13,6 +15,7 @@ export interface BuyerReturnRequestResult {
   disputeReason: string | null;
   items: BuyerReturnItemResult[];
   messages: BuyerReturnMessageResult[];
+  sellerPolicySnapshot: SellerPolicySnapshotResponse | null;
 }
 
 export interface BuyerReturnItemResult {

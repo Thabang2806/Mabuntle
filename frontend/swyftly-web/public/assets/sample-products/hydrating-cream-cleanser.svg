@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1200" role="img" aria-labelledby="title desc">
+  <title id="title">Hydrating Cream Cleanser</title>
+  <desc id="desc">Editorial product illustration for a hydrating cream cleanser.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fffaf4"/>
+      <stop offset="0.6" stop-color="#e9c8bd"/>
+      <stop offset="1" stop-color="#4a1836"/>
+    </linearGradient>
+    <linearGradient id="bottle" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff6e8"/>
+      <stop offset="1" stop-color="#e0b39f"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1200" fill="url(#bg)"/>
+  <rect x="104" y="96" width="692" height="1008" rx="44" fill="#fffaf4" opacity="0.74"/>
+  <rect x="364" y="260" width="172" height="84" rx="20" fill="#4a1836"/>
+  <rect x="304" y="340" width="292" height="520" rx="66" fill="url(#bottle)"/>
+  <rect x="340" y="478" width="220" height="198" rx="26" fill="#fffaf4" opacity="0.82"/>
+  <text x="450" y="562" text-anchor="middle" font-family="Georgia, serif" font-size="40" fill="#4a1836">Cream</text>
+  <text x="450" y="612" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#6f415d">Cleanser</text>
+  <text x="450" y="1038" text-anchor="middle" font-family="Georgia, serif" font-size="40" fill="#3d102b">Hydrating cleanser</text>
+</svg>

@@ -161,17 +161,17 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               </div>
               <div class="summary-row">
                 <span>Delivery</span>
-                <strong>Confirmed next</strong>
+                <strong>Selected at checkout</strong>
               </div>
               <div class="summary-row">
                 <span>Payment</span>
-                <strong>After order creation</strong>
+                <strong>Provider webhook confirms paid</strong>
               </div>
               <div class="summary-row total">
-                <span>Estimated total</span>
+                <span>Subtotal before delivery</span>
                 <strong>{{ cart()?.subtotal | currency:'ZAR':'symbol-narrow' }}</strong>
               </div>
-              <p>Delivery, discounts, fees, and payment confirmation are finalized during checkout.</p>
+              <p>Delivery is quoted after you choose an address. The order becomes paid only after Swyftly receives the signed provider webhook.</p>
               <a mat-flat-button routerLink="/checkout" [class.disabled-link]="!cart()?.items?.length">Checkout</a>
             </aside>
           </div>

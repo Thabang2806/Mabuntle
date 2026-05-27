@@ -1,6 +1,6 @@
 # Security Review
 
-Last reviewed: 2026-05-21
+Last reviewed: 2026-05-26
 
 ## Critical Issues
 
@@ -20,6 +20,7 @@ Resolved high issues:
 - Refund and payout money movement now uses finance-specific read/operate/approve policies and dual-control checks, including for `SuperAdmin`.
 - Payment webhook payloads are normalized to sanitized JSON before persistence; signatures, tokens, secrets, passwords, passphrases, card fields, and CVV/CVC values are redacted. Expired stored raw webhook payload JSON is redacted by the worker according to the configured retention window while event metadata is preserved.
 - Verified sellers can no longer directly overwrite an approved payout provider reference. Payout-profile changes now use a finance-reviewed request workflow with audit logs, dual-control approval/rejection, and payout-processing blocks while a change is pending.
+- Seller verification evidence files are private API-managed uploads rather than public media URLs. Seller upload/remove and admin download actions are ownership/role checked, content-type and signature validated, scanner checked, and audited.
 
 ## Medium Issues
 

@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
+import { SellerNotificationService } from './seller-notification.service';
 import { SellerWorkspaceNavComponent } from './seller-workspace-nav.component';
 
 describe('SellerWorkspaceNavComponent', () => {
@@ -8,7 +10,16 @@ describe('SellerWorkspaceNavComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [SellerWorkspaceNavComponent],
-      providers: [provideRouter([])]
+      providers: [
+        provideRouter([]),
+        {
+          provide: SellerNotificationService,
+          useValue: {
+            unreadCount: signal(2),
+            refreshUnreadCount: jasmine.createSpy('refreshUnreadCount').and.resolveTo()
+          }
+        }
+      ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SellerWorkspaceNavComponent);
@@ -23,6 +34,8 @@ describe('SellerWorkspaceNavComponent', () => {
     expect(compiled.textContent).toContain('Catalog');
     expect(compiled.textContent).toContain('Operations');
     expect(compiled.textContent).toContain('Growth and finance');
+    expect(compiled.textContent).toContain('Notifications');
+    expect(compiled.querySelector('.workspace-nav-badge')?.textContent?.trim()).toBe('2');
     expect(compiled.querySelector('a[href="/seller/products"]')).not.toBeNull();
     expect(compiled.querySelector('a[href="/seller/inventory"]')).not.toBeNull();
     expect(compiled.querySelector('a[href="/seller/orders"]')).not.toBeNull();

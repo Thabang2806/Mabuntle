@@ -1,3 +1,5 @@
+import { SellerPolicyResponse } from '../shared/seller-policy.models';
+
 export interface ProductSearchResponse {
   items: ProductSearchItemResponse[];
   page: number;
@@ -49,6 +51,7 @@ export interface PublicProductDetailResponse {
   attributes: Record<string, string>;
   images: PublicProductImageResponse[];
   variants: PublicProductVariantResponse[];
+  sellerPolicy: SellerPolicyResponse;
 }
 
 export interface PublicProductImageResponse {
@@ -83,4 +86,5 @@ export interface PublicSellerStorefrontResponse {
   logoUrl: string | null;
   bannerUrl: string | null;
   products: ProductSearchItemResponse[];
+  sellerPolicy: SellerPolicyResponse;
 }

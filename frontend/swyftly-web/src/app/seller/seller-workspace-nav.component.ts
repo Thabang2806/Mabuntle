@@ -2,11 +2,13 @@ import { DOCUMENT } from '@angular/common';
 import { Component, OnInit, PLATFORM_ID, ViewEncapsulation, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { ensureLazyStylesheet } from '../shared/ui/lazy-stylesheet';
+import { SellerNotificationService } from './seller-notification.service';
 
 type SellerWorkspaceNavItem = {
   label: string;
   route: string;
   exact: boolean;
+  badge?: 'sellerUnread';
 };
 
 type SellerWorkspaceNavGroup = {
@@ -38,6 +40,11 @@ type SellerWorkspaceNavGroup = {
               ariaCurrentWhenActive="page"
             >
               {{ item.label }}
+              @if (item.badge === 'sellerUnread' && unreadCount() > 0) {
+                <span class="workspace-nav-badge" [attr.aria-label]="unreadCount() + ' unread seller notifications'">
+                  {{ unreadCount() }}
+                </span>
+              }
             </a>
           }
         </section>
@@ -48,6 +55,9 @@ type SellerWorkspaceNavGroup = {
 export class SellerWorkspaceNavComponent implements OnInit {
   private readonly document = inject(DOCUMENT);
   private readonly platformId = inject(PLATFORM_ID);
+  private readonly notificationService = inject(SellerNotificationService);
+
+  protected readonly unreadCount = this.notificationService.unreadCount;
 
   protected readonly groups: readonly SellerWorkspaceNavGroup[] = [
     {
@@ -70,7 +80,8 @@ export class SellerWorkspaceNavComponent implements OnInit {
       items: [
         { label: 'Orders', route: '/seller/orders', exact: false },
         { label: 'Returns', route: '/seller/returns', exact: false },
-        { label: 'Support', route: '/seller/support', exact: false }
+        { label: 'Support', route: '/seller/support', exact: false },
+        { label: 'Notifications', route: '/seller/notifications', exact: false, badge: 'sellerUnread' }
       ]
     },
     {
@@ -82,7 +93,16 @@ export class SellerWorkspaceNavComponent implements OnInit {
     }
   ];
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     ensureLazyStylesheet(this.document, this.platformId, 'luxury-seller', '/styles/luxury-seller.css');
+    await this.loadUnreadCount();
+  }
+
+  private async loadUnreadCount(): Promise<void> {
+    try {
+      await this.notificationService.refreshUnreadCount();
+    } catch {
+      this.unreadCount.set(0);
+    }
   }
 }

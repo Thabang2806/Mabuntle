@@ -10,6 +10,7 @@ export interface SellerOnboardingResponse {
   storefront: SellerStorefrontResponse | null;
   address: SellerAddressResponse | null;
   payout: SellerPayoutResponse | null;
+  latestVerificationReview: SellerVerificationReviewResponse | null;
 }
 
 export interface SellerProfileResponse {
@@ -42,6 +43,13 @@ export interface SellerPayoutResponse {
   payoutProviderReference: string;
   hasSubmittedPlaceholder: boolean;
   isAdminApproved: boolean;
+}
+
+export interface SellerVerificationReviewResponse {
+  submittedAtUtc: string | null;
+  reviewedAtUtc: string | null;
+  rejectionReason: string | null;
+  suspensionReason: string | null;
 }
 
 export interface UpdateSellerProfileRequest {

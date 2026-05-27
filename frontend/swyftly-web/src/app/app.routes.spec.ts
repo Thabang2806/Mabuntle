@@ -48,6 +48,11 @@ describe('app routes', () => {
     expect(route?.canActivate?.length).toBeGreaterThan(0);
   });
 
+  it('keeps product variant revision review admin-only', () => {
+    const route = routes.find(item => item.path === 'admin/products/variant-revisions/:revisionId');
+    expect(route?.canActivate?.length).toBeGreaterThan(0);
+  });
+
   it('protects buyer account operation routes', () => {
     const buyerPaths = [
       'account',
@@ -68,5 +73,16 @@ describe('app routes', () => {
       const route = routes.find(item => item.path === path);
       expect(route?.canActivate?.length).toBeGreaterThan(0);
     }
+  });
+
+  it('protects seller notification route', () => {
+    const route = routes.find(item => item.path === 'seller/notifications');
+    expect(route?.canActivate?.length).toBeGreaterThan(0);
+  });
+
+  it('keeps sell landing public', () => {
+    const route = routes.find(item => item.path === 'sell');
+    expect(route?.title).toBe('Sell on Swyftly | Swyftly');
+    expect(route?.canActivate).toBeUndefined();
   });
 });

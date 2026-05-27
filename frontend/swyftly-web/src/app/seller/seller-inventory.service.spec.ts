@@ -55,6 +55,29 @@ describe('SellerInventoryService', () => {
     expect(response.variantStatus).toBe('OutOfStock');
   });
 
+  it('loads inventory movement history', async () => {
+    const historyPromise = service.listHistory({
+      variantId: 'variant-id',
+      movementType: 'SellerAdjustment',
+      orderId: 'order-id'
+    });
+
+    const historyRequest = httpTestingController.expectOne(request =>
+      request.url === `${environment.apiBaseUrl}/api/seller/inventory/history` &&
+      request.params.get('variantId') === 'variant-id' &&
+      request.params.get('movementType') === 'SellerAdjustment' &&
+      request.params.get('orderId') === 'order-id');
+    expect(historyRequest.request.method).toBe('GET');
+    historyRequest.flush([createMovement()]);
+    await expectAsync(historyPromise).toBeResolvedTo([createMovement()]);
+
+    const variantHistoryPromise = service.listVariantHistory('variant-id');
+    const variantHistoryRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/seller/inventory/variant-id/history`);
+    expect(variantHistoryRequest.request.method).toBe('GET');
+    variantHistoryRequest.flush([createMovement()]);
+    await expectAsync(variantHistoryPromise).toBeResolvedTo([createMovement()]);
+  });
+
   it('calls bulk inventory import and export endpoints', async () => {
     const file = new File(['sku,stockQuantity,status\nSKU-1,8,Active'], 'inventory.csv', { type: 'text/csv' });
     const previewResponse = createBulkResponse();
@@ -103,6 +126,7 @@ function createInventoryItem(overrides: Record<string, unknown> = {}) {
     primaryImageUrl: null,
     primaryImageAltText: null,
     sku: 'SUMMER-DRESS-M-BLACK',
+    barcode: '6001000000012',
     size: 'M',
     colour: 'Black',
     price: 499.99,
@@ -126,6 +150,7 @@ function createBulkResponse(): SellerInventoryBulkAdjustmentResponse {
       rowNumber: 2,
       variantId: 'variant-id',
       sku: 'SUMMER-DRESS-M-BLACK',
+      barcode: '6001000000012',
       productId: 'product-id',
       productTitle: 'Summer Dress',
       productSlug: 'summer-dress',
@@ -139,5 +164,40 @@ function createBulkResponse(): SellerInventoryBulkAdjustmentResponse {
       rowStatus: 'Changed',
       messages: []
     }]
+  };
+}
+
+function createMovement() {
+  return {
+    movementId: 'movement-id',
+    productId: 'product-id',
+    variantId: 'variant-id',
+    productTitle: 'Summer Dress',
+    productSlug: 'summer-dress',
+    sku: 'SUMMER-DRESS-M-BLACK',
+    barcode: '6001000000012',
+    size: 'M',
+    colour: 'Black',
+    movementType: 'SellerAdjustment' as const,
+    stockQuantityBefore: 10,
+    stockQuantityAfter: 7,
+    reservedQuantityBefore: 2,
+    reservedQuantityAfter: 2,
+    quantityDelta: -3,
+    reservedQuantityDelta: 0,
+    statusBefore: 'Active' as const,
+    statusAfter: 'Inactive' as const,
+    source: 'SellerInventoryAdjust',
+    reason: 'Stocktake correction',
+    actorUserId: 'seller-user-id',
+    batchReference: null,
+    cartId: null,
+    orderId: 'order-id',
+    reservationId: null,
+    paymentId: null,
+    returnRequestId: null,
+    refundId: null,
+    relatedRoute: '/seller/orders/order-id',
+    occurredAtUtc: '2026-05-21T08:00:00Z'
   };
 }

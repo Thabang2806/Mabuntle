@@ -33,6 +33,7 @@ describe('SellerOnboardingService', () => {
 
     const response = await promise;
     expect(response.verificationStatus).toBe('PendingVerification');
+    expect(response.latestVerificationReview).toBeNull();
   });
 
   it('updates profile details', async () => {
@@ -84,6 +85,7 @@ function createOnboardingResponse() {
     },
     storefront: null,
     address: null,
-    payout: null
+    payout: null,
+    latestVerificationReview: null
   };
 }

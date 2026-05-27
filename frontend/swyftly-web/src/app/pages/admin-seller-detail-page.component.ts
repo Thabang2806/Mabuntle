@@ -12,6 +12,7 @@ import { getApiErrorMessage } from '../auth/api-error';
 import { PageHeaderComponent } from '../shared/ui/page-header.component';
 import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge.component';
 import { UiAlertComponent } from '../shared/ui/ui-alert.component';
+import { SellerVerificationEvidenceType } from '../seller/seller-verification-evidence.models';
 
 @Component({
   selector: 'app-admin-seller-detail-page',
@@ -109,6 +110,47 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 <div><dt>Submitted</dt><dd>{{ seller()?.payout?.hasSubmittedPlaceholder ? 'Yes' : 'No' }}</dd></div>
                 <div><dt>Admin approved</dt><dd>{{ seller()?.payout?.isAdminApproved ? 'Yes' : 'No' }}</dd></div>
               </dl>
+            </article>
+
+            <article class="route-card admin-detail-card">
+              <h2>Store policies</h2>
+              <app-status-badge
+                [label]="seller()!.storePolicy.isComplete ? 'Policy complete' : 'Policy context missing'"
+                [tone]="seller()!.storePolicy.isComplete ? 'success' : 'warning'"
+              />
+              @if (!seller()!.storePolicy.isComplete) {
+                <p>Missing: {{ seller()!.storePolicy.missingFields.join(', ') }}.</p>
+              }
+              @if (storePolicyEntries().length > 0) {
+                <dl class="admin-facts">
+                  @for (entry of storePolicyEntries(); track entry.label) {
+                    <div><dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd></div>
+                  }
+                </dl>
+              } @else {
+                <app-ui-alert tone="info">No buyer-facing store policy has been saved yet. This is review context only and does not block admin actions.</app-ui-alert>
+              }
+            </article>
+
+            <article class="route-card admin-detail-card">
+              <h2>Verification evidence</h2>
+              @if ((seller()?.verificationEvidence?.length ?? 0) === 0) {
+                <app-ui-alert tone="info">No supporting evidence has been uploaded. Evidence is optional context and does not change approval rules.</app-ui-alert>
+              } @else {
+                <div class="admin-evidence-list">
+                  @for (item of seller()?.verificationEvidence; track item.evidenceId) {
+                    <div class="admin-evidence-row">
+                      <div>
+                        <app-status-badge [label]="evidenceTypeLabel(item.evidenceType)" tone="neutral" />
+                        <h3>{{ item.originalFileName }}</h3>
+                        <p>{{ item.note ?? 'No reviewer note provided.' }}</p>
+                        <small>{{ formatFileSize(item.byteSize) }} - uploaded {{ item.uploadedAtUtc | date:'medium' }}</small>
+                      </div>
+                      <button mat-stroked-button type="button" (click)="downloadEvidence(item.evidenceId, item.originalFileName)">Download</button>
+                    </div>
+                  }
+                </div>
+              }
             </article>
           </div>
 
@@ -263,8 +305,35 @@ export class AdminSellerDetailPageComponent implements OnInit {
         label: 'Payout setup',
         description: 'Provider reference placeholder was submitted for admin approval.',
         isComplete: Boolean(seller.payout?.payoutProviderReference && seller.payout.hasSubmittedPlaceholder)
+      },
+      {
+        label: 'Store policies',
+        description: 'Return, exchange, fulfilment, and support policy context is available for buyer-facing screens.',
+        isComplete: seller.storePolicy.isComplete
+      },
+      {
+        label: 'Verification evidence',
+        description: 'Supporting documents or images were uploaded for admin review context.',
+        isComplete: (seller.verificationEvidence?.length ?? 0) > 0
       }
     ];
+  }
+
+  protected storePolicyEntries(): { label: string; value: string }[] {
+    const policy = this.seller()?.storePolicy;
+    if (!policy) {
+      return [];
+    }
+
+    return [
+      policy.returnWindowDays === null ? null : { label: 'Return window', value: `${policy.returnWindowDays} day${policy.returnWindowDays === 1 ? '' : 's'}` },
+      policy.returnPolicy ? { label: 'Returns', value: policy.returnPolicy } : null,
+      policy.exchangePolicy ? { label: 'Exchanges', value: policy.exchangePolicy } : null,
+      policy.fulfilmentPolicy ? { label: 'Fulfilment', value: policy.fulfilmentPolicy } : null,
+      policy.supportPolicy ? { label: 'Support', value: policy.supportPolicy } : null,
+      policy.careInstructions ? { label: 'Care', value: policy.careInstructions } : null,
+      policy.productDisclaimer ? { label: 'Disclaimer', value: policy.productDisclaimer } : null
+    ].filter((entry): entry is { label: string; value: string } => entry !== null);
   }
 
   protected sellerStatusTone(status: string): StatusBadgeTone {
@@ -277,6 +346,46 @@ export class AdminSellerDetailPageComponent implements OnInit {
     }
 
     return 'warning';
+  }
+
+  protected evidenceTypeLabel(type: SellerVerificationEvidenceType): string {
+    const labels: Record<SellerVerificationEvidenceType, string> = {
+      BusinessRegistration: 'Business registration',
+      IdentityOrRepresentative: 'Identity or representative',
+      FulfilmentAddress: 'Fulfilment address',
+      BrandAuthorization: 'Brand authorization',
+      ProductAuthenticity: 'Product authenticity',
+      Other: 'Other'
+    };
+
+    return labels[type] ?? type;
+  }
+
+  protected formatFileSize(bytes: number): string {
+    if (bytes < 1024) {
+      return `${bytes} B`;
+    }
+
+    if (bytes < 1024 * 1024) {
+      return `${Math.round(bytes / 1024)} KB`;
+    }
+
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  protected async downloadEvidence(evidenceId: string, fileName: string): Promise<void> {
+    const seller = this.seller();
+    if (!seller) {
+      return;
+    }
+
+    this.errorMessage.set(null);
+    try {
+      const blob = await this.adminSellerService.downloadVerificationEvidence(seller.sellerId, evidenceId);
+      triggerBrowserDownload(blob, fileName);
+    } catch (error) {
+      this.errorMessage.set(getApiErrorMessage(error));
+    }
   }
 
   private async loadSeller(): Promise<void> {
@@ -316,4 +425,17 @@ export class AdminSellerDetailPageComponent implements OnInit {
       this.isSaving.set(false);
     }
   }
+}
+
+function triggerBrowserDownload(blob: Blob, fileName: string): void {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

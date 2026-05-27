@@ -31,6 +31,10 @@ describe('SellerProductFormPageComponent', () => {
         'deleteRevisionImage',
         'submitRevisionForReview',
         'cancelRevision',
+        'getVariantRevision',
+        'updateVariantRevision',
+        'submitVariantRevisionForReview',
+        'cancelVariantRevision',
         'generateAiSuggestion',
         'applyAiSuggestion'
       ]);
@@ -39,6 +43,12 @@ describe('SellerProductFormPageComponent', () => {
     productService.updateProduct.and.resolveTo(createProductDetail());
     productService.getProduct.and.resolveTo(createProductDetail());
     productService.getRevision.and.resolveTo(createRevision());
+    productService.getVariantRevision.and.resolveTo(createVariantRevision());
+    productService.updateVariantRevision.and.resolveTo(createVariantRevision({
+      items: [createVariantRevisionItem({ operation: 'Update', sku: 'SKU-EDIT', price: 129 })]
+    }));
+    productService.submitVariantRevisionForReview.and.resolveTo(createVariantRevision({ status: 'PendingReview', canEdit: false }));
+    productService.cancelVariantRevision.and.resolveTo(createVariantRevision({ status: 'Cancelled', canEdit: false }));
     productService.updateImage.and.resolveTo(createProductDetail({
       images: [createImage({ altText: 'Updated side image', sortOrder: 2, isPrimary: true })]
     }));
@@ -251,6 +261,38 @@ describe('SellerProductFormPageComponent', () => {
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('current approved listing');
   });
 
+  it('stages published variant revision updates without editing live variants', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const variant = createVariant();
+    const component = fixture.componentInstance as unknown as {
+      product: { set(value: unknown): void };
+      variantRevision: { set(value: unknown): void };
+      stageVariantRevisionUpdate(variant: unknown): void;
+      variantRevisionForm: {
+        patchValue(value: Record<string, unknown>): void;
+      };
+      addVariantRevisionItem(): Promise<void>;
+    };
+    component.product.set(createProductDetail({ status: 'Published', variants: [variant] }));
+    component.variantRevision.set(createVariantRevision());
+
+    component.stageVariantRevisionUpdate(variant);
+    component.variantRevisionForm.patchValue({ sku: 'SKU-EDIT', price: 129 });
+    await component.addVariantRevisionItem();
+
+    expect(productService.updateVariant).not.toHaveBeenCalled();
+    expect(productService.updateVariantRevision).toHaveBeenCalledWith('product-id', jasmine.objectContaining({
+      items: [jasmine.objectContaining({
+        operation: 'Update',
+        sourceVariantId: 'variant-id',
+        sku: 'SKU-EDIT',
+        price: 129
+      })]
+    }));
+  });
+
   it('generates an AI suggestion from the saved product draft', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
@@ -371,6 +413,7 @@ function createProductDetail(overrides: Record<string, unknown> = {}) {
     attributes: { size: '"M"' },
     variants: [],
     images: [],
+    moderationEvents: [],
     ...overrides
   };
 }
@@ -416,6 +459,62 @@ function createRevision(overrides: Record<string, unknown> = {}) {
       isPrimary: true,
       createdAtUtc: '2026-05-18T12:00:00Z'
     }],
+    moderationEvents: [],
+    ...overrides
+  };
+}
+
+function createVariantRevision(overrides: Record<string, unknown> = {}) {
+  return {
+    revisionId: 'variant-revision-id',
+    productId: 'product-id',
+    sellerId: 'seller-id',
+    status: 'Draft',
+    canEdit: true,
+    sellerReason: null,
+    rejectionReason: null,
+    submittedAtUtc: null,
+    reviewedAtUtc: null,
+    currentVariants: [createRevisionVariant()],
+    items: [],
+    proposedFinalVariants: [createRevisionVariant()],
+    validationErrors: {},
+    moderationEvents: [],
+    ...overrides
+  };
+}
+
+function createVariantRevisionItem(overrides: Record<string, unknown> = {}) {
+  return {
+    revisionItemId: 'variant-revision-item-id',
+    operation: 'Update',
+    sourceVariantId: 'variant-id',
+    sku: 'SKU-1',
+    size: 'M',
+    colour: 'Black',
+    price: 100,
+    compareAtPrice: null,
+    initialStockQuantity: null,
+    proposedStatus: 'Active',
+    barcode: null,
+    ...overrides
+  };
+}
+
+function createRevisionVariant(overrides: Record<string, unknown> = {}) {
+  return {
+    sourceVariantId: 'variant-id',
+    changeType: 'Unchanged',
+    sku: 'SKU-1',
+    size: 'M',
+    colour: 'Black',
+    price: 100,
+    compareAtPrice: null,
+    stockQuantity: 10,
+    reservedQuantity: 0,
+    status: 'Active',
+    barcode: null,
+    availableQuantity: 10,
     ...overrides
   };
 }

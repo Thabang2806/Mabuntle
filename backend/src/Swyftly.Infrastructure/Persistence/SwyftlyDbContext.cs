@@ -39,7 +39,11 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
 
     public DbSet<SellerProfile> SellerProfiles => Set<SellerProfile>();
 
+    public DbSet<SellerNotificationPreference> SellerNotificationPreferences => Set<SellerNotificationPreference>();
+
     public DbSet<SellerStorefront> SellerStorefronts => Set<SellerStorefront>();
+
+    public DbSet<SellerStorePolicy> SellerStorePolicies => Set<SellerStorePolicy>();
 
     public DbSet<SellerAddress> SellerAddresses => Set<SellerAddress>();
 
@@ -52,6 +56,8 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
     public DbSet<SellerPayoutProfileChangeRequest> SellerPayoutProfileChangeRequests => Set<SellerPayoutProfileChangeRequest>();
 
     public DbSet<SellerVerification> SellerVerifications => Set<SellerVerification>();
+
+    public DbSet<SellerVerificationEvidence> SellerVerificationEvidence => Set<SellerVerificationEvidence>();
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
@@ -70,6 +76,10 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
     public DbSet<ProductListingRevision> ProductListingRevisions => Set<ProductListingRevision>();
 
     public DbSet<ProductListingRevisionImage> ProductListingRevisionImages => Set<ProductListingRevisionImage>();
+
+    public DbSet<ProductVariantRevision> ProductVariantRevisions => Set<ProductVariantRevision>();
+
+    public DbSet<ProductVariantRevisionItem> ProductVariantRevisionItems => Set<ProductVariantRevisionItem>();
 
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
 
@@ -97,6 +107,8 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
 
     public DbSet<InventoryReservation> InventoryReservations => Set<InventoryReservation>();
 
+    public DbSet<InventoryMovement> InventoryMovements => Set<InventoryMovement>();
+
     public DbSet<Order> Orders => Set<Order>();
 
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
@@ -112,6 +124,8 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
     public DbSet<ReturnItem> ReturnItems => Set<ReturnItem>();
 
     public DbSet<ReturnMessage> ReturnMessages => Set<ReturnMessage>();
+
+    public DbSet<ReturnRestockDecision> ReturnRestockDecisions => Set<ReturnRestockDecision>();
 
     public DbSet<Refund> Refunds => Set<Refund>();
 
@@ -204,6 +218,22 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
             builder.HasOne<BuyerProfile>()
                 .WithMany()
                 .HasForeignKey(preference => preference.BuyerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SellerNotificationPreference>(builder =>
+        {
+            builder.ToTable("seller_notification_preferences");
+            builder.HasKey(preference => preference.Id);
+            builder.HasIndex(preference => new { preference.SellerId, preference.Category }).IsUnique();
+            builder.Property(preference => preference.Category).HasMaxLength(40).IsRequired();
+            builder.Property(preference => preference.IsEnabled).IsRequired();
+            builder.Property(preference => preference.EmailEnabled).IsRequired();
+            builder.Property(preference => preference.CreatedAtUtc).IsRequired();
+            builder.Property(preference => preference.UpdatedAtUtc).IsRequired();
+            builder.HasOne<SellerProfile>()
+                .WithMany()
+                .HasForeignKey(preference => preference.SellerId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -325,6 +355,26 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<SellerStorePolicy>(builder =>
+        {
+            builder.ToTable("seller_store_policies");
+            builder.HasKey(policy => policy.Id);
+            builder.HasIndex(policy => policy.SellerId).IsUnique();
+            builder.Property(policy => policy.ReturnWindowDays);
+            builder.Property(policy => policy.ReturnPolicy).HasMaxLength(SellerStorePolicy.ReturnPolicyMaxLength);
+            builder.Property(policy => policy.ExchangePolicy).HasMaxLength(SellerStorePolicy.ExchangePolicyMaxLength);
+            builder.Property(policy => policy.FulfilmentPolicy).HasMaxLength(SellerStorePolicy.FulfilmentPolicyMaxLength);
+            builder.Property(policy => policy.SupportPolicy).HasMaxLength(SellerStorePolicy.SupportPolicyMaxLength);
+            builder.Property(policy => policy.CareInstructions).HasMaxLength(SellerStorePolicy.CareInstructionsMaxLength);
+            builder.Property(policy => policy.ProductDisclaimer).HasMaxLength(SellerStorePolicy.ProductDisclaimerMaxLength);
+            builder.Property(policy => policy.CreatedAtUtc).IsRequired();
+            builder.Property(policy => policy.UpdatedAtUtc).IsRequired();
+            builder.HasOne<SellerProfile>()
+                .WithOne()
+                .HasForeignKey<SellerStorePolicy>(policy => policy.SellerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<SellerAddress>(builder =>
         {
             builder.ToTable("seller_addresses");
@@ -436,6 +486,48 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
             builder.HasOne<SellerProfile>()
                 .WithMany()
                 .HasForeignKey(verification => verification.SellerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SellerVerificationEvidence>(builder =>
+        {
+            builder.ToTable("seller_verification_evidence");
+            builder.HasKey(evidence => evidence.Id);
+            builder.HasIndex(evidence => evidence.SellerId);
+            builder.HasIndex(evidence => new { evidence.SellerId, evidence.EvidenceType });
+            builder.HasIndex(evidence => evidence.RemovedAtUtc);
+            builder.Property(evidence => evidence.EvidenceType)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .IsRequired();
+            builder.Property(evidence => evidence.StorageProvider)
+                .HasMaxLength(Swyftly.Domain.Sellers.SellerVerificationEvidence.StorageProviderMaxLength)
+                .IsRequired();
+            builder.Property(evidence => evidence.StorageKey)
+                .HasMaxLength(Swyftly.Domain.Sellers.SellerVerificationEvidence.StorageKeyMaxLength)
+                .IsRequired();
+            builder.Property(evidence => evidence.OriginalFileName)
+                .HasMaxLength(Swyftly.Domain.Sellers.SellerVerificationEvidence.OriginalFileNameMaxLength)
+                .IsRequired();
+            builder.Property(evidence => evidence.ContentType)
+                .HasMaxLength(Swyftly.Domain.Sellers.SellerVerificationEvidence.ContentTypeMaxLength)
+                .IsRequired();
+            builder.Property(evidence => evidence.ByteSize).IsRequired();
+            builder.Property(evidence => evidence.Sha256Hash)
+                .HasMaxLength(Swyftly.Domain.Sellers.SellerVerificationEvidence.Sha256HashMaxLength)
+                .IsRequired();
+            builder.Property(evidence => evidence.Note)
+                .HasMaxLength(Swyftly.Domain.Sellers.SellerVerificationEvidence.NoteMaxLength);
+            builder.Property(evidence => evidence.UploadedByUserId).IsRequired();
+            builder.Property(evidence => evidence.UploadedAtUtc).IsRequired();
+            builder.Property(evidence => evidence.RemovedByUserId);
+            builder.Property(evidence => evidence.RemovedAtUtc);
+            builder.Property(evidence => evidence.CreatedAtUtc).IsRequired();
+            builder.Property(evidence => evidence.UpdatedAtUtc).IsRequired();
+            builder.Ignore(evidence => evidence.IsActive);
+            builder.HasOne<SellerProfile>()
+                .WithMany()
+                .HasForeignKey(evidence => evidence.SellerId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -678,6 +770,66 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
                 .WithMany()
                 .HasForeignKey(image => image.MediaAssetId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ProductVariantRevision>(builder =>
+        {
+            builder.ToTable("product_variant_revisions");
+            builder.HasKey(revision => revision.Id);
+            builder.HasIndex(revision => revision.ProductId);
+            builder.HasIndex(revision => revision.SellerId);
+            builder.HasIndex(revision => revision.Status);
+            builder.HasIndex(revision => new { revision.ProductId, revision.Status })
+                .IsUnique()
+                .HasFilter("\"Status\" IN ('Draft', 'PendingReview', 'Rejected')");
+            builder.Property(revision => revision.Status)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .IsRequired();
+            builder.Property(revision => revision.SellerReason).HasMaxLength(1000);
+            builder.Property(revision => revision.RejectionReason).HasMaxLength(1000);
+            builder.Property(revision => revision.CreatedAtUtc).IsRequired();
+            builder.Property(revision => revision.UpdatedAtUtc).IsRequired();
+            builder.HasOne<Product>()
+                .WithMany()
+                .HasForeignKey(revision => revision.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne<SellerProfile>()
+                .WithMany()
+                .HasForeignKey(revision => revision.SellerId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ProductVariantRevisionItem>(builder =>
+        {
+            builder.ToTable("product_variant_revision_items");
+            builder.HasKey(item => item.Id);
+            builder.HasIndex(item => item.RevisionId);
+            builder.HasIndex(item => item.SourceVariantId);
+            builder.HasIndex(item => new { item.RevisionId, item.Sku });
+            builder.HasIndex(item => new { item.RevisionId, item.Size, item.Colour });
+            builder.Property(item => item.Operation)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .IsRequired();
+            builder.Property(item => item.Sku).HasMaxLength(120).IsRequired();
+            builder.Property(item => item.Size).HasMaxLength(64).IsRequired();
+            builder.Property(item => item.Colour).HasMaxLength(64).IsRequired();
+            builder.Property(item => item.Price).HasPrecision(18, 2).IsRequired();
+            builder.Property(item => item.CompareAtPrice).HasPrecision(18, 2);
+            builder.Property(item => item.ProposedStatus)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .IsRequired();
+            builder.Property(item => item.Barcode).HasMaxLength(120);
+            builder.HasOne<ProductVariantRevision>()
+                .WithMany()
+                .HasForeignKey(item => item.RevisionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne<ProductVariant>()
+                .WithMany()
+                .HasForeignKey(item => item.SourceVariantId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<MediaAsset>(builder =>
@@ -1055,6 +1207,93 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<InventoryMovement>(builder =>
+        {
+            builder.ToTable("inventory_movements");
+            builder.HasKey(movement => movement.Id);
+            builder.HasIndex(movement => new { movement.SellerId, movement.OccurredAtUtc });
+            builder.HasIndex(movement => movement.ProductId);
+            builder.HasIndex(movement => movement.ProductVariantId);
+            builder.HasIndex(movement => movement.MovementType);
+            builder.HasIndex(movement => movement.BatchReference);
+            builder.HasIndex(movement => movement.CartId);
+            builder.HasIndex(movement => movement.OrderId);
+            builder.HasIndex(movement => movement.ReservationId);
+            builder.HasIndex(movement => movement.PaymentId);
+            builder.HasIndex(movement => movement.ReturnRequestId);
+            builder.HasIndex(movement => movement.RefundId);
+            builder.Property(movement => movement.MovementType)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .IsRequired();
+            builder.Property(movement => movement.StockQuantityBefore).IsRequired();
+            builder.Property(movement => movement.StockQuantityAfter).IsRequired();
+            builder.Property(movement => movement.ReservedQuantityBefore).IsRequired();
+            builder.Property(movement => movement.ReservedQuantityAfter).IsRequired();
+            builder.Property(movement => movement.QuantityDelta).IsRequired();
+            builder.Property(movement => movement.StatusBefore)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .IsRequired();
+            builder.Property(movement => movement.StatusAfter)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .IsRequired();
+            builder.Property(movement => movement.Source).HasMaxLength(InventoryMovement.SourceMaxLength).IsRequired();
+            builder.Property(movement => movement.Reason).HasMaxLength(InventoryMovement.ReasonMaxLength).IsRequired();
+            builder.Property(movement => movement.BatchReference).HasMaxLength(InventoryMovement.BatchReferenceMaxLength);
+            builder.Property(movement => movement.OccurredAtUtc).IsRequired();
+            builder.HasOne<SellerProfile>()
+                .WithMany()
+                .HasForeignKey(movement => movement.SellerId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne<Product>()
+                .WithMany()
+                .HasForeignKey(movement => movement.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne<ProductVariant>()
+                .WithMany()
+                .HasForeignKey(movement => movement.ProductVariantId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ReturnRestockDecision>(builder =>
+        {
+            builder.ToTable("return_restock_decisions");
+            builder.HasKey(decision => decision.Id);
+            builder.HasIndex(decision => decision.SellerId);
+            builder.HasIndex(decision => decision.ReturnRequestId);
+            builder.HasIndex(decision => decision.ReturnItemId).IsUnique();
+            builder.HasIndex(decision => decision.ProductVariantId);
+            builder.Property(decision => decision.QuantityRestocked).IsRequired();
+            builder.Property(decision => decision.Condition)
+                .HasConversion<string>()
+                .HasMaxLength(64)
+                .IsRequired();
+            builder.Property(decision => decision.Reason).HasMaxLength(ReturnRestockDecision.ReasonMaxLength).IsRequired();
+            builder.Property(decision => decision.CreatedAtUtc).IsRequired();
+            builder.HasOne<SellerProfile>()
+                .WithMany()
+                .HasForeignKey(decision => decision.SellerId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne<ReturnRequest>()
+                .WithMany()
+                .HasForeignKey(decision => decision.ReturnRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne<ReturnItem>()
+                .WithMany()
+                .HasForeignKey(decision => decision.ReturnItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne<Product>()
+                .WithMany()
+                .HasForeignKey(decision => decision.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne<ProductVariant>()
+                .WithMany()
+                .HasForeignKey(decision => decision.ProductVariantId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<Order>(builder =>
         {
             builder.ToTable("orders");
@@ -1105,6 +1344,12 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
             builder.Property(order => order.PickupPointLatitude).HasPrecision(9, 6);
             builder.Property(order => order.PickupPointLongitude).HasPrecision(9, 6);
             builder.Property(order => order.PickupPointOpeningHours).HasMaxLength(PickupPoint.OpeningHoursMaxLength);
+            builder.Property(order => order.SellerPolicyReturnPolicy).HasMaxLength(SellerStorePolicy.ReturnPolicyMaxLength);
+            builder.Property(order => order.SellerPolicyExchangePolicy).HasMaxLength(SellerStorePolicy.ExchangePolicyMaxLength);
+            builder.Property(order => order.SellerPolicyFulfilmentPolicy).HasMaxLength(SellerStorePolicy.FulfilmentPolicyMaxLength);
+            builder.Property(order => order.SellerPolicySupportPolicy).HasMaxLength(SellerStorePolicy.SupportPolicyMaxLength);
+            builder.Property(order => order.SellerPolicyCareInstructions).HasMaxLength(SellerStorePolicy.CareInstructionsMaxLength);
+            builder.Property(order => order.SellerPolicyProductDisclaimer).HasMaxLength(SellerStorePolicy.ProductDisclaimerMaxLength);
             builder.Property(order => order.CreatedAtUtc).IsRequired();
             builder.Property(order => order.UpdatedAtUtc).IsRequired();
             builder.HasOne<BuyerProfile>()

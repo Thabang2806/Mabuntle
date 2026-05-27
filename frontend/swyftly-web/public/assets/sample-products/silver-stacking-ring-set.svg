@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1200" role="img" aria-labelledby="title desc">
+  <title id="title">Silver Stacking Ring Set</title>
+  <desc id="desc">Editorial product illustration for a silver stacking ring set.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fffaf4"/>
+      <stop offset="0.6" stop-color="#d8d9de"/>
+      <stop offset="1" stop-color="#3d102b"/>
+    </linearGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.45" stop-color="#aeb4bd"/>
+      <stop offset="1" stop-color="#f4f6f8"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1200" fill="url(#bg)"/>
+  <rect x="100" y="104" width="700" height="992" rx="44" fill="#fffaf4" opacity="0.74"/>
+  <circle cx="390" cy="548" r="132" fill="none" stroke="url(#silver)" stroke-width="42"/>
+  <circle cx="492" cy="548" r="132" fill="none" stroke="url(#silver)" stroke-width="42"/>
+  <circle cx="448" cy="656" r="132" fill="none" stroke="url(#silver)" stroke-width="42"/>
+  <path d="M300 850h300" stroke="#4a1836" stroke-width="10" stroke-linecap="round" opacity="0.5"/>
+  <text x="450" y="1038" text-anchor="middle" font-family="Georgia, serif" font-size="42" fill="#3d102b">Silver stacking rings</text>
+</svg>

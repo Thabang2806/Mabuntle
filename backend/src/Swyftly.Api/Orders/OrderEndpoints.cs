@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Swyftly.Api.Notifications;
 using Swyftly.Api.Results;
+using Swyftly.Api.Sellers;
 using Swyftly.Application.Delivery;
 using Swyftly.Application.Identity;
 using Swyftly.Application.Notifications;
@@ -731,7 +732,8 @@ public static class OrderEndpoints
                     order.PickupPoint.CountryCode,
                     order.PickupPoint.Latitude,
                     order.PickupPoint.Longitude,
-                    order.PickupPoint.OpeningHours));
+                    order.PickupPoint.OpeningHours),
+            SellerPolicyResponseMapper.MapSnapshot(order.SellerPolicySnapshot));
 
     private static bool HasLatestShipmentEvent(OrderResult order, string eventType, DateTimeOffset occurredAtUtc) =>
         order.Shipments

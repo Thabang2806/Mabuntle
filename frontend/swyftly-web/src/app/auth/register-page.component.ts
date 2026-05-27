@@ -34,6 +34,9 @@ type PublicRegistrationRole = 'Buyer' | 'Seller';
         <span class="eyebrow">{{ roleLabel() }}</span>
         <h1>{{ heading() }}</h1>
         <p>{{ summary() }}</p>
+        @if (role === 'Seller') {
+          <a class="auth-context-link" routerLink="/sell">Review seller requirements before applying</a>
+        }
 
         @if (successMessage()) {
           <p class="auth-alert success" role="status">{{ successMessage() }}</p>
@@ -118,7 +121,7 @@ export class RegisterPageComponent {
 
   protected summary(): string {
     return this.role === 'Seller'
-      ? 'Start seller onboarding, prepare your storefront, and submit listings for marketplace review.'
+      ? 'Create your seller account, then complete onboarding so Swyftly can review your storefront before products and ads go live.'
       : 'Save products, manage orders, track returns, and keep your marketplace preferences in one place.';
   }
 

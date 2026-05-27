@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1200" role="img" aria-labelledby="title desc">
+  <title id="title">Black Structured Leather Tote</title>
+  <desc id="desc">Editorial product illustration for a black structured leather tote.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fffaf4"/>
+      <stop offset="0.65" stop-color="#d7b46a"/>
+      <stop offset="1" stop-color="#12060d"/>
+    </linearGradient>
+    <linearGradient id="bag" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#30232a"/>
+      <stop offset="1" stop-color="#070507"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1200" fill="url(#bg)"/>
+  <rect x="126" y="126" width="648" height="948" rx="42" fill="#fff8ef" opacity="0.72"/>
+  <path d="M292 482h316l54 386H238z" fill="url(#bag)"/>
+  <path d="M328 486c0-120 244-120 244 0" fill="none" stroke="#1b1118" stroke-width="34" stroke-linecap="round"/>
+  <path d="M332 550h236M316 820h268" stroke="#d1a86d" stroke-width="10" stroke-linecap="round" opacity="0.75"/>
+  <rect x="426" y="640" width="48" height="42" rx="8" fill="#d1a86d"/>
+  <text x="450" y="1036" text-anchor="middle" font-family="Georgia, serif" font-size="40" fill="#3d102b">Structured leather tote</text>
+</svg>

@@ -153,6 +153,46 @@ describe('SellerProductService', () => {
     const product = await applyPromise;
     expect(product.title).toBe('Seller title');
   });
+
+  it('manages published variant revision requests', async () => {
+    const getPromise = service.getVariantRevision('product-id');
+    const getRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/seller/products/product-id/variant-revision`);
+    expect(getRequest.request.method).toBe('GET');
+    getRequest.flush(createVariantRevision());
+    await expectAsync(getPromise).toBeResolved();
+
+    const updatePromise = service.updateVariantRevision('product-id', {
+      sellerReason: 'Seasonal price update.',
+      items: [{
+        operation: 'Update',
+        sourceVariantId: 'variant-id',
+        sku: 'SKU-EDIT',
+        size: 'M',
+        colour: 'Black',
+        price: 120,
+        compareAtPrice: null,
+        initialStockQuantity: null,
+        barcode: null
+      }]
+    });
+    const updateRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/seller/products/product-id/variant-revision`);
+    expect(updateRequest.request.method).toBe('PUT');
+    expect(updateRequest.request.body.sellerReason).toBe('Seasonal price update.');
+    updateRequest.flush(createVariantRevision({ items: [createVariantRevisionItem()] }));
+    await expectAsync(updatePromise).toBeResolved();
+
+    const submitPromise = service.submitVariantRevisionForReview('product-id');
+    const submitRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/seller/products/product-id/variant-revision/submit-review`);
+    expect(submitRequest.request.method).toBe('POST');
+    submitRequest.flush(createVariantRevision({ status: 'PendingReview' }));
+    await expectAsync(submitPromise).toBeResolved();
+
+    const cancelPromise = service.cancelVariantRevision('product-id');
+    const cancelRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/seller/products/product-id/variant-revision/cancel`);
+    expect(cancelRequest.request.method).toBe('POST');
+    cancelRequest.flush(createVariantRevision({ status: 'Cancelled' }));
+    await expectAsync(cancelPromise).toBeResolved();
+  });
 });
 
 function createCategory() {
@@ -205,6 +245,7 @@ function createProductDetail(overrides: Record<string, unknown> = {}) {
     attributes: { size: '"M"' },
     variants: [],
     images: [],
+    moderationEvents: [],
     ...overrides
   };
 }
@@ -225,5 +266,42 @@ function createAiSuggestion() {
     missingFields: [],
     riskFlags: [],
     qualityScore: 70
+  };
+}
+
+function createVariantRevision(overrides: Record<string, unknown> = {}) {
+  return {
+    revisionId: 'variant-revision-id',
+    productId: 'product-id',
+    sellerId: 'seller-id',
+    status: 'Draft',
+    canEdit: true,
+    sellerReason: null,
+    rejectionReason: null,
+    submittedAtUtc: null,
+    reviewedAtUtc: null,
+    currentVariants: [],
+    items: [],
+    proposedFinalVariants: [],
+    validationErrors: {},
+    moderationEvents: [],
+    ...overrides
+  };
+}
+
+function createVariantRevisionItem(overrides: Record<string, unknown> = {}) {
+  return {
+    revisionItemId: 'variant-revision-item-id',
+    operation: 'Update',
+    sourceVariantId: 'variant-id',
+    sku: 'SKU-EDIT',
+    size: 'M',
+    colour: 'Black',
+    price: 120,
+    compareAtPrice: null,
+    initialStockQuantity: null,
+    proposedStatus: 'Active',
+    barcode: null,
+    ...overrides
   };
 }

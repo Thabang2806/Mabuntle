@@ -137,6 +137,7 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy(SwyftlyPolicies.BuyerOnly, policy => policy.RequireRole(SwyftlyRoles.Buyer));
     options.AddPolicy(SwyftlyPolicies.SellerOnly, policy => policy.RequireRole(SwyftlyRoles.Seller));
+    options.AddPolicy(SwyftlyPolicies.BuyerOrSeller, policy => policy.RequireRole(SwyftlyRoles.Buyer, SwyftlyRoles.Seller));
     options.AddPolicy(SwyftlyPolicies.AdminOnly, policy => policy.RequireRole(SwyftlyRoles.Admin, SwyftlyRoles.SuperAdmin));
     options.AddPolicy(SwyftlyPolicies.SuperAdminOnly, policy => policy.RequireRole(SwyftlyRoles.SuperAdmin));
     options.AddPolicy(SwyftlyPolicies.SupportAgentOnly, policy => policy.RequireRole(
@@ -317,6 +318,7 @@ app.MapGet("/health/ready", async (HealthCheckService healthCheckService) =>
 
 app.MapAuthEndpoints();
 app.MapSellerOnboardingEndpoints();
+app.MapSellerVerificationEvidenceEndpoints();
 app.MapSellerPayoutProfileChangeEndpoints();
 app.MapAdminSellerEndpoints();
 app.MapAdminProductEndpoints();
@@ -325,6 +327,7 @@ app.MapAdminAuditLogEndpoints();
 app.MapAdminDashboardEndpoints();
 app.MapAdminMarketplaceReportEndpoints();
 app.MapAdminAiUsageAnalyticsEndpoints();
+app.MapAdminInventoryLedgerEndpoints();
 app.MapAdminCategoryEndpoints();
 app.MapAdminPickupPointEndpoints();
 app.MapAdminOrderPaymentEndpoints();
@@ -332,6 +335,9 @@ app.MapSellerCatalogEndpoints();
 app.MapSellerProductEndpoints();
 app.MapSellerInventoryEndpoints();
 app.MapSellerDeliveryMethodEndpoints();
+app.MapSellerStorePolicyEndpoints();
+app.MapSellerNotificationEndpoints();
+app.MapSellerDashboardEndpoints();
 app.MapPublicProductEndpoints();
 app.MapBuyerSettingsEndpoints();
 app.MapBuyerEngagementEndpoints();
@@ -350,7 +356,7 @@ app.MapSellerAnalyticsEndpoints();
 app.MapBuyerAiShoppingAssistantEndpoints();
 app.MapBuyerVisualSearchEndpoints();
 app.MapHub<NotificationHub>("/hubs/notifications")
-    .RequireAuthorization(SwyftlyPolicies.BuyerOnly);
+    .RequireAuthorization(SwyftlyPolicies.BuyerOrSeller);
 
 app.Run();
 

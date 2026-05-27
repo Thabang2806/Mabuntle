@@ -6,7 +6,9 @@ import {
   AdjustSellerInventoryRequest,
   BulkAdjustSellerInventoryRequest,
   SellerInventoryBulkAdjustmentResponse,
-  SellerInventoryItemResponse
+  SellerInventoryHistoryFilters,
+  SellerInventoryItemResponse,
+  SellerInventoryMovementResponse
 } from './seller-inventory.models';
 
 @Injectable({ providedIn: 'root' })
@@ -46,6 +48,26 @@ export class SellerInventoryService {
   bulkAdjust(request: BulkAdjustSellerInventoryRequest): Promise<SellerInventoryBulkAdjustmentResponse> {
     return firstValueFrom(
       this.http.post<SellerInventoryBulkAdjustmentResponse>(`${this.baseUrl}/bulk-adjust`, request)
+    );
+  }
+
+  listHistory(filters: SellerInventoryHistoryFilters = {}): Promise<SellerInventoryMovementResponse[]> {
+    const params = Object.entries(filters).reduce<Record<string, string>>((accumulator, [key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        accumulator[key] = value;
+      }
+
+      return accumulator;
+    }, {});
+
+    return firstValueFrom(
+      this.http.get<SellerInventoryMovementResponse[]>(`${this.baseUrl}/history`, { params })
+    );
+  }
+
+  listVariantHistory(variantId: string): Promise<SellerInventoryMovementResponse[]> {
+    return firstValueFrom(
+      this.http.get<SellerInventoryMovementResponse[]>(`${this.baseUrl}/${variantId}/history`)
     );
   }
 

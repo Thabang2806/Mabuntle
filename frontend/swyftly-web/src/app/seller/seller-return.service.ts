@@ -2,7 +2,12 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { SellerReturnRequestResult, SellerReturnResponseRequest } from './seller-return.models';
+import {
+  SellerReturnRequestResult,
+  SellerReturnResponseRequest,
+  SellerReturnRestockDecisionRequest,
+  SellerReturnRestockDecisionResponse
+} from './seller-return.models';
 
 @Injectable({ providedIn: 'root' })
 export class SellerReturnService {
@@ -23,5 +28,18 @@ export class SellerReturnService {
 
   rejectReturn(returnRequestId: string, request: SellerReturnResponseRequest): Promise<SellerReturnRequestResult> {
     return firstValueFrom(this.http.post<SellerReturnRequestResult>(`${this.baseUrl}/${returnRequestId}/reject`, request));
+  }
+
+  listRestockDecisions(returnRequestId: string): Promise<SellerReturnRestockDecisionResponse[]> {
+    return firstValueFrom(this.http.get<SellerReturnRestockDecisionResponse[]>(`${this.baseUrl}/${returnRequestId}/restock-decisions`));
+  }
+
+  createRestockDecisions(
+    returnRequestId: string,
+    request: SellerReturnRestockDecisionRequest
+  ): Promise<SellerReturnRestockDecisionResponse[]> {
+    return firstValueFrom(
+      this.http.post<SellerReturnRestockDecisionResponse[]>(`${this.baseUrl}/${returnRequestId}/restock-decisions`, request)
+    );
   }
 }

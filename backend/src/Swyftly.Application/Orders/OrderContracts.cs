@@ -1,4 +1,5 @@
 using Swyftly.Application.Common.Results;
+using Swyftly.Application.Sellers;
 
 namespace Swyftly.Application.Orders;
 
@@ -54,7 +55,8 @@ public sealed record OrderResult(
     string? DeliveryMethodType = null,
     int? DeliveryEstimatedMinDays = null,
     int? DeliveryEstimatedMaxDays = null,
-    OrderPickupPointResult? PickupPoint = null);
+    OrderPickupPointResult? PickupPoint = null,
+    SellerPolicySnapshotResponse? SellerPolicySnapshot = null);
 
 public sealed record OrderDeliveryAddressResult(
     string RecipientName,

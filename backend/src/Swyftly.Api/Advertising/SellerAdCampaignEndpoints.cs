@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Swyftly.Application.Advertising;
 using Swyftly.Application.Identity;
+using Swyftly.Api.Sellers;
 using Swyftly.Domain.Advertising;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Persistence;
@@ -373,6 +374,17 @@ public static class SellerAdCampaignEndpoints
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.AdCampaignId == campaign.Id, cancellationToken);
         var eligibility = await eligibilityService.ValidateAsync(campaign.SellerId, productIds, cancellationToken);
+        var moderationEvents = await dbContext.AuditLogs
+            .AsNoTracking()
+            .Where(auditLog => auditLog.EntityType == "AdCampaign" && auditLog.EntityId == campaign.Id.ToString())
+            .OrderByDescending(auditLog => auditLog.CreatedAtUtc)
+            .Select(auditLog => new SellerModerationEventResponse(
+                auditLog.Id,
+                auditLog.ActionType,
+                auditLog.ActorRole,
+                auditLog.Reason,
+                auditLog.CreatedAtUtc))
+            .ToArrayAsync(cancellationToken);
 
         return new SellerAdCampaignResponse(
             campaign.Id,
@@ -404,7 +416,8 @@ public static class SellerAdCampaignEndpoints
                     product.ProductId,
                     product.IsEligible,
                     product.QualityScore,
-                    product.Reasons)).ToArray()));
+                    product.Reasons)).ToArray()),
+            moderationEvents);
     }
 
     private static async Task<AdCampaign?> GetOwnedCampaignAsync(
@@ -513,7 +526,8 @@ public sealed record SellerAdCampaignResponse(
     string? RejectionReason,
     IReadOnlyCollection<Guid> ProductIds,
     AdBudgetResponse? Budget,
-    AdCampaignEligibilityResponse Eligibility);
+    AdCampaignEligibilityResponse Eligibility,
+    IReadOnlyCollection<SellerModerationEventResponse> ModerationEvents);
 
 public sealed record AdBudgetResponse(
     string Currency,

@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { PublicCatalogService } from '../shop/public-catalog.service';
 import { SellerStorefrontPageComponent } from './seller-storefront-page.component';
-import { createProduct } from './shop-page.component.spec';
+import { createProduct, createSellerPolicy } from './shop-page.component.spec';
 
 describe('SellerStorefrontPageComponent', () => {
   let fixture: ComponentFixture<SellerStorefrontPageComponent>;
@@ -17,7 +17,8 @@ describe('SellerStorefrontPageComponent', () => {
       description: 'Curated dresses.',
       logoUrl: null,
       bannerUrl: 'https://example.test/banner.jpg',
-      products: [createProduct()]
+      products: [createProduct()],
+      sellerPolicy: createSellerPolicy()
     });
 
     await TestBed.configureTestingModule({
@@ -49,6 +50,8 @@ describe('SellerStorefrontPageComponent', () => {
     expect(compiled.textContent).toContain('Seller Store');
     expect(compiled.textContent).toContain('Curated dresses.');
     expect(compiled.textContent).toContain('Summer Dress');
+    expect(compiled.textContent).toContain('Store policies');
+    expect(compiled.textContent).toContain('Returns are reviewed');
   });
 
   it('renders storefront trust details and fallback logo initial', async () => {

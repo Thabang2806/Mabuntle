@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Swyftly.Api.Security;
+using Swyftly.Api.Sellers;
 using Swyftly.Application.Search;
+using Swyftly.Application.Sellers;
 using Swyftly.Domain.Catalog;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Persistence;
@@ -247,6 +249,9 @@ public static class PublicProductEndpoints
                 products.Add(card);
             }
         }
+        var policy = await dbContext.SellerStorePolicies
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.SellerId == storefront.SellerId, cancellationToken);
 
         return HttpResults.Ok(new PublicSellerStorefrontResponse(
             storefront.SellerId,
@@ -255,7 +260,8 @@ public static class PublicProductEndpoints
             storefront.Description,
             storefront.LogoUrl,
             storefront.BannerUrl,
-            products));
+            products,
+            SellerPolicyResponseMapper.Map(policy)));
     }
 
     private static IQueryable<Product> BuildSearchQuery(
@@ -463,13 +469,17 @@ public static class PublicProductEndpoints
                 attribute => attribute.ValueJson,
                 StringComparer.OrdinalIgnoreCase,
                 cancellationToken);
+        var policy = await dbContext.SellerStorePolicies
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.SellerId == product.SellerId, cancellationToken);
 
         return new PublicProductDetailResponse(
             card,
             product.FullDescription,
             attributes,
             images,
-            variants);
+            variants,
+            SellerPolicyResponseMapper.Map(policy));
     }
 
     private static IQueryable<Product> BuildVisiblePublishedProductQuery(SwyftlyDbContext dbContext) =>
@@ -574,7 +584,8 @@ public sealed record PublicProductDetailResponse(
     string? FullDescription,
     IReadOnlyDictionary<string, string> Attributes,
     IReadOnlyCollection<PublicProductImageResponse> Images,
-    IReadOnlyCollection<PublicProductVariantResponse> Variants);
+    IReadOnlyCollection<PublicProductVariantResponse> Variants,
+    SellerPolicyResponse SellerPolicy);
 
 public sealed record PublicProductImageResponse(
     Guid ImageId,
@@ -604,4 +615,5 @@ public sealed record PublicSellerStorefrontResponse(
     string? Description,
     string? LogoUrl,
     string? BannerUrl,
-    IReadOnlyCollection<ProductSearchItemResponse> Products);
+    IReadOnlyCollection<ProductSearchItemResponse> Products,
+    SellerPolicyResponse SellerPolicy);

@@ -336,6 +336,17 @@ public static class SellerOnboardingEndpoints
             related.Address,
             related.PayoutProfile);
 
+        var latestVerification = await dbContext.SellerVerifications
+            .Where(verification => verification.SellerId == seller.Id)
+            .OrderByDescending(verification => verification.SubmittedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+        var latestSuspensionAudit = await dbContext.AuditLogs
+            .Where(auditLog => auditLog.EntityType == "SellerProfile"
+                && auditLog.EntityId == seller.Id.ToString()
+                && auditLog.ActionType == "SellerSuspended")
+            .OrderByDescending(auditLog => auditLog.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
         return new SellerOnboardingResponse(
             seller.Id,
             seller.VerificationStatus.ToString(),
@@ -347,7 +358,8 @@ public static class SellerOnboardingEndpoints
             ToProfileResponse(seller),
             related.Storefront is null ? null : ToStorefrontResponse(related.Storefront),
             related.Address is null ? null : ToAddressResponse(related.Address),
-            related.PayoutProfile is null ? null : ToPayoutResponse(related.PayoutProfile));
+            related.PayoutProfile is null ? null : ToPayoutResponse(related.PayoutProfile),
+            ToLatestVerificationReviewResponse(latestVerification, latestSuspensionAudit?.Reason));
     }
 
     private static async Task<SellerRelatedData> GetRelatedSellerDataAsync(
@@ -396,6 +408,22 @@ public static class SellerOnboardingEndpoints
             payoutProfile.PayoutProviderReference,
             payoutProfile.HasSubmittedPlaceholder,
             payoutProfile.IsAdminApproved);
+
+    private static SellerVerificationReviewResponse? ToLatestVerificationReviewResponse(
+        SellerVerification? verification,
+        string? suspensionReason)
+    {
+        if (verification is null && string.IsNullOrWhiteSpace(suspensionReason))
+        {
+            return null;
+        }
+
+        return new SellerVerificationReviewResponse(
+            verification?.SubmittedAtUtc,
+            verification?.ReviewedAtUtc,
+            verification?.RejectionReason,
+            string.IsNullOrWhiteSpace(suspensionReason) ? null : suspensionReason);
+    }
 
     private static Dictionary<string, string[]> ValidateProfile(UpdateSellerProfileRequest request)
     {
@@ -496,7 +524,8 @@ public sealed record SellerOnboardingResponse(
     SellerProfileResponse Profile,
     SellerStorefrontResponse? Storefront,
     SellerAddressResponse? Address,
-    SellerPayoutResponse? Payout);
+    SellerPayoutResponse? Payout,
+    SellerVerificationReviewResponse? LatestVerificationReview);
 
 public sealed record SellerProfileResponse(
     string? DisplayName,
@@ -525,6 +554,12 @@ public sealed record SellerPayoutResponse(
     string PayoutProviderReference,
     bool HasSubmittedPlaceholder,
     bool IsAdminApproved);
+
+public sealed record SellerVerificationReviewResponse(
+    DateTimeOffset? SubmittedAtUtc,
+    DateTimeOffset? ReviewedAtUtc,
+    string? RejectionReason,
+    string? SuspensionReason);
 
 public sealed record UpdateSellerProfileRequest(
     string DisplayName,

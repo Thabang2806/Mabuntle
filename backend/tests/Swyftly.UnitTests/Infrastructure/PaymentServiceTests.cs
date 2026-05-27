@@ -129,6 +129,11 @@ public class PaymentServiceTests
         Assert.Equal(4, await dbContext.LedgerEntries.CountAsync(entry => entry.PaymentId == payment.Id));
         Assert.Equal(1, await dbContext.PaymentEvents.CountAsync());
         Assert.Equal(PaymentEventProcessingStatus.Processed, (await dbContext.PaymentEvents.SingleAsync()).ProcessingStatus);
+        var movement = await dbContext.InventoryMovements.SingleAsync(movement => movement.MovementType == InventoryMovementType.ReservationConfirmed);
+        Assert.Equal(payment.Id, movement.PaymentId);
+        Assert.Equal(seed.Order.Id, movement.OrderId);
+        Assert.Equal(2, movement.ReservedQuantityBefore);
+        Assert.Equal(2, movement.ReservedQuantityAfter);
     }
 
     [Fact]
@@ -219,6 +224,11 @@ public class PaymentServiceTests
         Assert.Equal(0, (await dbContext.ProductVariants.SingleAsync()).ReservedQuantity);
         Assert.Single(await dbContext.CartItems.ToListAsync());
         Assert.Empty(await dbContext.LedgerEntries.ToListAsync());
+        var movement = await dbContext.InventoryMovements.SingleAsync(movement => movement.MovementType == InventoryMovementType.PaymentFailedReservationReleased);
+        Assert.Equal(payment.Id, movement.PaymentId);
+        Assert.Equal(seed.Order.Id, movement.OrderId);
+        Assert.Equal(2, movement.ReservedQuantityBefore);
+        Assert.Equal(0, movement.ReservedQuantityAfter);
     }
 
     [Fact]

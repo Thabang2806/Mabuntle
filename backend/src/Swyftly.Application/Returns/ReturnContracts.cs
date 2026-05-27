@@ -1,4 +1,5 @@
 using Swyftly.Application.Common.Results;
+using Swyftly.Application.Sellers;
 
 namespace Swyftly.Application.Returns;
 
@@ -65,7 +66,8 @@ public sealed record ReturnRequestResult(
     DateTimeOffset? DisputedAtUtc,
     string? DisputeReason,
     IReadOnlyCollection<ReturnItemResult> Items,
-    IReadOnlyCollection<ReturnMessageResult> Messages);
+    IReadOnlyCollection<ReturnMessageResult> Messages,
+    SellerPolicySnapshotResponse? SellerPolicySnapshot = null);
 
 public sealed record ReturnItemResult(
     Guid ReturnItemId,

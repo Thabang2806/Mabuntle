@@ -15,6 +15,11 @@ export const routes: Routes = [
     title: 'Shop | Swyftly'
   },
   {
+    path: 'sell',
+    loadComponent: () => import('./pages/sell-on-swyftly-page.component').then(component => component.SellOnSwyftlyPageComponent),
+    title: 'Sell on Swyftly | Swyftly'
+  },
+  {
     path: 'seller/products',
     loadComponent: () => import('./pages/seller-products-page.component').then(component => component.SellerProductsPageComponent),
     title: 'Seller products | Swyftly',
@@ -87,6 +92,12 @@ export const routes: Routes = [
     canActivate: [requireRoleGuard(['Seller'])]
   },
   {
+    path: 'seller/notifications',
+    loadComponent: () => import('./pages/seller-notifications-page.component').then(component => component.SellerNotificationsPageComponent),
+    title: 'Seller notifications | Swyftly',
+    canActivate: [requireRoleGuard(['Seller'])]
+  },
+  {
     path: 'seller/ads',
     loadComponent: () => import('./pages/seller-ad-campaigns-page.component').then(component => component.SellerAdCampaignsPageComponent),
     title: 'Seller ads | Swyftly',
@@ -144,6 +155,12 @@ export const routes: Routes = [
     path: 'admin/products/revisions/:revisionId',
     loadComponent: () => import('./pages/admin-product-revision-detail-page.component').then(component => component.AdminProductRevisionDetailPageComponent),
     title: 'Product revision review | Swyftly',
+    canActivate: [requireRoleGuard(ADMIN_ROLES)]
+  },
+  {
+    path: 'admin/products/variant-revisions/:revisionId',
+    loadComponent: () => import('./pages/admin-product-variant-revision-detail-page.component').then(component => component.AdminProductVariantRevisionDetailPageComponent),
+    title: 'Product variant revision review | Swyftly',
     canActivate: [requireRoleGuard(ADMIN_ROLES)]
   },
   {

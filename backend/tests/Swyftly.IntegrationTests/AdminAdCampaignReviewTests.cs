@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Swyftly.Api.Advertising;
 using Swyftly.Api.Authentication;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Notifications;
 using Swyftly.Domain.Advertising;
 using Swyftly.Domain.Catalog;
 using Swyftly.Domain.Sellers;
@@ -65,6 +66,9 @@ public sealed class AdminAdCampaignReviewTests
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
         Assert.Equal(1, await dbContext.AuditLogs.CountAsync(auditLog => auditLog.ActionType == "AdCampaignApproved"));
+        Assert.True(await dbContext.Notifications.AnyAsync(notification =>
+            notification.Type == SellerNotificationTypes.AdCampaignApproved
+            && notification.RelatedEntityId == campaign.AdCampaignId));
     }
 
     [Fact]
@@ -94,6 +98,12 @@ public sealed class AdminAdCampaignReviewTests
         Assert.Contains(
             detail.AuditTrail,
             entry => entry.ActionType == "AdCampaignRejected" && entry.Reason == "Promoted products do not meet ad policy.");
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        Assert.True(await dbContext.Notifications.AnyAsync(notification =>
+            notification.Type == SellerNotificationTypes.AdCampaignRejected
+            && notification.RelatedEntityId == campaign.AdCampaignId));
     }
 
     [Fact]

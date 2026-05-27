@@ -63,6 +63,33 @@ describe('AdminProductService', () => {
     await expectAsync(rejectPromise).toBeResolved();
     await expectAsync(changesPromise).toBeResolved();
   });
+
+  it('loads and reviews variant revisions', async () => {
+    const listPromise = service.getPendingVariantRevisions();
+    const listRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/admin/products/pending-variant-revisions`);
+    expect(listRequest.request.method).toBe('GET');
+    listRequest.flush([createVariantRevisionSummary()]);
+    await expectAsync(listPromise).toBeResolved();
+
+    const detailPromise = service.getVariantRevision('revision-id');
+    const detailRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/admin/products/variant-revisions/revision-id`);
+    expect(detailRequest.request.method).toBe('GET');
+    detailRequest.flush(createVariantRevisionDetail());
+    await expectAsync(detailPromise).toBeResolved();
+
+    const approvePromise = service.approveVariantRevision('revision-id');
+    const approveRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/admin/products/variant-revisions/revision-id/approve`);
+    expect(approveRequest.request.method).toBe('POST');
+    approveRequest.flush(createVariantRevisionDetail({ status: 'Approved' }));
+    await expectAsync(approvePromise).toBeResolved();
+
+    const rejectPromise = service.rejectVariantRevision('revision-id', { reason: 'Price evidence missing.' });
+    const rejectRequest = httpTestingController.expectOne(`${environment.apiBaseUrl}/api/admin/products/variant-revisions/revision-id/reject`);
+    expect(rejectRequest.request.method).toBe('POST');
+    expect(rejectRequest.request.body).toEqual({ reason: 'Price evidence missing.' });
+    rejectRequest.flush(createVariantRevisionDetail({ status: 'Rejected' }));
+    await expectAsync(rejectPromise).toBeResolved();
+  });
 });
 
 function createProductSummary() {
@@ -100,6 +127,48 @@ function createProductDetail(overrides: Record<string, unknown> = {}) {
     variants: [],
     images: [],
     moderationResults: [],
+    auditTrail: [],
+    ...overrides
+  };
+}
+
+function createVariantRevisionSummary(overrides: Record<string, unknown> = {}) {
+  return {
+    revisionId: 'revision-id',
+    productId: 'product-id',
+    sellerId: 'seller-id',
+    sellerDisplayName: 'Seller Store',
+    sellerVerificationStatus: 'Verified',
+    productTitle: 'Summer Dress',
+    status: 'PendingReview',
+    itemCount: 1,
+    submittedAtUtc: '2026-05-18T12:00:00Z',
+    updatedAtUtc: '2026-05-18T12:00:00Z',
+    ...overrides
+  };
+}
+
+function createVariantRevisionDetail(overrides: Record<string, unknown> = {}) {
+  return {
+    revisionId: 'revision-id',
+    productId: 'product-id',
+    sellerId: 'seller-id',
+    seller: {
+      displayName: 'Seller Store',
+      contactEmail: 'seller@example.test',
+      verificationStatus: 'Verified'
+    },
+    productTitle: 'Summer Dress',
+    productSlug: 'summer-dress',
+    status: 'PendingReview',
+    sellerReason: 'Seasonal price update.',
+    rejectionReason: null,
+    submittedAtUtc: '2026-05-18T12:00:00Z',
+    reviewedAtUtc: null,
+    currentVariants: [],
+    items: [],
+    proposedFinalVariants: [],
+    validationErrors: {},
     auditTrail: [],
     ...overrides
   };

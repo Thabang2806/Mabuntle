@@ -111,6 +111,10 @@ public sealed class PublicProductSearchTests
         using var suspendedResponse = await client.GetAsync("/api/sellers/suspended-seller");
 
         visibleResponse.EnsureSuccessStatusCode();
+        var visibleStorefront = await visibleResponse.Content.ReadFromJsonAsync<PublicSellerStorefrontResponse>();
+        Assert.NotNull(visibleStorefront);
+        Assert.Equal(14, visibleStorefront!.SellerPolicy.ReturnWindowDays);
+        Assert.Contains("original condition", visibleStorefront.SellerPolicy.ReturnPolicy);
         Assert.Equal(HttpStatusCode.NotFound, unpublishedResponse.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, pendingResponse.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, rejectedResponse.StatusCode);
@@ -128,13 +132,19 @@ public sealed class PublicProductSearchTests
         await CreateProductAsync(factory, hiddenSellerId, "Hidden Dress", "hidden-dress", 399m, ProductSeedStatus.Published);
 
         using var searchResponse = await client.GetAsync("/api/products/search?query=dress");
+        using var visibleDetailResponse = await client.GetAsync("/api/products/visible-dress");
         using var hiddenDetailResponse = await client.GetAsync("/api/products/hidden-dress");
 
         searchResponse.EnsureSuccessStatusCode();
+        visibleDetailResponse.EnsureSuccessStatusCode();
         var search = await searchResponse.Content.ReadFromJsonAsync<ProductSearchResponse>();
         Assert.NotNull(search);
         var item = Assert.Single(search!.Items);
         Assert.Equal(visibleProductId, item.ProductId);
+        var detail = await visibleDetailResponse.Content.ReadFromJsonAsync<PublicProductDetailResponse>();
+        Assert.NotNull(detail);
+        Assert.Equal(14, detail!.SellerPolicy.ReturnWindowDays);
+        Assert.Contains("2-3 business days", detail.SellerPolicy.FulfilmentPolicy);
         Assert.Equal(HttpStatusCode.NotFound, hiddenDetailResponse.StatusCode);
     }
 
@@ -182,6 +192,15 @@ public sealed class PublicProductSearchTests
         dbContext.SellerStorefronts.Add(storefront);
         dbContext.SellerAddresses.Add(address);
         dbContext.SellerPayoutProfiles.Add(payout);
+        dbContext.SellerStorePolicies.Add(new SellerStorePolicy(
+            seller.Id,
+            14,
+            "Returns are reviewed for delivered items in original condition.",
+            "Exchanges depend on stock availability.",
+            "Orders are usually dispatched within 2-3 business days.",
+            "Message support with order issues and product questions.",
+            "Follow product care notes on each item.",
+            "Colour and fit may vary slightly by screen and size."));
         await dbContext.SaveChangesAsync();
 
         return seller.Id;

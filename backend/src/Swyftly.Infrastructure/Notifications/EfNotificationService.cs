@@ -1,6 +1,7 @@
 using Swyftly.Application.Notifications;
 using Swyftly.Domain.Buyers;
 using Swyftly.Domain.Notifications;
+using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -16,7 +17,7 @@ public sealed class EfNotificationService(
 {
     private readonly EmailDeliveryOptions emailOptions = emailOptions.Value;
 
-    private static readonly IReadOnlyDictionary<string, string> TypeCategories =
+    private static readonly IReadOnlyDictionary<string, string> BuyerTypeCategories =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["OrderTrackingAdded"] = BuyerNotificationCategory.Orders,
@@ -30,6 +31,23 @@ public sealed class EfNotificationService(
             ["ReviewApproved"] = BuyerNotificationCategory.Reviews,
             ["ReviewRejected"] = BuyerNotificationCategory.Reviews,
             ["SupportReply"] = BuyerNotificationCategory.Support
+        };
+
+    private static readonly IReadOnlyDictionary<string, string> SellerTypeCategories =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [SellerNotificationTypes.SellerVerificationApproved] = SellerNotificationCategory.Verification,
+            [SellerNotificationTypes.SellerVerificationRejected] = SellerNotificationCategory.Verification,
+            [SellerNotificationTypes.SellerSuspended] = SellerNotificationCategory.Verification,
+            [SellerNotificationTypes.ProductApproved] = SellerNotificationCategory.Products,
+            [SellerNotificationTypes.ProductRejected] = SellerNotificationCategory.Products,
+            [SellerNotificationTypes.ProductChangesRequested] = SellerNotificationCategory.Products,
+            [SellerNotificationTypes.ProductListingRevisionApproved] = SellerNotificationCategory.Revisions,
+            [SellerNotificationTypes.ProductListingRevisionRejected] = SellerNotificationCategory.Revisions,
+            [SellerNotificationTypes.ProductVariantRevisionApproved] = SellerNotificationCategory.Revisions,
+            [SellerNotificationTypes.ProductVariantRevisionRejected] = SellerNotificationCategory.Revisions,
+            [SellerNotificationTypes.AdCampaignApproved] = SellerNotificationCategory.Ads,
+            [SellerNotificationTypes.AdCampaignRejected] = SellerNotificationCategory.Ads
         };
 
     public async Task<NotificationResult?> CreateAsync(
@@ -95,14 +113,27 @@ public sealed class EfNotificationService(
         CreateNotificationRequest request,
         CancellationToken cancellationToken)
     {
-        if (!TypeCategories.TryGetValue(request.Type, out var category))
+        if (BuyerTypeCategories.TryGetValue(request.Type, out var category))
         {
-            return new NotificationChannelDecision(
-                IsInAppEnabled: true,
-                IsEmailEnabled: false,
-                RecipientEmail: null);
+            return await ResolveBuyerChannelsAsync(request, category, cancellationToken);
         }
 
+        if (SellerTypeCategories.TryGetValue(request.Type, out var sellerCategory))
+        {
+            return await ResolveSellerChannelsAsync(request, sellerCategory, cancellationToken);
+        }
+
+        return new NotificationChannelDecision(
+            IsInAppEnabled: true,
+            IsEmailEnabled: false,
+            RecipientEmail: null);
+    }
+
+    private async Task<NotificationChannelDecision> ResolveBuyerChannelsAsync(
+        CreateNotificationRequest request,
+        string category,
+        CancellationToken cancellationToken)
+    {
         var buyer = await dbContext.BuyerProfiles
             .Where(profile => profile.UserId == request.RecipientUserId)
             .Select(profile => new
@@ -133,6 +164,43 @@ public sealed class EfNotificationService(
             IsInAppEnabled: preference?.IsEnabled ?? true,
             IsEmailEnabled: preference?.EmailEnabled ?? true,
             RecipientEmail: buyer.UserEmail);
+    }
+
+    private async Task<NotificationChannelDecision> ResolveSellerChannelsAsync(
+        CreateNotificationRequest request,
+        string category,
+        CancellationToken cancellationToken)
+    {
+        var seller = await dbContext.SellerProfiles
+            .Where(profile => profile.UserId == request.RecipientUserId)
+            .Select(profile => new
+            {
+                profile.Id,
+                UserEmail = dbContext.Users
+                    .Where(user => user.Id == profile.UserId)
+                    .Select(user => user.Email)
+                    .SingleOrDefault()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (seller is null)
+        {
+            return new NotificationChannelDecision(
+                IsInAppEnabled: true,
+                IsEmailEnabled: false,
+                RecipientEmail: null);
+        }
+
+        var preference = await dbContext.SellerNotificationPreferences
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                existing => existing.SellerId == seller.Id && existing.Category == category,
+                cancellationToken);
+
+        return new NotificationChannelDecision(
+            IsInAppEnabled: preference?.IsEnabled ?? true,
+            IsEmailEnabled: preference?.EmailEnabled ?? true,
+            RecipientEmail: seller.UserEmail);
     }
 
     public static NotificationResult Map(Notification notification) =>
@@ -174,6 +242,10 @@ public sealed class EfNotificationService(
             "ReturnRequest" when notification.RelatedEntityId.HasValue => $"/account/returns/{notification.RelatedEntityId.Value}",
             "SupportTicket" when notification.RelatedEntityId.HasValue => $"/account/support/{notification.RelatedEntityId.Value}",
             "ProductReview" => "/account/reviews",
+            "SellerProfile" => "/seller",
+            "Product" when notification.RelatedEntityId.HasValue => $"/seller/products/{notification.RelatedEntityId.Value}/edit",
+            "AdCampaign" when notification.RelatedEntityId.HasValue => $"/seller/ads/{notification.RelatedEntityId.Value}",
+            _ when SellerTypeCategories.ContainsKey(notification.Type) => "/seller/notifications",
             _ => "/account/notifications"
         };
 

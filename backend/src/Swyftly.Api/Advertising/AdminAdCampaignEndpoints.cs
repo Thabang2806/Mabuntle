@@ -2,9 +2,11 @@ using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Swyftly.Api.Admin;
+using Swyftly.Api.Notifications;
 using Swyftly.Application.Admin;
 using Swyftly.Application.Advertising;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Notifications;
 using Swyftly.Domain.Advertising;
 using Swyftly.Infrastructure.Persistence;
 using HttpResults = Microsoft.AspNetCore.Http.Results;
@@ -80,6 +82,8 @@ public static class AdminAdCampaignEndpoints
         SwyftlyDbContext dbContext,
         IAdCampaignEligibilityService eligibilityService,
         IAuditLogService auditLogService,
+        INotificationService notificationService,
+        ILoggerFactory loggerFactory,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -130,6 +134,18 @@ public static class AdminAdCampaignEndpoints
             cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await SellerNotificationDispatcher.NotifySellerAsync(
+            campaign.SellerId,
+            SellerNotificationTypes.AdCampaignApproved,
+            "Ad campaign approved",
+            $"Your ad campaign {campaign.Name} has been approved.",
+            "AdCampaign",
+            campaign.Id,
+            timeProvider.GetUtcNow(),
+            dbContext,
+            notificationService,
+            loggerFactory.CreateLogger(nameof(AdminAdCampaignEndpoints)),
+            cancellationToken);
         return HttpResults.Ok(await CreateDetailResponseAsync(campaign.Id, dbContext, eligibilityService, cancellationToken));
     }
 
@@ -141,6 +157,8 @@ public static class AdminAdCampaignEndpoints
         SwyftlyDbContext dbContext,
         IAdCampaignEligibilityService eligibilityService,
         IAuditLogService auditLogService,
+        INotificationService notificationService,
+        ILoggerFactory loggerFactory,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -177,6 +195,18 @@ public static class AdminAdCampaignEndpoints
             cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await SellerNotificationDispatcher.NotifySellerAsync(
+            campaign.SellerId,
+            SellerNotificationTypes.AdCampaignRejected,
+            "Ad campaign rejected",
+            $"Your ad campaign {campaign.Name} was rejected. Reason: {request.Reason.Trim()}",
+            "AdCampaign",
+            campaign.Id,
+            timeProvider.GetUtcNow(),
+            dbContext,
+            notificationService,
+            loggerFactory.CreateLogger(nameof(AdminAdCampaignEndpoints)),
+            cancellationToken);
         return HttpResults.Ok(await CreateDetailResponseAsync(campaign.Id, dbContext, eligibilityService, cancellationToken));
     }
 

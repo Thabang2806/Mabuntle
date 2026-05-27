@@ -16,7 +16,9 @@ describe('SellerInventoryPageComponent', () => {
       'exportInventoryCsv',
       'downloadImportTemplate',
       'previewImport',
-      'bulkAdjust'
+      'bulkAdjust',
+      'listHistory',
+      'listVariantHistory'
     ]);
     inventoryService.listInventory.and.resolveTo([
       createInventoryItem(),
@@ -38,6 +40,8 @@ describe('SellerInventoryPageComponent', () => {
     }));
     inventoryService.previewImport.and.resolveTo(createBulkResponse());
     inventoryService.bulkAdjust.and.resolveTo(createBulkResponse({ changedRows: 1, unchangedRows: 0 }));
+    inventoryService.listHistory.and.resolveTo([createMovement()]);
+    inventoryService.listVariantHistory.and.resolveTo([createMovement()]);
 
     await TestBed.configureTestingModule({
       imports: [SellerInventoryPageComponent],
@@ -61,6 +65,7 @@ describe('SellerInventoryPageComponent', () => {
     expect(compiled.textContent).toContain('10 stock, 2 reserved');
     expect(compiled.textContent).toContain('Leather Belt');
     expect(compiled.textContent).toContain('OutOfStock');
+    expect(compiled.textContent).toContain('6001000000012');
   });
 
   it('filters inventory by search text', async () => {
@@ -133,11 +138,51 @@ describe('SellerInventoryPageComponent', () => {
       items: [{
         variantId: 'variant-id',
         sku: 'SUMMER-DRESS-M-BLACK',
+        barcode: '6001000000012',
         stockQuantity: 8,
         status: 'Active'
       }]
     });
     expect(inventoryService.listInventory).toHaveBeenCalledTimes(2);
+  });
+
+  it('loads movement history for selected variants and filters', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const component = fixture.componentInstance as unknown as {
+      selectItem(item: SellerInventoryItemResponse): void;
+      loadFilteredHistory(): Promise<void>;
+    };
+
+    component.selectItem(createInventoryItem());
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(inventoryService.listVariantHistory).toHaveBeenCalledWith('variant-id');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Recent stock changes');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Stocktake correction');
+
+    await component.loadFilteredHistory();
+    expect(inventoryService.listHistory).toHaveBeenCalled();
+  });
+
+  it('uses scanner quick search to select exact SKU or barcode matches', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const component = fixture.componentInstance as unknown as {
+      scannerTerm: { set(value: string): void };
+      submitScannerSearch(): void;
+    };
+
+    component.scannerTerm.set('6001000000012');
+    component.submitScannerSearch();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(inventoryService.listVariantHistory).toHaveBeenCalledWith('variant-id');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Scanner matched SUMMER-DRESS-M-BLACK');
   });
 });
 
@@ -151,6 +196,7 @@ function createInventoryItem(overrides: Partial<SellerInventoryItemResponse> = {
     primaryImageUrl: null,
     primaryImageAltText: null,
     sku: 'SUMMER-DRESS-M-BLACK',
+    barcode: '6001000000012',
     size: 'M',
     colour: 'Black',
     price: 499.99,
@@ -174,6 +220,7 @@ function createBulkResponse(overrides: Partial<SellerInventoryBulkAdjustmentResp
       rowNumber: 2,
       variantId: 'variant-id',
       sku: 'SUMMER-DRESS-M-BLACK',
+      barcode: '6001000000012',
       productId: 'product-id',
       productTitle: 'Summer Dress',
       productSlug: 'summer-dress',
@@ -188,5 +235,40 @@ function createBulkResponse(overrides: Partial<SellerInventoryBulkAdjustmentResp
       messages: []
     }],
     ...overrides
+  };
+}
+
+function createMovement() {
+  return {
+    movementId: 'movement-id',
+    productId: 'product-id',
+    variantId: 'variant-id',
+    productTitle: 'Summer Dress',
+    productSlug: 'summer-dress',
+    sku: 'SUMMER-DRESS-M-BLACK',
+    barcode: '6001000000012',
+    size: 'M',
+    colour: 'Black',
+    movementType: 'SellerAdjustment' as const,
+    stockQuantityBefore: 10,
+    stockQuantityAfter: 7,
+    reservedQuantityBefore: 2,
+    reservedQuantityAfter: 2,
+    quantityDelta: -3,
+    reservedQuantityDelta: 0,
+    statusBefore: 'Active' as const,
+    statusAfter: 'Inactive' as const,
+    source: 'SellerInventoryAdjust',
+    reason: 'Stocktake correction',
+    actorUserId: 'seller-user-id',
+    batchReference: null,
+    cartId: null,
+    orderId: null,
+    reservationId: null,
+    paymentId: null,
+    returnRequestId: null,
+    refundId: null,
+    relatedRoute: null,
+    occurredAtUtc: '2026-05-21T08:00:00Z'
   };
 }

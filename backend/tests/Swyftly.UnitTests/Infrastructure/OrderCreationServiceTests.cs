@@ -43,6 +43,9 @@ public class OrderCreationServiceTests
         Assert.Equal("Standard courier", result.Value.DeliveryMethodName);
         Assert.Equal("Standard", result.Value.DeliveryMethodType);
         Assert.Equal("Leave with reception if needed.", result.Value.DeliveryAddress!.DeliveryInstructions);
+        Assert.NotNull(result.Value.SellerPolicySnapshot);
+        Assert.Equal(14, result.Value.SellerPolicySnapshot!.ReturnWindowDays);
+        Assert.Equal("Returns are reviewed for delivered items in original condition.", result.Value.SellerPolicySnapshot.ReturnPolicy);
         var item = Assert.Single(result.Value.Items);
         Assert.Equal(product.Id, item.ProductId);
         Assert.Equal(variant.Id, item.ProductVariantId);
@@ -147,6 +150,15 @@ public class OrderCreationServiceTests
             10,
             isActive: true);
         var variant = new ProductVariant(product.Id, "SKU-1", "M", "Black", price, price + 100, stockQuantity: 5);
+        var storePolicy = new SellerStorePolicy(
+            product.SellerId,
+            14,
+            "Returns are reviewed for delivered items in original condition.",
+            "Exchanges depend on stock availability.",
+            "Orders are usually dispatched within 2-3 business days.",
+            "Message support with order issues and product questions.",
+            "Follow product care notes on each item.",
+            "Colour and fit may vary slightly by screen and size.");
         var cart = new Cart(buyer.Id);
         cart.AddOrUpdateItem(
             product.Id,
@@ -163,6 +175,7 @@ public class OrderCreationServiceTests
         dbContext.BuyerProfiles.Add(buyer);
         dbContext.Products.Add(product);
         dbContext.SellerDeliveryMethods.Add(deliveryMethod);
+        dbContext.SellerStorePolicies.Add(storePolicy);
         dbContext.ProductVariants.Add(variant);
         dbContext.Carts.Add(cart);
         await dbContext.SaveChangesAsync();

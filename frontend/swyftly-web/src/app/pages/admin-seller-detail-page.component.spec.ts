@@ -4,6 +4,7 @@ import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/route
 import { AdminSellerDetailResponse } from '../admin/admin-seller.models';
 import { AdminSellerService } from '../admin/admin-seller.service';
 import { AdminSellerDetailPageComponent } from './admin-seller-detail-page.component';
+import { createSellerPolicy } from './shop-page.component.spec';
 
 describe('AdminSellerDetailPageComponent', () => {
   let fixture: ComponentFixture<AdminSellerDetailPageComponent>;
@@ -12,7 +13,7 @@ describe('AdminSellerDetailPageComponent', () => {
   beforeEach(async () => {
     adminSellerService = jasmine.createSpyObj<AdminSellerService>(
       'AdminSellerService',
-      ['getSeller', 'approveSeller', 'rejectSeller', 'suspendSeller']);
+      ['getSeller', 'approveSeller', 'rejectSeller', 'suspendSeller', 'downloadVerificationEvidence']);
     adminSellerService.getSeller.and.resolveTo(createSellerDetail());
     adminSellerService.approveSeller.and.resolveTo(createSellerDetail({
       verificationStatus: 'Verified',
@@ -52,6 +53,7 @@ describe('AdminSellerDetailPageComponent', () => {
         createdAtUtc: '2026-05-18T12:40:00Z'
       }]
     }));
+    adminSellerService.downloadVerificationEvidence.and.resolveTo(new Blob(['evidence'], { type: 'application/pdf' }));
 
     await TestBed.configureTestingModule({
       imports: [AdminSellerDetailPageComponent],
@@ -83,6 +85,10 @@ describe('AdminSellerDetailPageComponent', () => {
     expect(compiled.textContent).toContain('RegisteredBusiness');
     expect(compiled.textContent).toContain('Review completeness');
     expect(compiled.textContent).toContain('Profile');
+    expect(compiled.textContent).toContain('Store policies');
+    expect(compiled.textContent).toContain('Returns are reviewed');
+    expect(compiled.textContent).toContain('Verification evidence');
+    expect(compiled.textContent).toContain('registration.pdf');
     expect(compiled.textContent).toContain('SellerSubmitted');
   });
 
@@ -152,6 +158,20 @@ describe('AdminSellerDetailPageComponent', () => {
     expect(adminSellerService.suspendSeller).toHaveBeenCalledWith('seller-id', { reason: 'Policy issue.' });
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Seller suspended.');
   });
+
+  it('downloads seller verification evidence from the review panel', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const downloadButton = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Download'));
+    downloadButton?.dispatchEvent(new Event('click'));
+
+    await fixture.whenStable();
+
+    expect(adminSellerService.downloadVerificationEvidence).toHaveBeenCalledWith('seller-id', 'evidence-id');
+  });
 });
 
 function createSellerDetail(overrides: Partial<AdminSellerDetailResponse> = {}): AdminSellerDetailResponse {
@@ -185,6 +205,18 @@ function createSellerDetail(overrides: Partial<AdminSellerDetailResponse> = {}):
       hasSubmittedPlaceholder: true,
       isAdminApproved: false
     },
+    storePolicy: createSellerPolicy(),
+    verificationEvidence: [{
+      evidenceId: 'evidence-id',
+      evidenceType: 'BusinessRegistration',
+      originalFileName: 'registration.pdf',
+      contentType: 'application/pdf',
+      byteSize: 1234,
+      sha256Hash: 'hash',
+      note: 'CIPC registration document',
+      uploadedAtUtc: '2026-05-26T10:00:00Z',
+      removedAtUtc: null
+    }],
     auditTrail: [{
       id: 'audit-id',
       actionType: 'SellerSubmitted',

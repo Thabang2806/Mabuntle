@@ -35,6 +35,12 @@ import { getApiErrorMessage } from '../auth/api-error';
         <p>Select published products, set campaign dates, and submit the draft for review when ready.</p>
       </div>
 
+      <div class="route-card">
+        <span class="status-pill">Eligibility gate</span>
+        <h2>Campaigns promote live products only</h2>
+        <p>Choose products that are published, in stock, and free of blocking moderation issues. Admin approval is required before any promoted placement becomes active.</p>
+      </div>
+
       @if (errorMessage()) {
         <p class="auth-alert error" role="alert">{{ errorMessage() }}</p>
       }

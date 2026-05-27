@@ -88,6 +88,20 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 <a mat-stroked-button routerLink="/account/support">Contact support</a>
               }
             </section>
+
+            <section class="buyer-panel">
+              <h2>Store policy snapshot</h2>
+              <p>This is the seller policy copied when the original order was created.</p>
+              @if (sellerPolicySnapshotEntries().length > 0) {
+                <dl class="seller-facts">
+                  @for (entry of sellerPolicySnapshotEntries(); track entry.label) {
+                    <div><dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd></div>
+                  }
+                </dl>
+              } @else {
+                <app-ui-alert tone="info">This return does not have checkout-time store-policy context.</app-ui-alert>
+              }
+            </section>
           </div>
 
           <section class="buyer-panel">
@@ -188,6 +202,23 @@ export class BuyerReturnDetailPageComponent implements OnInit {
     }
 
     return 'neutral';
+  }
+
+  protected sellerPolicySnapshotEntries(): { label: string; value: string }[] {
+    const snapshot = this.returnRequest()?.sellerPolicySnapshot;
+    if (!snapshot) {
+      return [];
+    }
+
+    return [
+      snapshot.returnWindowDays === null ? null : { label: 'Return window', value: `${snapshot.returnWindowDays} day${snapshot.returnWindowDays === 1 ? '' : 's'}` },
+      snapshot.returnPolicy ? { label: 'Returns', value: snapshot.returnPolicy } : null,
+      snapshot.exchangePolicy ? { label: 'Exchanges', value: snapshot.exchangePolicy } : null,
+      snapshot.fulfilmentPolicy ? { label: 'Fulfilment', value: snapshot.fulfilmentPolicy } : null,
+      snapshot.supportPolicy ? { label: 'Support', value: snapshot.supportPolicy } : null,
+      snapshot.careInstructions ? { label: 'Care', value: snapshot.careInstructions } : null,
+      snapshot.productDisclaimer ? { label: 'Disclaimer', value: snapshot.productDisclaimer } : null
+    ].filter((entry): entry is { label: string; value: string } => entry !== null);
   }
 
   private async loadReturn(): Promise<void> {

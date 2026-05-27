@@ -11,9 +11,11 @@ import {
   SellerProductDetailResponse,
   SellerProductRevisionResponse,
   SellerProductSummaryResponse,
+  SellerProductVariantRevisionResponse,
   UpdateSellerProductImageRequest,
   UpsertSellerProductRequest,
   UpsertSellerProductRevisionRequest,
+  UpsertSellerProductVariantRevisionRequest,
   UpsertSellerProductVariantRequest
 } from './seller-product.models';
 
@@ -127,6 +129,24 @@ export class SellerProductService {
 
   cancelRevision(productId: string): Promise<SellerProductRevisionResponse> {
     return firstValueFrom(this.http.post<SellerProductRevisionResponse>(`${this.productBaseUrl}/${productId}/revision/cancel`, {}));
+  }
+
+  getVariantRevision(productId: string): Promise<SellerProductVariantRevisionResponse> {
+    return firstValueFrom(this.http.get<SellerProductVariantRevisionResponse>(`${this.productBaseUrl}/${productId}/variant-revision`));
+  }
+
+  updateVariantRevision(
+    productId: string,
+    request: UpsertSellerProductVariantRevisionRequest): Promise<SellerProductVariantRevisionResponse> {
+    return firstValueFrom(this.http.put<SellerProductVariantRevisionResponse>(`${this.productBaseUrl}/${productId}/variant-revision`, request));
+  }
+
+  submitVariantRevisionForReview(productId: string): Promise<SellerProductVariantRevisionResponse> {
+    return firstValueFrom(this.http.post<SellerProductVariantRevisionResponse>(`${this.productBaseUrl}/${productId}/variant-revision/submit-review`, {}));
+  }
+
+  cancelVariantRevision(productId: string): Promise<SellerProductVariantRevisionResponse> {
+    return firstValueFrom(this.http.post<SellerProductVariantRevisionResponse>(`${this.productBaseUrl}/${productId}/variant-revision/cancel`, {}));
   }
 
   generateAiSuggestion(

@@ -6,7 +6,7 @@ import { BuyerWishlistStateService } from '../buyer/buyer-wishlist-state.service
 import { CartService } from '../cart/cart.service';
 import { PublicCatalogService } from '../shop/public-catalog.service';
 import { ProductDetailPageComponent } from './product-detail-page.component';
-import { createProduct } from './shop-page.component.spec';
+import { createProduct, createSellerPolicy } from './shop-page.component.spec';
 
 describe('ProductDetailPageComponent', () => {
   let fixture: ComponentFixture<ProductDetailPageComponent>;
@@ -92,7 +92,8 @@ describe('ProductDetailPageComponent', () => {
         price: 499,
         compareAtPrice: 599,
         inStock: true
-      }]
+      }],
+      sellerPolicy: createSellerPolicy()
     });
 
     await TestBed.configureTestingModule({
@@ -133,6 +134,8 @@ describe('ProductDetailPageComponent', () => {
     expect(compiled.textContent).toContain('A full product description.');
     expect(compiled.textContent).toContain('Cotton');
     expect(compiled.textContent).toContain('Great fit');
+    expect(compiled.textContent).toContain('Seller policies');
+    expect(compiled.textContent).toContain('Returns are reviewed');
     expect(compiled.querySelector('.product-gallery-shell')).not.toBeNull();
     expect(compiled.querySelector('.product-purchase-panel')).not.toBeNull();
     expect(compiled.querySelector('.variant-option.active')?.textContent).toContain('M');
@@ -200,7 +203,8 @@ describe('ProductDetailPageComponent', () => {
         price: 499,
         compareAtPrice: null,
         inStock: true
-      }]
+      }],
+      sellerPolicy: createSellerPolicy()
     });
 
     fixture = TestBed.createComponent(ProductDetailPageComponent);

@@ -15,7 +15,10 @@ using Swyftly.Api.Authentication;
 using Swyftly.Api.Sellers;
 using Swyftly.Application.Identity;
 using Swyftly.Domain.Ai;
+using Swyftly.Domain.Buyers;
+using Swyftly.Domain.Carts;
 using Swyftly.Domain.Catalog;
+using Swyftly.Domain.Inventory;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Persistence;
 
@@ -112,6 +115,107 @@ public sealed class SellerProductDraftTests
     }
 
     [Fact]
+    public async Task PublishedVariantRevision_Submit_DoesNotChangeLiveVariants()
+    {
+        using var factory = new SellerProductDraftTestFactory();
+        using var client = factory.CreateClient();
+        var seller = await RegisterAndLoginSellerAsync(client, "variant-revision-seller@example.test");
+        await MarkSellerVerifiedAsync(factory, seller.UserId);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", seller.AccessToken);
+        var product = await CreateProductAsync(client, title: "Live Variant Product");
+        var productWithVariant = await AddVariantAsync(client, product.ProductId, sku: "LIVE-SKU-M-BLACK");
+        await AddImageAsync(client, product.ProductId, isPrimary: true);
+        await SubmitAndPublishProductAsync(client, factory, product.ProductId);
+        var liveVariant = productWithVariant.Variants.Single();
+
+        using var updateResponse = await client.PutAsJsonAsync(
+            $"/api/seller/products/{product.ProductId}/variant-revision",
+            new UpsertSellerProductVariantRevisionRequest(
+                "Seasonal pricing and size expansion.",
+                [
+                    new UpsertSellerProductVariantRevisionItemRequest(
+                        "Update",
+                        liveVariant.VariantId,
+                        "LIVE-SKU-M-BLACK-UPDATED",
+                        "M",
+                        "Black",
+                        599.99m,
+                        799.99m,
+                        null,
+                        "BAR-UPDATED"),
+                    new UpsertSellerProductVariantRevisionItemRequest(
+                        "Add",
+                        null,
+                        "LIVE-SKU-L-BLACK",
+                        "L",
+                        "Black",
+                        649.99m,
+                        849.99m,
+                        5,
+                        "BAR-NEW")
+                ]));
+        updateResponse.EnsureSuccessStatusCode();
+
+        using var submitResponse = await client.PostAsync(
+            $"/api/seller/products/{product.ProductId}/variant-revision/submit-review",
+            null);
+        submitResponse.EnsureSuccessStatusCode();
+        var revision = await submitResponse.Content.ReadFromJsonAsync<SellerProductVariantRevisionResponse>();
+
+        Assert.NotNull(revision);
+        Assert.Equal("PendingReview", revision!.Status);
+        Assert.Contains(revision.ProposedFinalVariants, variant => variant.Sku == "LIVE-SKU-M-BLACK-UPDATED" && variant.Price == 599.99m);
+        Assert.Contains(revision.ProposedFinalVariants, variant => variant.Sku == "LIVE-SKU-L-BLACK" && variant.StockQuantity == 5);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        var liveVariants = await dbContext.ProductVariants
+            .Where(variant => variant.ProductId == product.ProductId)
+            .ToListAsync();
+
+        var persistedLiveVariant = Assert.Single(liveVariants);
+        Assert.Equal("LIVE-SKU-M-BLACK", persistedLiveVariant.Sku);
+        Assert.Equal(499.99m, persistedLiveVariant.Price);
+    }
+
+    [Fact]
+    public async Task PublishedVariantRevision_DeactivateRejectsActiveCartItems()
+    {
+        using var factory = new SellerProductDraftTestFactory();
+        using var client = factory.CreateClient();
+        var seller = await RegisterAndLoginSellerAsync(client, "variant-revision-cart-seller@example.test");
+        await MarkSellerVerifiedAsync(factory, seller.UserId);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", seller.AccessToken);
+        var product = await CreateProductAsync(client, title: "Cart Guard Product");
+        var productWithVariant = await AddVariantAsync(client, product.ProductId, sku: "CART-GUARD-M-BLACK");
+        await AddImageAsync(client, product.ProductId, isPrimary: true);
+        await SubmitAndPublishProductAsync(client, factory, product.ProductId);
+        var liveVariant = productWithVariant.Variants.Single();
+        await AddActiveCartItemAsync(factory, product.ProductId, liveVariant.VariantId);
+
+        using var response = await client.PutAsJsonAsync(
+            $"/api/seller/products/{product.ProductId}/variant-revision",
+            new UpsertSellerProductVariantRevisionRequest(
+                "Remove unavailable size.",
+                [
+                    new UpsertSellerProductVariantRevisionItemRequest(
+                        "Deactivate",
+                        liveVariant.VariantId,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null)
+                ]));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Seller_CannotAccessAnotherSellersProduct()
     {
         using var factory = new SellerProductDraftTestFactory();
@@ -192,6 +296,15 @@ public sealed class SellerProductDraftTests
         Assert.Equal("ProductVariant", auditLog.EntityType);
         Assert.Equal(variantId.ToString(), auditLog.EntityId);
         Assert.Equal("Seasonal stocktake", auditLog.Reason);
+
+        var movement = await dbContext.InventoryMovements.SingleAsync(item => item.ProductVariantId == variantId);
+        Assert.Equal(InventoryMovementType.SellerAdjustment, movement.MovementType);
+        Assert.Equal(10, movement.StockQuantityBefore);
+        Assert.Equal(8, movement.StockQuantityAfter);
+        Assert.Equal(-2, movement.QuantityDelta);
+        Assert.Equal(ProductVariantStatus.Active, movement.StatusBefore);
+        Assert.Equal(ProductVariantStatus.OutOfStock, movement.StatusAfter);
+        Assert.Equal("Seasonal stocktake", movement.Reason);
     }
 
     [Fact]
@@ -279,7 +392,7 @@ public sealed class SellerProductDraftTests
         var exportCsv = await exportResponse.Content.ReadAsStringAsync();
         var templateCsv = await templateResponse.Content.ReadAsStringAsync();
 
-        Assert.Contains("\"variantId\",\"sku\",\"productTitle\"", exportCsv);
+        Assert.Contains("\"variantId\",\"sku\",\"barcode\",\"productTitle\"", exportCsv);
         Assert.Contains(withVariant.Variants.Single().VariantId.ToString(), exportCsv);
         Assert.Contains("EXPORT-DRESS-M-BLACK", exportCsv);
         Assert.Contains("\"stockQuantity\",\"status\"", templateCsv);
@@ -371,6 +484,87 @@ public sealed class SellerProductDraftTests
         Assert.Equal(9, variantTwo.StockQuantity);
         Assert.Equal(ProductVariantStatus.OutOfStock, variantTwo.Status);
         Assert.Equal(2, await dbContext.AuditLogs.CountAsync(audit => audit.ActionType == "SellerInventoryBulkAdjusted"));
+        Assert.Equal(2, await dbContext.InventoryMovements.CountAsync(movement => movement.MovementType == InventoryMovementType.BulkImportAdjustment));
+        Assert.Single(await dbContext.InventoryMovements
+            .Where(movement => movement.ProductVariantId == productOneWithVariant.Variants.Single().VariantId)
+            .Select(movement => movement.BatchReference)
+            .ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task SellerInventory_History_IsScopedAndFiltersBySkuBarcodeAndMovementType()
+    {
+        using var factory = new SellerProductDraftTestFactory();
+        using var client = factory.CreateClient();
+        var sellerOne = await RegisterAndLoginSellerAsync(client, "inventory-history-owner@example.test");
+        var sellerTwo = await RegisterAndLoginSellerAsync(client, "inventory-history-other@example.test");
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sellerOne.AccessToken);
+        var product = await CreateProductAsync(client, title: "History Dress");
+        var withVariant = await AddVariantAsync(client, product.ProductId, sku: "HISTORY-DRESS-M-BLACK", barcode: "6001000000012");
+        var variantId = withVariant.Variants.Single().VariantId;
+
+        using var adjustResponse = await client.PostAsJsonAsync(
+            $"/api/seller/inventory/{variantId}/adjust",
+            new AdjustSellerInventoryRequest(7, "Inactive", "Cycle count correction"));
+        adjustResponse.EnsureSuccessStatusCode();
+
+        using var skuHistoryResponse = await client.GetAsync(
+            "/api/seller/inventory/history?sku=HISTORY-DRESS-M-BLACK&movementType=SellerAdjustment");
+        using var barcodeHistoryResponse = await client.GetAsync(
+            "/api/seller/inventory/history?barcode=6001000000012");
+        using var variantHistoryResponse = await client.GetAsync($"/api/seller/inventory/{variantId}/history");
+
+        skuHistoryResponse.EnsureSuccessStatusCode();
+        barcodeHistoryResponse.EnsureSuccessStatusCode();
+        variantHistoryResponse.EnsureSuccessStatusCode();
+        var skuHistory = await skuHistoryResponse.Content.ReadFromJsonAsync<IReadOnlyCollection<SellerInventoryMovementResponse>>();
+        var barcodeHistory = await barcodeHistoryResponse.Content.ReadFromJsonAsync<IReadOnlyCollection<SellerInventoryMovementResponse>>();
+        var variantHistory = await variantHistoryResponse.Content.ReadFromJsonAsync<IReadOnlyCollection<SellerInventoryMovementResponse>>();
+
+        Assert.NotNull(skuHistory);
+        var movement = Assert.Single(skuHistory!);
+        Assert.Equal(variantId, movement.VariantId);
+        Assert.Equal("6001000000012", movement.Barcode);
+        Assert.Equal("SellerAdjustment", movement.MovementType);
+        Assert.Equal("Cycle count correction", movement.Reason);
+        Assert.Single(barcodeHistory!);
+        Assert.Single(variantHistory!);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sellerTwo.AccessToken);
+        using var otherSellerHistoryResponse = await client.GetAsync($"/api/seller/inventory/{variantId}/history");
+        Assert.Equal(HttpStatusCode.NotFound, otherSellerHistoryResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task SellerInventory_BulkAdjust_DoesNotCreateMovementForUnchangedRows()
+    {
+        using var factory = new SellerProductDraftTestFactory();
+        using var client = factory.CreateClient();
+        var seller = await RegisterAndLoginSellerAsync(client, "inventory-bulk-unchanged-seller@example.test");
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", seller.AccessToken);
+        var product = await CreateProductAsync(client);
+        var withVariant = await AddVariantAsync(client, product.ProductId, sku: "BULK-UNCHANGED-DRESS", barcode: "6001000000013");
+        var variantId = withVariant.Variants.Single().VariantId;
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/seller/inventory/bulk-adjust",
+            new BulkAdjustSellerInventoryRequest(
+                "No-op stocktake",
+                [
+                    new BulkAdjustSellerInventoryItemRequest(null, null, 10, "Active", "6001000000013")
+                ]));
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<SellerInventoryBulkAdjustmentResponse>();
+        Assert.NotNull(result);
+        Assert.Equal(0, result!.ChangedRows);
+        Assert.Equal(1, result.UnchangedRows);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        Assert.Empty(await dbContext.InventoryMovements.Where(movement => movement.ProductVariantId == variantId).ToArrayAsync());
     }
 
     [Fact]
@@ -838,7 +1032,8 @@ public sealed class SellerProductDraftTests
         string sku = "SUMMER-DRESS-M-BLACK",
         string size = "M",
         string colour = "Black",
-        int stockQuantity = 10)
+        int stockQuantity = 10,
+        string? barcode = null)
     {
         using var response = await client.PostAsJsonAsync(
             $"/api/seller/products/{productId}/variants",
@@ -851,7 +1046,7 @@ public sealed class SellerProductDraftTests
                 stockQuantity,
                 0,
                 "Active",
-                null));
+                barcode));
         response.EnsureSuccessStatusCode();
 
         var product = await response.Content.ReadFromJsonAsync<SellerProductDetailResponse>();
@@ -987,6 +1182,34 @@ public sealed class SellerProductDraftTests
         var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
         var variant = await dbContext.ProductVariants.SingleAsync(item => item.Id == variantId);
         variant.Reserve(quantity);
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task AddActiveCartItemAsync(
+        SellerProductDraftTestFactory factory,
+        Guid productId,
+        Guid variantId)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        var product = await dbContext.Products.SingleAsync(item => item.Id == productId);
+        var variant = await dbContext.ProductVariants.SingleAsync(item => item.Id == variantId);
+        var buyer = new BuyerProfile(Guid.NewGuid());
+        var cart = new Cart(buyer.Id);
+        cart.AddOrUpdateItem(
+            product.Id,
+            variant.Id,
+            product.SellerId,
+            product.Title,
+            variant.Sku,
+            variant.Size,
+            variant.Colour,
+            variant.Price,
+            1,
+            variant.AvailableQuantity);
+
+        dbContext.BuyerProfiles.Add(buyer);
+        dbContext.Carts.Add(cart);
         await dbContext.SaveChangesAsync();
     }
 

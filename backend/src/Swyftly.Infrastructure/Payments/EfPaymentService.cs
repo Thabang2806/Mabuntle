@@ -11,6 +11,7 @@ using Swyftly.Domain.Carts;
 using Swyftly.Domain.Inventory;
 using Swyftly.Domain.Orders;
 using Swyftly.Domain.Payments;
+using Swyftly.Infrastructure.Inventory;
 using Swyftly.Infrastructure.Persistence;
 
 namespace Swyftly.Infrastructure.Payments;
@@ -275,7 +276,33 @@ public sealed class EfPaymentService(
             .ToListAsync(cancellationToken);
         foreach (var reservation in reservations)
         {
+            var alreadyRecorded = await dbContext.InventoryMovements.AnyAsync(
+                movement => movement.MovementType == InventoryMovementType.ReservationConfirmed
+                    && movement.ReservationId == reservation.Id
+                    && movement.PaymentId == payment.Id,
+                cancellationToken);
+            var snapshot = alreadyRecorded
+                ? null
+                : await InventoryMovementRecorder.LoadSnapshotAsync(
+                    dbContext,
+                    reservation.ProductVariantId,
+                    cancellationToken);
             reservation.Confirm(now);
+            if (!alreadyRecorded && snapshot is not null)
+            {
+                dbContext.InventoryMovements.Add(InventoryMovementRecorder.CreateContext(
+                    snapshot,
+                    InventoryMovementType.ReservationConfirmed,
+                    "PaymentWebhookPaid",
+                    "Signed payment webhook confirmed the checkout reservation; stock quantity was not deducted automatically.",
+                    actorUserId: null,
+                    batchReference: null,
+                    occurredAtUtc: now,
+                    cartId: order.CartId,
+                    orderId: order.Id,
+                    reservationId: reservation.Id,
+                    paymentId: payment.Id));
+            }
         }
 
         var ledgerResult = await ledgerService.CreateSuccessfulPaymentEntriesAsync(
@@ -318,6 +345,10 @@ public sealed class EfPaymentService(
             .ToListAsync(cancellationToken);
         foreach (var reservation in reservations)
         {
+            var beforeRelease = await InventoryMovementRecorder.LoadSnapshotAsync(
+                dbContext,
+                reservation.ProductVariantId,
+                cancellationToken);
             var variant = await dbContext.ProductVariants.SingleOrDefaultAsync(
                 variant => variant.Id == reservation.ProductVariantId,
                 cancellationToken);
@@ -327,6 +358,34 @@ public sealed class EfPaymentService(
             }
 
             reservation.Cancel(now);
+            if (variant is not null && beforeRelease is not null)
+            {
+                var afterRelease = beforeRelease with
+                {
+                    ReservedQuantity = beforeRelease.ReservedQuantity - reservation.Quantity
+                };
+                var alreadyRecorded = await dbContext.InventoryMovements.AnyAsync(
+                    movement => movement.MovementType == InventoryMovementType.PaymentFailedReservationReleased
+                        && movement.ReservationId == reservation.Id
+                        && movement.PaymentId == payment.Id,
+                    cancellationToken);
+                if (!alreadyRecorded)
+                {
+                    dbContext.InventoryMovements.Add(InventoryMovementRecorder.Create(
+                        beforeRelease,
+                        afterRelease,
+                        InventoryMovementType.PaymentFailedReservationReleased,
+                        "PaymentWebhookFailed",
+                        "Payment failed or was cancelled before settlement, so the checkout reservation was released.",
+                        actorUserId: null,
+                        batchReference: null,
+                        occurredAtUtc: now,
+                        cartId: order.CartId,
+                        orderId: order.Id,
+                        reservationId: reservation.Id,
+                        paymentId: payment.Id));
+                }
+            }
         }
     }
 

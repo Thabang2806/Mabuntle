@@ -130,6 +130,21 @@
   font-weight: 700;
 }
 
+.auth-context-link {
+  width: fit-content;
+  color: var(--swyftly-accent);
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.auth-context-link:hover,
+.auth-context-link:focus-visible {
+  color: var(--swyftly-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.25rem;
+}
+
 .market-home {
   display: grid;
   gap: 1rem;
@@ -254,6 +269,200 @@
 
 .market-showcase-card strong {
   font-size: 1.45rem;
+}
+
+.sell-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.sell-hero {
+  width: min(1280px, calc(100% - 2rem));
+  min-height: 460px;
+  margin: clamp(1rem, 3vw, 2.25rem) auto 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 470px);
+  gap: clamp(1.25rem, 4vw, 3rem);
+  align-items: center;
+  padding: clamp(1.25rem, 4vw, 3rem);
+  border: 1px solid rgb(232 214 199 / 96%);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 88% 22%, rgb(243 217 214 / 82%), transparent 30%),
+    linear-gradient(115deg, rgb(255 255 255 / 95%), rgb(244 237 231 / 76%)),
+    var(--swyftly-background);
+  box-shadow: var(--swyftly-shadow);
+}
+
+.sell-hero-copy {
+  max-width: 760px;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.sell-hero h1 {
+  color: var(--swyftly-primary);
+}
+
+.sell-hero p {
+  max-width: 650px;
+  color: var(--swyftly-muted);
+  font-size: 1.05rem;
+}
+
+.sell-hero-visual {
+  min-height: 380px;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 58%);
+  border-radius: 22px;
+  background: var(--swyftly-primary);
+  box-shadow: 0 24px 52px rgb(58 29 50 / 16%);
+}
+
+.sell-hero-visual app-product-visual-fallback {
+  min-height: 280px;
+  display: block;
+}
+
+.sell-hero-note {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  color: #fff9f4;
+  background: linear-gradient(135deg, rgb(42 20 37 / 94%), rgb(91 35 71 / 88%));
+}
+
+.sell-hero-note strong {
+  font-family: var(--swyftly-editorial-font);
+  font-size: 1.3rem;
+  font-weight: 400;
+}
+
+.sell-hero-note span {
+  color: rgb(255 249 244 / 78%);
+}
+
+.sell-section {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.sell-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.sell-step-card {
+  min-height: 210px;
+  display: grid;
+  align-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem;
+  border: 1px solid rgb(232 214 199 / 100%);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 98%), rgb(255 250 245 / 92%)),
+    var(--swyftly-surface);
+  box-shadow: 0 18px 50px rgb(58 29 50 / 8%);
+}
+
+.sell-step-card span {
+  width: 2.4rem;
+  height: 2.4rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgb(183 110 121 / 36%);
+  border-radius: 999px;
+  color: var(--swyftly-primary);
+  background: rgb(243 217 214 / 56%);
+  font-weight: 900;
+}
+
+.sell-step-card h2,
+.sell-policy-card h2,
+.sell-deferred-panel h2 {
+  color: var(--swyftly-primary);
+  font-family: var(--swyftly-editorial-font);
+  font-weight: 400;
+}
+
+.sell-step-card p {
+  color: var(--swyftly-muted);
+}
+
+.sell-readiness-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  gap: 1rem;
+  align-items: start;
+}
+
+.sell-readiness-layout > div:first-child,
+.sell-policy-card,
+.sell-deferred-panel {
+  border: 1px solid rgb(232 214 199 / 100%);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 98%), rgb(255 250 245 / 92%)),
+    var(--swyftly-surface);
+  box-shadow: 0 18px 50px rgb(58 29 50 / 8%);
+}
+
+.sell-readiness-layout > div:first-child {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.sell-checklist {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.sell-checklist span {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgb(232 214 199 / 88%);
+  border-radius: 999px;
+  color: var(--swyftly-text);
+  background: rgb(255 255 255 / 76%);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.sell-policy-card {
+  position: sticky;
+  top: 7rem;
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.25rem;
+}
+
+.sell-policy-card p,
+.sell-deferred-panel p {
+  color: var(--swyftly-muted);
+}
+
+.sell-card-footnote {
+  color: var(--swyftly-accent);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.sell-deferred-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1.25rem;
+}
+
+.sell-deferred-panel > div:first-child {
+  display: grid;
+  gap: 0.75rem;
 }
 
 .market-home-section {
@@ -2142,8 +2351,12 @@
   .cart-item,
   .ui-page-header,
   .market-home-hero,
+  .sell-hero,
   .market-home-seller-band,
+  .sell-readiness-layout,
+  .sell-deferred-panel,
   .market-featured-grid,
+  .sell-steps-grid,
     .hf-workspace-shell,
     .page:has(> app-admin-workspace-nav),
     .page:has(> app-seller-workspace-nav),
@@ -2159,6 +2372,18 @@
 
   .market-home-hero {
     min-height: auto;
+  }
+
+  .sell-hero {
+    min-height: auto;
+  }
+
+  .sell-policy-card {
+    position: static;
+  }
+
+  .sell-checklist {
+    grid-template-columns: 1fr;
   }
 
   .ai-chat-panel {

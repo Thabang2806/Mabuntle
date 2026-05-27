@@ -5,6 +5,7 @@ using Swyftly.Application.Common.Validation;
 using Swyftly.Application.Delivery;
 using Swyftly.Application.Inventory;
 using Swyftly.Application.Orders;
+using Swyftly.Application.Sellers;
 using Swyftly.Domain.Buyers;
 using Swyftly.Domain.Carts;
 using Swyftly.Domain.Delivery;
@@ -126,6 +127,9 @@ public sealed class EfOrderCreationService(
             return Result<OrderResult>.Failure(reservationResult.Error);
         }
 
+        var sellerPolicy = await dbContext.SellerStorePolicies
+            .SingleOrDefaultAsync(policy => policy.SellerId == cart.SellerId.Value, cancellationToken);
+
         var order = new Order(
             cart.BuyerId,
             cart.SellerId.Value,
@@ -139,6 +143,7 @@ public sealed class EfOrderCreationService(
             deliveryMethodResult.Value.DeliveryMethod,
             deliveryMethodResult.Value.ShippingAmount);
         order.SetPickupPoint(pickupPointResult.Value);
+        order.SetSellerPolicySnapshot(sellerPolicy, request.StartedAtUtc);
 
         foreach (var item in cart.Items.OrderBy(item => item.CreatedAtUtc))
         {
@@ -325,7 +330,8 @@ public sealed class EfOrderCreationService(
             order.DeliveryMethodType,
             order.DeliveryEstimatedMinDays,
             order.DeliveryEstimatedMaxDays,
-            MapPickupPoint(order.PickupPoint));
+            MapPickupPoint(order.PickupPoint),
+            MapSellerPolicySnapshot(order.SellerPolicySnapshot));
 
     private async Task<Result<ResolvedDeliveryMethod>> ResolveDeliveryMethodAsync(
         Guid sellerId,
@@ -560,6 +566,19 @@ public sealed class EfOrderCreationService(
                 pickupPoint.Latitude,
                 pickupPoint.Longitude,
                 pickupPoint.OpeningHours);
+
+    private static SellerPolicySnapshotResponse? MapSellerPolicySnapshot(OrderSellerPolicySnapshot? snapshot) =>
+        snapshot is null
+            ? null
+            : new SellerPolicySnapshotResponse(
+                snapshot.ReturnWindowDays,
+                snapshot.ReturnPolicy,
+                snapshot.ExchangePolicy,
+                snapshot.FulfilmentPolicy,
+                snapshot.SupportPolicy,
+                snapshot.CareInstructions,
+                snapshot.ProductDisclaimer,
+                snapshot.SnapshotAtUtc);
 
     private static string ToCamelCase(string value) =>
         string.IsNullOrEmpty(value) ? value : char.ToLowerInvariant(value[0]) + value[1..];

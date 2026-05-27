@@ -24,5 +24,6 @@ describe('HomePageComponent', () => {
     expect(compiled.querySelectorAll('.market-feature-card').length).toBe(4);
     expect(compiled.textContent).toContain('Shop local style, beauty, and jewellery. Swyftly.');
     expect(compiled.textContent).toContain('Live inventory still comes from the shop APIs.');
+    expect(compiled.querySelector('a[href="/sell"]')?.textContent).toContain('Start selling');
   });
 });

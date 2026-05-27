@@ -63,7 +63,10 @@
               [routerLinkActiveOptions]="{ exact: true }"
               ariaCurrentWhenActive="page"
             >
-              {{ item.label }}
+              <span>{{ item.label }}</span>
+              @if (item.badge && item.badge > 0) {
+                <span class="nav-badge" [attr.aria-label]="item.badge + ' unread seller notifications'">{{ item.badge }}</span>
+              }
             </a>
           }
 
@@ -112,6 +115,7 @@
   <footer class="footer">
     <span>Swyftly marketplace</span>
     <span>Fashion, beauty, jewellery, and accessories</span>
+    <a class="nav-link" routerLink="/sell">Sell on Swyftly</a>
   </footer>
 
   <app-mobile-bottom-nav [items]="mobileNavigationItems()" />
@@ -124,6 +128,17 @@
       </div>
       <a [routerLink]="notificationRoute(notification)" (click)="notificationRealtime.dismissLatestNotification()">Open</a>
       <button type="button" aria-label="Dismiss notification" (click)="notificationRealtime.dismissLatestNotification()">Close</button>
+    </aside>
+  }
+
+  @if (sellerNotificationRealtime.latestNotification(); as notification) {
+    <aside class="notification-toast" aria-live="polite">
+      <div>
+        <strong>{{ notification.title }}</strong>
+        <p>{{ notification.message }}</p>
+      </div>
+      <a [routerLink]="sellerNotificationRoute(notification)" (click)="sellerNotificationRealtime.dismissLatestNotification()">Open</a>
+      <button type="button" aria-label="Dismiss notification" (click)="sellerNotificationRealtime.dismissLatestNotification()">Close</button>
     </aside>
   }
 </div>

@@ -1,3 +1,6 @@
+import { SellerPolicyResponse } from '../shared/seller-policy.models';
+import { SellerVerificationEvidenceResponse } from '../seller/seller-verification-evidence.models';
+
 export interface AdminSellerSummaryResponse {
   sellerId: string;
   displayName: string | null;
@@ -20,6 +23,8 @@ export interface AdminSellerDetailResponse {
   storefront: AdminSellerStorefrontResponse | null;
   address: AdminSellerAddressResponse | null;
   payout: AdminSellerPayoutResponse | null;
+  storePolicy: SellerPolicyResponse;
+  verificationEvidence: SellerVerificationEvidenceResponse[];
   auditTrail: AdminAuditLogResponse[];
 }
 

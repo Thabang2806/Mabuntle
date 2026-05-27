@@ -4,6 +4,7 @@ import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/route
 import { BuyerReturnRequestResult } from '../buyer/buyer-return.models';
 import { BuyerReturnService } from '../buyer/buyer-return.service';
 import { BuyerReturnDetailPageComponent } from './buyer-return-detail-page.component';
+import { createSellerPolicySnapshot } from './shop-page.component.spec';
 
 describe('BuyerReturnDetailPageComponent', () => {
   let fixture: ComponentFixture<BuyerReturnDetailPageComponent>;
@@ -48,6 +49,7 @@ describe('BuyerReturnDetailPageComponent', () => {
 
     expect(returnService.disputeReturn).toHaveBeenCalledWith('return-id', { reason: 'Please review.' });
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Return dispute opened.');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Store policy snapshot');
   });
 });
 
@@ -76,6 +78,7 @@ function createReturn(overrides: Partial<BuyerReturnRequestResult> = {}): BuyerR
       note: 'Photo available'
     }],
     messages: [],
+    sellerPolicySnapshot: createSellerPolicySnapshot(),
     ...overrides
   };
 }

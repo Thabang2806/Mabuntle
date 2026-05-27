@@ -32,4 +32,10 @@ export class AdminSellerService {
   suspendSeller(sellerId: string, request: AdminSellerReasonRequest): Promise<AdminSellerDetailResponse> {
     return firstValueFrom(this.http.post<AdminSellerDetailResponse>(`${this.baseUrl}/${sellerId}/suspend`, request));
   }
+
+  downloadVerificationEvidence(sellerId: string, evidenceId: string): Promise<Blob> {
+    return firstValueFrom(
+      this.http.get(`${this.baseUrl}/${sellerId}/verification-evidence/${evidenceId}/download`, { responseType: 'blob' })
+    );
+  }
 }

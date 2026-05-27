@@ -56,6 +56,27 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           </article>
         </section>
 
+        <section class="route-card seller-policy-context">
+          <div class="storefront-products-header">
+            <div>
+              <h2>Store policies</h2>
+              <p>Current seller guidance. Checkout keeps a copy of these policies on new orders.</p>
+            </div>
+          </div>
+          @if (sellerPolicyEntries().length > 0) {
+            <div class="settings-summary-list">
+              @for (entry of sellerPolicyEntries(); track entry.label) {
+                <div>
+                  <span>{{ entry.label }}</span>
+                  <strong>{{ entry.value }}</strong>
+                </div>
+              }
+            </div>
+          } @else {
+            <app-ui-alert tone="info">This seller has not added detailed store policies yet. Buyer support remains available through order and account workflows.</app-ui-alert>
+          }
+        </section>
+
         @if ((storefront()?.products?.length ?? 0) === 0) {
           <app-empty-state
             eyebrow="No products"
@@ -116,5 +137,20 @@ export class SellerStorefrontPageComponent implements OnInit {
 
   protected storefrontInitial(): string {
     return this.storefront()?.storeName?.trim().charAt(0).toUpperCase() || 'S';
+  }
+
+  protected sellerPolicyEntries(): { label: string; value: string }[] {
+    const policy = this.storefront()?.sellerPolicy;
+    if (!policy) {
+      return [];
+    }
+
+    return [
+      policy.returnWindowDays === null ? null : { label: 'Return window', value: `${policy.returnWindowDays} day${policy.returnWindowDays === 1 ? '' : 's'}` },
+      policy.returnPolicy ? { label: 'Returns', value: policy.returnPolicy } : null,
+      policy.exchangePolicy ? { label: 'Exchanges', value: policy.exchangePolicy } : null,
+      policy.fulfilmentPolicy ? { label: 'Fulfilment', value: policy.fulfilmentPolicy } : null,
+      policy.supportPolicy ? { label: 'Support', value: policy.supportPolicy } : null
+    ].filter((entry): entry is { label: string; value: string } => entry !== null);
   }
 }

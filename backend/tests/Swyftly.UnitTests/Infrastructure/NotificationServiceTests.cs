@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Swyftly.Application.Notifications;
 using Swyftly.Domain.Buyers;
+using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Identity;
 using Swyftly.Infrastructure.Notifications;
 using Swyftly.Infrastructure.Persistence;
@@ -83,6 +84,75 @@ public sealed class NotificationServiceTests
         Assert.Single(await dbContext.Notifications.ToListAsync());
     }
 
+    [Fact]
+    public async Task CreateAsync_QueuesSellerTransactionalEmail()
+    {
+        await using var dbContext = CreateDbContext();
+        var userId = await SeedSellerAsync(dbContext);
+        var publisher = new RecordingNotificationRealtimePublisher();
+        var service = CreateService(dbContext, publisher);
+
+        var result = await service.CreateAsync(new CreateNotificationRequest(
+            userId,
+            SellerNotificationTypes.ProductApproved,
+            "Product approved",
+            "Your product was approved.",
+            "Product",
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow));
+
+        Assert.NotNull(result);
+        Assert.Single(publisher.Created);
+        var delivery = Assert.Single(await dbContext.NotificationEmailDeliveries.ToListAsync());
+        Assert.Contains("/seller/products/", delivery.Body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RespectsSellerNotificationPreferences()
+    {
+        await using var dbContext = CreateDbContext();
+        var userId = await SeedSellerAsync(dbContext, seller =>
+        {
+            dbContext.SellerNotificationPreferences.Add(new SellerNotificationPreference(
+                seller.Id,
+                SellerNotificationCategory.Products,
+                isEnabled: false,
+                emailEnabled: true));
+            dbContext.SellerNotificationPreferences.Add(new SellerNotificationPreference(
+                seller.Id,
+                SellerNotificationCategory.Ads,
+                isEnabled: false,
+                emailEnabled: false));
+        });
+        var publisher = new RecordingNotificationRealtimePublisher();
+        var service = CreateService(dbContext, publisher);
+
+        var emailOnly = await service.CreateAsync(new CreateNotificationRequest(
+            userId,
+            SellerNotificationTypes.ProductRejected,
+            "Product rejected",
+            "Your product needs edits.",
+            "Product",
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow));
+        var suppressed = await service.CreateAsync(new CreateNotificationRequest(
+            userId,
+            SellerNotificationTypes.AdCampaignRejected,
+            "Ad rejected",
+            "Your ad needs edits.",
+            "AdCampaign",
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow.AddMinutes(1)));
+
+        Assert.NotNull(emailOnly);
+        Assert.Null(suppressed);
+        Assert.Empty(publisher.Created);
+
+        var notification = Assert.Single(await dbContext.Notifications.ToListAsync());
+        Assert.False(notification.IsInAppVisible);
+        Assert.Single(await dbContext.NotificationEmailDeliveries.ToListAsync());
+    }
+
     private static EfNotificationService CreateService(
         SwyftlyDbContext dbContext,
         INotificationRealtimePublisher publisher) =>
@@ -113,6 +183,26 @@ public sealed class NotificationServiceTests
         dbContext.BuyerProfiles.Add(buyer);
         await dbContext.SaveChangesAsync();
         configurePreferences?.Invoke(buyer);
+        await dbContext.SaveChangesAsync();
+        return user.Id;
+    }
+
+    private static async Task<Guid> SeedSellerAsync(
+        SwyftlyDbContext dbContext,
+        Action<SellerProfile>? configurePreferences = null)
+    {
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = $"seller-{Guid.NewGuid():N}@example.test",
+            Email = $"seller-{Guid.NewGuid():N}@example.test",
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        };
+        var seller = new SellerProfile(user.Id);
+        dbContext.Users.Add(user);
+        dbContext.SellerProfiles.Add(seller);
+        await dbContext.SaveChangesAsync();
+        configurePreferences?.Invoke(seller);
         await dbContext.SaveChangesAsync();
         return user.Id;
     }

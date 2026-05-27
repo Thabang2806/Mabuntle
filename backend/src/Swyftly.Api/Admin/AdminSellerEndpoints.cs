@@ -1,8 +1,12 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Swyftly.Api.Notifications;
+using Swyftly.Api.Sellers;
 using Swyftly.Application.Admin;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Notifications;
+using Swyftly.Application.Sellers;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Persistence;
 using HttpResults = Microsoft.AspNetCore.Http.Results;
@@ -28,6 +32,11 @@ public static class AdminSellerEndpoints
             .WithName("GetAdminSellerDetail")
             .WithSummary("Returns seller verification detail for admin review.")
             .Produces<AdminSellerDetailResponse>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{sellerId:guid}/verification-evidence/{evidenceId:guid}/download", DownloadVerificationEvidenceAsync)
+            .WithName("DownloadAdminSellerVerificationEvidence")
+            .WithSummary("Downloads private seller verification evidence for admin review.")
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         group.MapPost("/{sellerId:guid}/approve", ApproveAsync)
@@ -96,12 +105,68 @@ public static class AdminSellerEndpoints
         return detail is null ? SellerNotFound() : HttpResults.Ok(detail);
     }
 
+    private static async Task<IResult> DownloadVerificationEvidenceAsync(
+        Guid sellerId,
+        Guid evidenceId,
+        ClaimsPrincipal principal,
+        HttpContext httpContext,
+        SwyftlyDbContext dbContext,
+        ISellerVerificationEvidenceStorage storage,
+        IAuditLogService auditLogService,
+        CancellationToken cancellationToken)
+    {
+        var evidence = await dbContext.SellerVerificationEvidence
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == evidenceId && item.SellerId == sellerId && item.RemovedAtUtc == null, cancellationToken);
+        if (evidence is null)
+        {
+            return EvidenceNotFound();
+        }
+
+        var readFile = await storage.OpenReadAsync(
+            evidence.StorageKey,
+            evidence.ContentType,
+            evidence.OriginalFileName,
+            cancellationToken);
+        if (readFile is null)
+        {
+            return EvidenceNotFound();
+        }
+
+        var actorUserId = GetActorUserId(principal);
+        var actorRole = principal.IsInRole(SwyftlyRoles.SuperAdmin)
+            ? SwyftlyRoles.SuperAdmin
+            : SwyftlyRoles.Admin;
+        await auditLogService.RecordAsync(
+            new CreateAuditLogEntry(
+                actorUserId?.ToString(),
+                actorRole,
+                "SellerVerificationEvidenceDownloaded",
+                "SellerVerificationEvidence",
+                evidence.Id.ToString(),
+                null,
+                JsonSerializer.Serialize(new
+                {
+                    evidence.SellerId,
+                    evidence.EvidenceType,
+                    evidence.OriginalFileName
+                }),
+                null,
+                httpContext.Connection.RemoteIpAddress?.ToString()),
+            cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return HttpResults.File(readFile.Content, readFile.ContentType, readFile.FileName);
+    }
+
     private static async Task<IResult> ApproveAsync(
         Guid sellerId,
         ClaimsPrincipal principal,
         HttpContext httpContext,
         SwyftlyDbContext dbContext,
         IAuditLogService auditLogService,
+        INotificationService notificationService,
+        ILoggerFactory loggerFactory,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -152,6 +217,18 @@ public static class AdminSellerEndpoints
         }, cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await SellerNotificationDispatcher.NotifySellerAsync(
+            seller.Id,
+            SellerNotificationTypes.SellerVerificationApproved,
+            "Seller verification approved",
+            "Your seller account has been approved. You can now submit products for marketplace review.",
+            "SellerProfile",
+            seller.Id,
+            timeProvider.GetUtcNow(),
+            dbContext,
+            notificationService,
+            loggerFactory.CreateLogger(nameof(AdminSellerEndpoints)),
+            cancellationToken);
 
         return HttpResults.Ok(await CreateDetailResponseAsync(sellerId, dbContext, cancellationToken));
     }
@@ -163,6 +240,8 @@ public static class AdminSellerEndpoints
         HttpContext httpContext,
         SwyftlyDbContext dbContext,
         IAuditLogService auditLogService,
+        INotificationService notificationService,
+        ILoggerFactory loggerFactory,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -197,6 +276,18 @@ public static class AdminSellerEndpoints
         }, cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await SellerNotificationDispatcher.NotifySellerAsync(
+            seller.Id,
+            SellerNotificationTypes.SellerVerificationRejected,
+            "Seller verification rejected",
+            $"Your seller verification was rejected. Reason: {request.Reason.Trim()}",
+            "SellerProfile",
+            seller.Id,
+            timeProvider.GetUtcNow(),
+            dbContext,
+            notificationService,
+            loggerFactory.CreateLogger(nameof(AdminSellerEndpoints)),
+            cancellationToken);
 
         return HttpResults.Ok(await CreateDetailResponseAsync(sellerId, dbContext, cancellationToken));
     }
@@ -208,6 +299,8 @@ public static class AdminSellerEndpoints
         HttpContext httpContext,
         SwyftlyDbContext dbContext,
         IAuditLogService auditLogService,
+        INotificationService notificationService,
+        ILoggerFactory loggerFactory,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -237,6 +330,18 @@ public static class AdminSellerEndpoints
             cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await SellerNotificationDispatcher.NotifySellerAsync(
+            seller.Id,
+            SellerNotificationTypes.SellerSuspended,
+            "Seller account suspended",
+            $"Your seller account has been suspended. Reason: {request.Reason.Trim()}",
+            "SellerProfile",
+            seller.Id,
+            timeProvider.GetUtcNow(),
+            dbContext,
+            notificationService,
+            loggerFactory.CreateLogger(nameof(AdminSellerEndpoints)),
+            cancellationToken);
 
         return HttpResults.Ok(await CreateDetailResponseAsync(sellerId, dbContext, cancellationToken));
     }
@@ -263,6 +368,12 @@ public static class AdminSellerEndpoints
                 auditLog.ActorRole,
                 auditLog.Reason,
                 auditLog.CreatedAtUtc))
+            .ToListAsync(cancellationToken);
+        var evidence = await dbContext.SellerVerificationEvidence
+            .AsNoTracking()
+            .Where(item => item.SellerId == sellerId && item.RemovedAtUtc == null)
+            .OrderBy(item => item.EvidenceType)
+            .ThenByDescending(item => item.UploadedAtUtc)
             .ToListAsync(cancellationToken);
 
         return new AdminSellerDetailResponse(
@@ -298,6 +409,8 @@ public static class AdminSellerEndpoints
                     related.PayoutProfile.PayoutProviderReference,
                     related.PayoutProfile.HasSubmittedPlaceholder,
                     related.PayoutProfile.IsAdminApproved),
+            SellerPolicyResponseMapper.Map(related.StorePolicy),
+            evidence.Select(SellerVerificationEvidenceResponseMapper.Map).ToList(),
             auditTrail);
     }
 
@@ -309,8 +422,9 @@ public static class AdminSellerEndpoints
         var storefront = await dbContext.SellerStorefronts.SingleOrDefaultAsync(item => item.SellerId == sellerId, cancellationToken);
         var address = await dbContext.SellerAddresses.SingleOrDefaultAsync(item => item.SellerId == sellerId, cancellationToken);
         var payoutProfile = await dbContext.SellerPayoutProfiles.SingleOrDefaultAsync(item => item.SellerId == sellerId, cancellationToken);
+        var storePolicy = await dbContext.SellerStorePolicies.SingleOrDefaultAsync(item => item.SellerId == sellerId, cancellationToken);
 
-        return new SellerRelatedData(storefront, address, payoutProfile);
+        return new SellerRelatedData(storefront, address, payoutProfile, storePolicy);
     }
 
     private static async Task AddAuditLogAsync(
@@ -379,10 +493,17 @@ public static class AdminSellerEndpoints
             detail: "Seller was not found.",
             statusCode: StatusCodes.Status404NotFound);
 
+    private static IResult EvidenceNotFound() =>
+        HttpResults.Problem(
+            title: "AdminSellers.VerificationEvidenceNotFound",
+            detail: "Seller verification evidence was not found.",
+            statusCode: StatusCodes.Status404NotFound);
+
     private sealed record SellerRelatedData(
         SellerStorefront? Storefront,
         SellerAddress? Address,
-        SellerPayoutProfilePlaceholder? PayoutProfile);
+        SellerPayoutProfilePlaceholder? PayoutProfile,
+        SellerStorePolicy? StorePolicy);
 }
 
 public sealed record AdminSellerSummaryResponse(
@@ -406,6 +527,8 @@ public sealed record AdminSellerDetailResponse(
     AdminSellerStorefrontResponse? Storefront,
     AdminSellerAddressResponse? Address,
     AdminSellerPayoutResponse? Payout,
+    SellerPolicyResponse StorePolicy,
+    IReadOnlyCollection<SellerVerificationEvidenceResponse> VerificationEvidence,
     IReadOnlyCollection<AdminAuditLogResponse> AuditTrail);
 
 public sealed record AdminSellerStorefrontResponse(

@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { SellerReturnRequestResult } from '../seller/seller-return.models';
 import { SellerReturnService } from '../seller/seller-return.service';
 import { SellerReturnsPageComponent } from './seller-returns-page.component';
+import { createSellerPolicySnapshot } from './shop-page.component.spec';
 
 describe('SellerReturnsPageComponent', () => {
   let fixture: ComponentFixture<SellerReturnsPageComponent>;
@@ -64,6 +65,7 @@ export function createReturnRequest(
       note: null
     }],
     messages: [],
+    sellerPolicySnapshot: createSellerPolicySnapshot(),
     ...overrides
   };
 }

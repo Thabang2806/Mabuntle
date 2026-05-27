@@ -8,6 +8,7 @@ using Swyftly.Api.Security;
 using Swyftly.Application.Admin;
 using Swyftly.Application.Identity;
 using Swyftly.Domain.Catalog;
+using Swyftly.Domain.Inventory;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Persistence;
 using HttpResults = Microsoft.AspNetCore.Http.Results;
@@ -22,6 +23,7 @@ public static class SellerInventoryEndpoints
     [
         "variantId",
         "sku",
+        "barcode",
         "productTitle",
         "productSlug",
         "size",
@@ -58,6 +60,13 @@ public static class SellerInventoryEndpoints
             .Produces(StatusCodes.Status200OK, contentType: "text/csv")
             .ProducesProblem(StatusCodes.Status404NotFound);
 
+        group.MapGet("/history", ListInventoryHistoryAsync)
+            .WithName("ListSellerInventoryHistory")
+            .WithSummary("Lists seller inventory movement history across owned variants.")
+            .Produces<IReadOnlyCollection<SellerInventoryMovementResponse>>(StatusCodes.Status200OK)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
         group.MapPost("/import/preview", PreviewInventoryImportAsync)
             .WithName("PreviewSellerInventoryImport")
             .WithSummary("Previews a seller inventory CSV import without changing data.")
@@ -78,6 +87,13 @@ public static class SellerInventoryEndpoints
             .WithName("AdjustSellerInventory")
             .WithSummary("Adjusts stock quantity and variant status for an owned product variant.")
             .Produces<SellerInventoryItemResponse>(StatusCodes.Status200OK)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapGet("/{variantId:guid}/history", ListVariantInventoryHistoryAsync)
+            .WithName("ListSellerVariantInventoryHistory")
+            .WithSummary("Lists seller inventory movement history for a single owned variant.")
+            .Produces<IReadOnlyCollection<SellerInventoryMovementResponse>>(StatusCodes.Status200OK)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
@@ -136,6 +152,108 @@ public static class SellerInventoryEndpoints
         return HttpResults.Text(BuildInventoryCsv([]), "text/csv", Encoding.UTF8);
     }
 
+    private static async Task<IResult> ListInventoryHistoryAsync(
+        [FromQuery] Guid? productId,
+        [FromQuery] Guid? variantId,
+        [FromQuery] string? sku,
+        [FromQuery] string? barcode,
+        [FromQuery] string? movementType,
+        [FromQuery] Guid? orderId,
+        [FromQuery] Guid? cartId,
+        [FromQuery] Guid? reservationId,
+        [FromQuery] Guid? paymentId,
+        [FromQuery] Guid? returnRequestId,
+        [FromQuery] Guid? refundId,
+        [FromQuery] DateTimeOffset? fromUtc,
+        [FromQuery] DateTimeOffset? toUtc,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var seller = await GetCurrentSellerAsync(principal, dbContext, cancellationToken);
+        if (seller is null)
+        {
+            return SellerNotFound();
+        }
+
+        if (fromUtc.HasValue && toUtc.HasValue && fromUtc.Value > toUtc.Value)
+        {
+            return Validation("dateRange", "fromUtc must be earlier than toUtc.");
+        }
+
+        InventoryMovementType? parsedMovementType = null;
+        if (!string.IsNullOrWhiteSpace(movementType))
+        {
+            if (!Enum.TryParse<InventoryMovementType>(movementType, ignoreCase: true, out var parsed)
+                || !Enum.IsDefined(parsed))
+            {
+                return Validation("movementType", $"Movement type must be one of: {string.Join(", ", Enum.GetNames<InventoryMovementType>())}.");
+            }
+
+            parsedMovementType = parsed;
+        }
+
+        var items = await CreateInventoryHistoryQuery(
+                dbContext,
+                seller.Id,
+                productId,
+                variantId,
+                sku,
+                barcode,
+                parsedMovementType,
+                orderId,
+                cartId,
+                reservationId,
+                paymentId,
+                returnRequestId,
+                refundId,
+                fromUtc,
+                toUtc)
+            .ToListAsync(cancellationToken);
+
+        return HttpResults.Ok(items.Select(MapMovementResponse).ToArray());
+    }
+
+    private static async Task<IResult> ListVariantInventoryHistoryAsync(
+        Guid variantId,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var seller = await GetCurrentSellerAsync(principal, dbContext, cancellationToken);
+        if (seller is null)
+        {
+            return SellerNotFound();
+        }
+
+        var ownsVariant = await CreateInventoryQuery(dbContext, seller.Id, variantId)
+            .AnyAsync(cancellationToken);
+        if (!ownsVariant)
+        {
+            return VariantNotFound();
+        }
+
+        var items = await CreateInventoryHistoryQuery(
+                dbContext,
+                seller.Id,
+                productId: null,
+                variantId,
+                sku: null,
+                barcode: null,
+                movementType: null,
+                orderId: null,
+                cartId: null,
+                reservationId: null,
+                paymentId: null,
+                returnRequestId: null,
+                refundId: null,
+                fromUtc: null,
+                toUtc: null)
+            .ToListAsync(cancellationToken);
+
+        return HttpResults.Ok(items.Select(MapMovementResponse).ToArray());
+    }
+
     private static async Task<IResult> PreviewInventoryImportAsync(
         IFormFile file,
         ClaimsPrincipal principal,
@@ -183,6 +301,7 @@ public static class SellerInventoryEndpoints
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
         IAuditLogService auditLogService,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var seller = await GetCurrentSellerAsync(principal, dbContext, cancellationToken);
@@ -214,6 +333,9 @@ public static class SellerInventoryEndpoints
         }
 
         var previousValue = CreateAuditSnapshot(variant);
+        var previousStockQuantity = variant.StockQuantity;
+        var previousReservedQuantity = variant.ReservedQuantity;
+        var previousStatus = variant.Status;
 
         try
         {
@@ -223,6 +345,23 @@ public static class SellerInventoryEndpoints
         {
             return Validation("inventory", exception.Message);
         }
+
+        dbContext.InventoryMovements.Add(new InventoryMovement(
+            seller.Id,
+            variant.ProductId,
+            variant.Id,
+            InventoryMovementType.SellerAdjustment,
+            previousStockQuantity,
+            variant.StockQuantity,
+            previousReservedQuantity,
+            variant.ReservedQuantity,
+            previousStatus,
+            variant.Status,
+            "SellerInventoryAdjust",
+            reason,
+            GetActorUserId(principal),
+            batchReference: null,
+            timeProvider.GetUtcNow()));
 
         await auditLogService.RecordAsync(
             new CreateAuditLogEntry(
@@ -249,6 +388,7 @@ public static class SellerInventoryEndpoints
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
         IAuditLogService auditLogService,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var seller = await GetCurrentSellerAsync(principal, dbContext, cancellationToken);
@@ -299,12 +439,33 @@ public static class SellerInventoryEndpoints
         var variants = await dbContext.ProductVariants
             .Where(variant => variantIds.Contains(variant.Id))
             .ToDictionaryAsync(variant => variant.Id, cancellationToken);
+        var batchReference = $"bulk-{Guid.NewGuid():N}";
 
         foreach (var row in changeRows)
         {
             var variant = variants[row.VariantId!.Value];
             var previousValue = CreateAuditSnapshot(variant);
+            var previousStockQuantity = variant.StockQuantity;
+            var previousReservedQuantity = variant.ReservedQuantity;
+            var previousStatus = variant.Status;
             variant.AdjustInventory(row.ProposedStockQuantity!.Value, Enum.Parse<ProductVariantStatus>(row.ProposedStatus!, ignoreCase: true));
+
+            dbContext.InventoryMovements.Add(new InventoryMovement(
+                seller.Id,
+                variant.ProductId,
+                variant.Id,
+                InventoryMovementType.BulkImportAdjustment,
+                previousStockQuantity,
+                variant.StockQuantity,
+                previousReservedQuantity,
+                variant.ReservedQuantity,
+                previousStatus,
+                variant.Status,
+                "SellerInventoryBulkImport",
+                reason,
+                GetActorUserId(principal),
+                batchReference,
+                timeProvider.GetUtcNow()));
 
             await auditLogService.RecordAsync(
                 new CreateAuditLogEntry(
@@ -335,6 +496,10 @@ public static class SellerInventoryEndpoints
         var bySku = inventory
             .GroupBy(item => item.Sku, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+        var byBarcode = inventory
+            .Where(item => !string.IsNullOrWhiteSpace(item.Barcode))
+            .GroupBy(item => item.Barcode!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
         var seenTargets = new HashSet<Guid>();
         var rows = new List<SellerInventoryBulkAdjustmentRowResponse>();
         var rowNumber = 1;
@@ -355,6 +520,7 @@ public static class SellerInventoryEndpoints
             }
 
             var sku = item.Sku?.Trim();
+            var barcode = item.Barcode?.Trim();
             if (!string.IsNullOrWhiteSpace(sku))
             {
                 if (!bySku.TryGetValue(sku, out var skuMatches))
@@ -375,9 +541,29 @@ public static class SellerInventoryEndpoints
                 }
             }
 
-            if (!item.VariantId.HasValue && string.IsNullOrWhiteSpace(sku))
+            if (!string.IsNullOrWhiteSpace(barcode))
             {
-                messages.Add("Either variantId or SKU is required.");
+                if (!byBarcode.TryGetValue(barcode, out var barcodeMatches))
+                {
+                    messages.Add("Barcode was not found for this seller.");
+                }
+                else if (barcodeMatches.Length > 1)
+                {
+                    messages.Add("Barcode matches multiple variants; use variantId for this row.");
+                }
+                else if (target is not null && barcodeMatches[0].VariantId != target.VariantId)
+                {
+                    messages.Add("Variant id, SKU, and barcode must refer to the same variant.");
+                }
+                else
+                {
+                    target ??= barcodeMatches[0];
+                }
+            }
+
+            if (!item.VariantId.HasValue && string.IsNullOrWhiteSpace(sku) && string.IsNullOrWhiteSpace(barcode))
+            {
+                messages.Add("Either variantId, SKU, or barcode is required.");
             }
 
             if (!Enum.TryParse<ProductVariantStatus>(item.Status, ignoreCase: true, out var parsedStatus)
@@ -417,6 +603,7 @@ public static class SellerInventoryEndpoints
                 rowNumber,
                 target?.VariantId ?? item.VariantId,
                 string.IsNullOrWhiteSpace(sku) ? target?.Sku : sku,
+                string.IsNullOrWhiteSpace(barcode) ? target?.Barcode : barcode,
                 target?.ProductId,
                 target?.ProductTitle,
                 target?.ProductSlug,
@@ -469,8 +656,8 @@ public static class SellerInventoryEndpoints
             .Select(item => new SellerInventoryItemResponse(
                 item.Product.Id,
                 item.Variant.Id,
-                item.Product.Title,
-                item.Product.Slug,
+                item.Product.Title ?? string.Empty,
+                item.Product.Slug ?? string.Empty,
                 item.Product.Status.ToString(),
                 dbContext.ProductImages
                     .Where(image => image.ProductId == item.Product.Id)
@@ -492,8 +679,217 @@ public static class SellerInventoryEndpoints
                 item.Variant.ReservedQuantity,
                 item.Variant.StockQuantity - item.Variant.ReservedQuantity,
                 item.Variant.Status.ToString(),
+                item.Variant.Barcode,
                 item.Variant.UpdatedAtUtc));
     }
+
+    private static IQueryable<SellerInventoryMovementProjection> CreateInventoryHistoryQuery(
+        SwyftlyDbContext dbContext,
+        Guid sellerId,
+        Guid? productId,
+        Guid? variantId,
+        string? sku,
+        string? barcode,
+        InventoryMovementType? movementType,
+        Guid? orderId,
+        Guid? cartId,
+        Guid? reservationId,
+        Guid? paymentId,
+        Guid? returnRequestId,
+        Guid? refundId,
+        DateTimeOffset? fromUtc,
+        DateTimeOffset? toUtc)
+    {
+        var query = dbContext.InventoryMovements
+            .AsNoTracking()
+            .Join(
+                dbContext.ProductVariants.AsNoTracking(),
+                movement => movement.ProductVariantId,
+                variant => variant.Id,
+                (movement, variant) => new { Movement = movement, Variant = variant })
+            .Join(
+                dbContext.Products.AsNoTracking(),
+                item => item.Movement.ProductId,
+                product => product.Id,
+                (item, product) => new { item.Movement, item.Variant, Product = product })
+            .Where(item => item.Movement.SellerId == sellerId);
+
+        if (productId.HasValue)
+        {
+            query = query.Where(item => item.Movement.ProductId == productId.Value);
+        }
+
+        if (variantId.HasValue)
+        {
+            query = query.Where(item => item.Movement.ProductVariantId == variantId.Value);
+        }
+
+        var trimmedSku = sku?.Trim();
+        if (!string.IsNullOrWhiteSpace(trimmedSku))
+        {
+            query = query.Where(item => item.Variant.Sku == trimmedSku);
+        }
+
+        var trimmedBarcode = barcode?.Trim();
+        if (!string.IsNullOrWhiteSpace(trimmedBarcode))
+        {
+            query = query.Where(item => item.Variant.Barcode == trimmedBarcode);
+        }
+
+        if (movementType.HasValue)
+        {
+            query = query.Where(item => item.Movement.MovementType == movementType.Value);
+        }
+
+        if (orderId.HasValue)
+        {
+            query = query.Where(item => item.Movement.OrderId == orderId.Value);
+        }
+
+        if (cartId.HasValue)
+        {
+            query = query.Where(item => item.Movement.CartId == cartId.Value);
+        }
+
+        if (reservationId.HasValue)
+        {
+            query = query.Where(item => item.Movement.ReservationId == reservationId.Value);
+        }
+
+        if (paymentId.HasValue)
+        {
+            query = query.Where(item => item.Movement.PaymentId == paymentId.Value);
+        }
+
+        if (returnRequestId.HasValue)
+        {
+            query = query.Where(item => item.Movement.ReturnRequestId == returnRequestId.Value);
+        }
+
+        if (refundId.HasValue)
+        {
+            query = query.Where(item => item.Movement.RefundId == refundId.Value);
+        }
+
+        if (fromUtc.HasValue)
+        {
+            query = query.Where(item => item.Movement.OccurredAtUtc >= fromUtc.Value);
+        }
+
+        if (toUtc.HasValue)
+        {
+            query = query.Where(item => item.Movement.OccurredAtUtc <= toUtc.Value);
+        }
+
+        return query
+            .OrderByDescending(item => item.Movement.OccurredAtUtc)
+            .ThenBy(item => item.Product.Title)
+            .ThenBy(item => item.Variant.Sku)
+            .Select(item => new SellerInventoryMovementProjection(
+                item.Movement.Id,
+                item.Movement.ProductId,
+                item.Movement.ProductVariantId,
+                item.Product.Title ?? string.Empty,
+                item.Product.Slug ?? string.Empty,
+                item.Variant.Sku,
+                item.Variant.Barcode,
+                item.Variant.Size,
+                item.Variant.Colour,
+                item.Movement.MovementType.ToString(),
+                item.Movement.StockQuantityBefore,
+                item.Movement.StockQuantityAfter,
+                item.Movement.ReservedQuantityBefore,
+                item.Movement.ReservedQuantityAfter,
+                item.Movement.QuantityDelta,
+                item.Movement.ReservedQuantityAfter - item.Movement.ReservedQuantityBefore,
+                item.Movement.StatusBefore.ToString(),
+                item.Movement.StatusAfter.ToString(),
+                item.Movement.Source,
+                item.Movement.Reason,
+                item.Movement.ActorUserId,
+                item.Movement.BatchReference,
+                item.Movement.CartId,
+                item.Movement.OrderId,
+                item.Movement.ReservationId,
+                item.Movement.PaymentId,
+                item.Movement.ReturnRequestId,
+                item.Movement.RefundId,
+                item.Movement.OccurredAtUtc));
+    }
+
+    private static SellerInventoryMovementResponse MapMovementResponse(SellerInventoryMovementProjection movement) =>
+        new(
+            movement.MovementId,
+            movement.ProductId,
+            movement.VariantId,
+            movement.ProductTitle,
+            movement.ProductSlug,
+            movement.Sku,
+            movement.Barcode,
+            movement.Size,
+            movement.Colour,
+            movement.MovementType,
+            movement.StockQuantityBefore,
+            movement.StockQuantityAfter,
+            movement.ReservedQuantityBefore,
+            movement.ReservedQuantityAfter,
+            movement.QuantityDelta,
+            movement.ReservedQuantityDelta,
+            movement.StatusBefore,
+            movement.StatusAfter,
+            movement.Source,
+            movement.Reason,
+            movement.ActorUserId,
+            movement.BatchReference,
+            movement.CartId,
+            movement.OrderId,
+            movement.ReservationId,
+            movement.PaymentId,
+            movement.ReturnRequestId,
+            movement.RefundId,
+            BuildRelatedRoute(movement),
+            movement.OccurredAtUtc);
+
+    private static string? BuildRelatedRoute(SellerInventoryMovementProjection movement)
+    {
+        if (movement.ReturnRequestId.HasValue)
+        {
+            return $"/seller/returns/{movement.ReturnRequestId.Value}";
+        }
+
+        return movement.OrderId.HasValue ? $"/seller/orders/{movement.OrderId.Value}" : null;
+    }
+
+    private sealed record SellerInventoryMovementProjection(
+        Guid MovementId,
+        Guid ProductId,
+        Guid VariantId,
+        string ProductTitle,
+        string ProductSlug,
+        string Sku,
+        string? Barcode,
+        string Size,
+        string Colour,
+        string MovementType,
+        int StockQuantityBefore,
+        int StockQuantityAfter,
+        int ReservedQuantityBefore,
+        int ReservedQuantityAfter,
+        int QuantityDelta,
+        int ReservedQuantityDelta,
+        string StatusBefore,
+        string StatusAfter,
+        string Source,
+        string Reason,
+        Guid? ActorUserId,
+        string? BatchReference,
+        Guid? CartId,
+        Guid? OrderId,
+        Guid? ReservationId,
+        Guid? PaymentId,
+        Guid? ReturnRequestId,
+        Guid? RefundId,
+        DateTimeOffset OccurredAtUtc);
 
     private static async Task<SellerProfile?> GetCurrentSellerAsync(
         ClaimsPrincipal principal,
@@ -517,6 +913,12 @@ public static class SellerInventoryEndpoints
             variant.AvailableQuantity,
             variant.Status.ToString());
 
+    private static Guid? GetActorUserId(ClaimsPrincipal principal)
+    {
+        var userIdValue = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(userIdValue, out var userId) ? userId : null;
+    }
+
     private static string BuildInventoryCsv(IReadOnlyCollection<SellerInventoryItemResponse> items)
     {
         var builder = new StringBuilder();
@@ -528,6 +930,7 @@ public static class SellerInventoryEndpoints
                 builder,
                 item.VariantId.ToString(),
                 item.Sku,
+                item.Barcode ?? string.Empty,
                 item.ProductTitle ?? string.Empty,
                 item.ProductSlug ?? string.Empty,
                 item.Size,
@@ -570,9 +973,9 @@ public static class SellerInventoryEndpoints
             }
         }
 
-        if (!headers.ContainsKey("variantId") && !headers.ContainsKey("sku"))
+        if (!headers.ContainsKey("variantId") && !headers.ContainsKey("sku") && !headers.ContainsKey("barcode"))
         {
-            throw new InvalidOperationException("Inventory import CSV must include either a 'variantId' or 'sku' column.");
+            throw new InvalidOperationException("Inventory import CSV must include either a 'variantId', 'sku', or 'barcode' column.");
         }
 
         var items = new List<BulkAdjustSellerInventoryItemRequest>();
@@ -599,7 +1002,8 @@ public static class SellerInventoryEndpoints
                 variantId,
                 ReadColumn(record, headers, "sku"),
                 stockQuantity,
-                ReadColumn(record, headers, "status") ?? string.Empty));
+                ReadColumn(record, headers, "status") ?? string.Empty,
+                ReadColumn(record, headers, "barcode")));
         }
 
         return items;
@@ -731,7 +1135,8 @@ public sealed record BulkAdjustSellerInventoryItemRequest(
     Guid? VariantId,
     string? Sku,
     int StockQuantity,
-    string Status);
+    string Status,
+    string? Barcode = null);
 
 public sealed record SellerInventoryItemResponse(
     Guid ProductId,
@@ -749,7 +1154,40 @@ public sealed record SellerInventoryItemResponse(
     int ReservedQuantity,
     int AvailableQuantity,
     string VariantStatus,
+    string? Barcode,
     DateTimeOffset UpdatedAtUtc);
+
+public sealed record SellerInventoryMovementResponse(
+    Guid MovementId,
+    Guid ProductId,
+    Guid VariantId,
+    string ProductTitle,
+    string ProductSlug,
+    string Sku,
+    string? Barcode,
+    string Size,
+    string Colour,
+    string MovementType,
+    int StockQuantityBefore,
+    int StockQuantityAfter,
+    int ReservedQuantityBefore,
+    int ReservedQuantityAfter,
+    int QuantityDelta,
+    int ReservedQuantityDelta,
+    string StatusBefore,
+    string StatusAfter,
+    string Source,
+    string Reason,
+    Guid? ActorUserId,
+    string? BatchReference,
+    Guid? CartId,
+    Guid? OrderId,
+    Guid? ReservationId,
+    Guid? PaymentId,
+    Guid? ReturnRequestId,
+    Guid? RefundId,
+    string? RelatedRoute,
+    DateTimeOffset OccurredAtUtc);
 
 public sealed record SellerInventoryBulkAdjustmentResponse(
     int TotalRows,
@@ -763,6 +1201,7 @@ public sealed record SellerInventoryBulkAdjustmentRowResponse(
     int RowNumber,
     Guid? VariantId,
     string? Sku,
+    string? Barcode,
     Guid? ProductId,
     string? ProductTitle,
     string? ProductSlug,

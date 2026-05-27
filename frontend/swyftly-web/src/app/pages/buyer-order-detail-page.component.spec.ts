@@ -7,6 +7,7 @@ import { BuyerOrderService } from '../buyer/buyer-order.service';
 import { BuyerPaymentRedirectService, BuyerPaymentService } from '../buyer/buyer-payment.service';
 import { BuyerReturnService } from '../buyer/buyer-return.service';
 import { BuyerOrderDetailPageComponent } from './buyer-order-detail-page.component';
+import { createSellerPolicySnapshot } from './shop-page.component.spec';
 
 describe('BuyerOrderDetailPageComponent', () => {
   let fixture: ComponentFixture<BuyerOrderDetailPageComponent>;
@@ -63,7 +64,8 @@ describe('BuyerOrderDetailPageComponent', () => {
       disputedAtUtc: null,
       disputeReason: null,
       items: [],
-      messages: []
+      messages: [],
+      sellerPolicySnapshot: createSellerPolicySnapshot()
     });
 
     await TestBed.configureTestingModule({
@@ -132,6 +134,7 @@ describe('BuyerOrderDetailPageComponent', () => {
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Returns can be requested after an order is delivered');
+    expect(text).toContain('Store policy snapshot');
     expect(returnService.createReturn).not.toHaveBeenCalled();
   });
 
@@ -215,6 +218,7 @@ function createOrder(overrides: Partial<BuyerOrderResult> = {}): BuyerOrderResul
     totalAmount: 500,
     statusHistory: [{ statusHistoryId: 'history-id', previousStatus: null, newStatus: 'Delivered', changedAtUtc: '2026-05-18T12:00:00Z', reason: null }],
     shipments: [],
+    sellerPolicySnapshot: createSellerPolicySnapshot(),
     ...overrides
   };
 }

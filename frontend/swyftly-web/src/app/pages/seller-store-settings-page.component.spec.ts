@@ -1,8 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { SellerDeliveryMethodResponse } from '../seller/seller-delivery-method.models';
 import { SellerDeliveryMethodService } from '../seller/seller-delivery-method.service';
+import { SellerNotificationService } from '../seller/seller-notification.service';
 import { SellerOnboardingResponse } from '../seller/seller-onboarding.models';
 import { SellerOnboardingService } from '../seller/seller-onboarding.service';
 import {
@@ -10,13 +12,17 @@ import {
   SellerPayoutProfileChangeStateResponse
 } from '../seller/seller-payout-profile-change.models';
 import { SellerPayoutProfileChangeService } from '../seller/seller-payout-profile-change.service';
+import { SellerStorePolicyService } from '../seller/seller-store-policy.service';
+import { SellerPolicyResponse } from '../shared/seller-policy.models';
 import { SellerStoreSettingsPageComponent } from './seller-store-settings-page.component';
 
 describe('SellerStoreSettingsPageComponent', () => {
   let fixture: ComponentFixture<SellerStoreSettingsPageComponent>;
   let deliveryMethodService: jasmine.SpyObj<SellerDeliveryMethodService>;
+  let notificationService: jasmine.SpyObj<SellerNotificationService>;
   let onboardingService: jasmine.SpyObj<SellerOnboardingService>;
   let payoutProfileChangeService: jasmine.SpyObj<SellerPayoutProfileChangeService>;
+  let storePolicyService: jasmine.SpyObj<SellerStorePolicyService>;
 
   beforeEach(async () => {
     deliveryMethodService = jasmine.createSpyObj<SellerDeliveryMethodService>(
@@ -27,6 +33,26 @@ describe('SellerStoreSettingsPageComponent', () => {
     deliveryMethodService.update.and.resolveTo(createDeliveryMethod({ name: 'Updated courier' }));
     deliveryMethodService.activate.and.resolveTo(createDeliveryMethod({ isActive: true }));
     deliveryMethodService.deactivate.and.resolveTo(createDeliveryMethod({ isActive: false }));
+    notificationService = jasmine.createSpyObj<SellerNotificationService>(
+      'SellerNotificationService',
+      ['getPreferences', 'updatePreferences'],
+      { unreadCount: signal(0) });
+    notificationService.getPreferences.and.resolveTo({
+      preferences: [
+        { category: 'Verification', isEnabled: true, emailEnabled: true },
+        { category: 'Products', isEnabled: true, emailEnabled: true },
+        { category: 'Revisions', isEnabled: true, emailEnabled: true },
+        { category: 'Ads', isEnabled: true, emailEnabled: true }
+      ]
+    });
+    notificationService.updatePreferences.and.resolveTo({
+      preferences: [
+        { category: 'Verification', isEnabled: true, emailEnabled: true },
+        { category: 'Products', isEnabled: false, emailEnabled: true },
+        { category: 'Revisions', isEnabled: true, emailEnabled: true },
+        { category: 'Ads', isEnabled: true, emailEnabled: true }
+      ]
+    });
     onboardingService = jasmine.createSpyObj<SellerOnboardingService>(
       'SellerOnboardingService',
       ['getOnboarding', 'updateProfile', 'updateStorefront', 'updateAddress']);
@@ -61,6 +87,14 @@ describe('SellerStoreSettingsPageComponent', () => {
       activeRequest: null,
       latestRequest: createPayoutChangeRequest({ status: 'Cancelled' })
     }));
+    storePolicyService = jasmine.createSpyObj<SellerStorePolicyService>(
+      'SellerStorePolicyService',
+      ['getPolicy', 'updatePolicy']);
+    storePolicyService.getPolicy.and.resolveTo(createStorePolicy());
+    storePolicyService.updatePolicy.and.resolveTo(createStorePolicy({
+      returnWindowDays: 21,
+      returnPolicy: 'Updated return policy.'
+    }));
 
     await TestBed.configureTestingModule({
       imports: [SellerStoreSettingsPageComponent],
@@ -68,8 +102,10 @@ describe('SellerStoreSettingsPageComponent', () => {
         provideNoopAnimations(),
         provideRouter([]),
         { provide: SellerDeliveryMethodService, useValue: deliveryMethodService },
+        { provide: SellerNotificationService, useValue: notificationService },
         { provide: SellerOnboardingService, useValue: onboardingService },
-        { provide: SellerPayoutProfileChangeService, useValue: payoutProfileChangeService }
+        { provide: SellerPayoutProfileChangeService, useValue: payoutProfileChangeService },
+        { provide: SellerStorePolicyService, useValue: storePolicyService }
       ]
     }).compileComponents();
 
@@ -88,6 +124,10 @@ describe('SellerStoreSettingsPageComponent', () => {
     expect(compiled.querySelector('a[href="/seller/luxe-seller"]')).not.toBeNull();
     expect(compiled.textContent).toContain('Payout profile changes');
     expect(compiled.textContent).toContain('provider-ref');
+    expect(compiled.textContent).toContain('Seller notification preferences');
+    expect(compiled.textContent).toContain('Store policies');
+    expect(compiled.textContent).toContain('Policy completeness');
+    expect(compiled.textContent).toContain('Complete');
   });
 
   it('saves storefront details through existing onboarding service', async () => {
@@ -179,6 +219,66 @@ describe('SellerStoreSettingsPageComponent', () => {
       reason: 'Updated payout account token.'
     });
   });
+
+  it('saves seller notification preferences', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const component = fixture.componentInstance as unknown as {
+      notificationPreferenceForm: { patchValue(value: Record<string, unknown>): void };
+      saveNotificationPreferences(): Promise<void>;
+    };
+
+    component.notificationPreferenceForm.patchValue({
+      Products: {
+        isEnabled: false,
+        emailEnabled: true
+      }
+    });
+
+    await component.saveNotificationPreferences();
+
+    expect(notificationService.updatePreferences).toHaveBeenCalledWith({
+      preferences: [
+        { category: 'Verification', isEnabled: true, emailEnabled: true },
+        { category: 'Products', isEnabled: false, emailEnabled: true },
+        { category: 'Revisions', isEnabled: true, emailEnabled: true },
+        { category: 'Ads', isEnabled: true, emailEnabled: true }
+      ]
+    });
+  });
+
+  it('saves buyer-facing store policy settings', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const component = fixture.componentInstance as unknown as {
+      policyForm: { patchValue(value: Record<string, unknown>): void };
+      saveStorePolicy(): Promise<void>;
+    };
+
+    component.policyForm.patchValue({
+      returnWindowDays: 21,
+      returnPolicy: 'Updated return policy.',
+      exchangePolicy: '',
+      fulfilmentPolicy: 'Dispatched within two business days.',
+      supportPolicy: 'Message support for order questions.',
+      careInstructions: '',
+      productDisclaimer: ''
+    });
+
+    await component.saveStorePolicy();
+
+    expect(storePolicyService.updatePolicy).toHaveBeenCalledWith({
+      returnWindowDays: 21,
+      returnPolicy: 'Updated return policy.',
+      exchangePolicy: null,
+      fulfilmentPolicy: 'Dispatched within two business days.',
+      supportPolicy: 'Message support for order questions.',
+      careInstructions: null,
+      productDisclaimer: null
+    });
+  });
 });
 
 function createOnboardingResponse(
@@ -220,6 +320,7 @@ function createOnboardingResponse(
       hasSubmittedPlaceholder: true,
       isAdminApproved: true
     },
+    latestVerificationReview: null,
     ...overrides
   };
 }
@@ -276,6 +377,22 @@ function createPayoutChangeRequest(
     cancelledAtUtc: null,
     reviewedAtUtc: null,
     createdAtUtc: '2026-05-21T10:00:00Z',
+    updatedAtUtc: '2026-05-21T10:00:00Z',
+    ...overrides
+  };
+}
+
+function createStorePolicy(overrides: Partial<SellerPolicyResponse> = {}): SellerPolicyResponse {
+  return {
+    returnWindowDays: 14,
+    returnPolicy: 'Returns are reviewed for delivered items in original condition.',
+    exchangePolicy: 'Exchanges depend on stock availability.',
+    fulfilmentPolicy: 'Orders are usually dispatched within 2-3 business days.',
+    supportPolicy: 'Message support with order issues and product questions.',
+    careInstructions: 'Follow product care notes on each item.',
+    productDisclaimer: 'Colour and fit may vary slightly by screen and size.',
+    isComplete: true,
+    missingFields: [],
     updatedAtUtc: '2026-05-21T10:00:00Z',
     ...overrides
   };

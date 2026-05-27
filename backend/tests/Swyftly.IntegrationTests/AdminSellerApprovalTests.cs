@@ -13,6 +13,8 @@ using Swyftly.Api.Admin;
 using Swyftly.Api.Authentication;
 using Swyftly.Api.Sellers;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Notifications;
+using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Identity;
 using Swyftly.Infrastructure.Persistence;
 
@@ -54,6 +56,40 @@ public sealed class AdminSellerApprovalTests
     }
 
     [Fact]
+    public async Task AdminSellerDetail_IncludesStorePolicyReadinessContext()
+    {
+        using var factory = new AdminSellerApprovalTestFactory();
+        using var client = factory.CreateClient();
+        var seller = await RegisterLoginAndSubmitSellerAsync(client);
+        var adminToken = await CreateAndLoginAdminAsync(factory, client);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+            dbContext.SellerStorePolicies.Add(new SellerStorePolicy(
+                seller.SellerId,
+                14,
+                "Returns are reviewed for delivered items in original condition.",
+                "Exchanges depend on stock availability.",
+                "Orders are usually dispatched within 2-3 business days.",
+                "Message support with order issues and product questions.",
+                "Follow product care notes on each item.",
+                "Colour and fit may vary slightly by screen and size."));
+            await dbContext.SaveChangesAsync();
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+
+        using var response = await client.GetAsync($"/api/admin/sellers/{seller.SellerId}");
+
+        response.EnsureSuccessStatusCode();
+        var detail = await response.Content.ReadFromJsonAsync<AdminSellerDetailResponse>();
+        Assert.NotNull(detail);
+        Assert.True(detail!.StorePolicy.IsComplete);
+        Assert.Equal(14, detail.StorePolicy.ReturnWindowDays);
+    }
+
+    [Fact]
     public async Task Approve_ChangesSellerToVerified_AndWritesAuditLog()
     {
         using var factory = new AdminSellerApprovalTestFactory();
@@ -75,6 +111,78 @@ public sealed class AdminSellerApprovalTests
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
         Assert.Equal(1, await dbContext.AuditLogs.CountAsync());
+
+        var sellerToken = await LoginAsync(client, "seller@example.test");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sellerToken);
+        using var notificationsResponse = await client.GetAsync("/api/seller/notifications");
+        notificationsResponse.EnsureSuccessStatusCode();
+        var notifications = await notificationsResponse.Content.ReadFromJsonAsync<NotificationResult[]>();
+        var notification = Assert.Single(notifications!, item => item.Type == SellerNotificationTypes.SellerVerificationApproved);
+
+        using var countResponse = await client.GetAsync("/api/seller/notifications/unread-count");
+        countResponse.EnsureSuccessStatusCode();
+        var count = await countResponse.Content.ReadFromJsonAsync<SellerNotificationsUnreadCountResponse>();
+        Assert.Equal(1, count!.UnreadCount);
+
+        using var readResponse = await client.PostAsync($"/api/seller/notifications/{notification.NotificationId}/read", null);
+        readResponse.EnsureSuccessStatusCode();
+        var readNotification = await readResponse.Content.ReadFromJsonAsync<NotificationResult>();
+        Assert.NotNull(readNotification!.ReadAtUtc);
+    }
+
+    [Fact]
+    public async Task Seller_CanReadAndUpdateNotificationPreferences()
+    {
+        using var factory = new AdminSellerApprovalTestFactory();
+        using var client = factory.CreateClient();
+        await RegisterAsync(client, "preference-seller@example.test", SwyftlyRoles.Seller);
+        var sellerToken = await LoginAsync(client, "preference-seller@example.test");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sellerToken);
+
+        using var getResponse = await client.GetAsync("/api/seller/notification-preferences");
+        getResponse.EnsureSuccessStatusCode();
+        var initial = await getResponse.Content.ReadFromJsonAsync<SellerNotificationPreferencesResponse>();
+        Assert.Equal(SellerNotificationCategory.All.Count, initial!.Preferences.Count);
+        Assert.All(initial.Preferences, preference => Assert.True(preference.IsEnabled));
+        Assert.All(initial.Preferences, preference => Assert.True(preference.EmailEnabled));
+
+        using var updateResponse = await client.PutAsJsonAsync(
+            "/api/seller/notification-preferences",
+            new SellerNotificationPreferencesRequest([
+                new SellerNotificationPreferenceRequest(SellerNotificationCategory.Verification, true, true),
+                new SellerNotificationPreferenceRequest(SellerNotificationCategory.Products, false, true),
+                new SellerNotificationPreferenceRequest(SellerNotificationCategory.Revisions, true, false),
+                new SellerNotificationPreferenceRequest(SellerNotificationCategory.Ads, true, true)
+            ]));
+
+        updateResponse.EnsureSuccessStatusCode();
+        var updated = await updateResponse.Content.ReadFromJsonAsync<SellerNotificationPreferencesResponse>();
+        Assert.False(updated!.Preferences.Single(preference => preference.Category == SellerNotificationCategory.Products).IsEnabled);
+        Assert.False(updated.Preferences.Single(preference => preference.Category == SellerNotificationCategory.Revisions).EmailEnabled);
+    }
+
+    [Fact]
+    public async Task SellerNotificationPreferences_RejectInvalidCategoriesAndNonSellers()
+    {
+        using var factory = new AdminSellerApprovalTestFactory();
+        using var client = factory.CreateClient();
+        var buyerToken = await RegisterAndLoginBuyerAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", buyerToken);
+
+        using var forbiddenResponse = await client.GetAsync("/api/seller/notification-preferences");
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenResponse.StatusCode);
+
+        await RegisterAsync(client, "invalid-preference-seller@example.test", SwyftlyRoles.Seller);
+        var sellerToken = await LoginAsync(client, "invalid-preference-seller@example.test");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sellerToken);
+
+        using var invalidResponse = await client.PutAsJsonAsync(
+            "/api/seller/notification-preferences",
+            new SellerNotificationPreferencesRequest([
+                new SellerNotificationPreferenceRequest("Unknown", true, true)
+            ]));
+
+        Assert.Equal(HttpStatusCode.BadRequest, invalidResponse.StatusCode);
     }
 
     [Fact]
@@ -115,6 +223,17 @@ public sealed class AdminSellerApprovalTests
         Assert.Contains(
             detail.AuditTrail,
             entry => entry.ActionType == "SellerRejected" && entry.Reason == "Documents are not clear.");
+
+        var sellerToken = await LoginAsync(client, "seller@example.test");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sellerToken);
+        using var onboardingResponse = await client.GetAsync("/api/seller/onboarding");
+        onboardingResponse.EnsureSuccessStatusCode();
+        var onboarding = await onboardingResponse.Content.ReadFromJsonAsync<SellerOnboardingResponse>();
+        Assert.NotNull(onboarding!.LatestVerificationReview);
+        Assert.NotNull(onboarding.LatestVerificationReview!.SubmittedAtUtc);
+        Assert.NotNull(onboarding.LatestVerificationReview.ReviewedAtUtc);
+        Assert.Equal("Documents are not clear.", onboarding.LatestVerificationReview.RejectionReason);
+        Assert.Null(onboarding.LatestVerificationReview.SuspensionReason);
     }
 
     [Fact]
@@ -144,6 +263,14 @@ public sealed class AdminSellerApprovalTests
         Assert.Contains(
             detail.AuditTrail,
             entry => entry.ActionType == "SellerSuspended" && entry.Reason == "Policy review required.");
+
+        var sellerToken = await LoginAsync(client, "seller@example.test");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sellerToken);
+        using var onboardingResponse = await client.GetAsync("/api/seller/onboarding");
+        onboardingResponse.EnsureSuccessStatusCode();
+        var onboarding = await onboardingResponse.Content.ReadFromJsonAsync<SellerOnboardingResponse>();
+        Assert.NotNull(onboarding!.LatestVerificationReview);
+        Assert.Equal("Policy review required.", onboarding.LatestVerificationReview!.SuspensionReason);
     }
 
     private static async Task<string> RegisterAndLoginBuyerAsync(HttpClient client)

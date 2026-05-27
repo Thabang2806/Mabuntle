@@ -19,6 +19,7 @@ using Swyftly.Application.Payments;
 using Swyftly.Application.Refunds;
 using Swyftly.Application.Returns;
 using Swyftly.Application.Search;
+using Swyftly.Application.Sellers;
 using Swyftly.Infrastructure.Admin;
 using Swyftly.Infrastructure.Advertising;
 using Swyftly.Infrastructure.Ai;
@@ -166,6 +167,31 @@ public static class DependencyInjection
                 options.BatchSize = batchSize;
             }
         });
+        services.Configure<SellerVerificationEvidenceOptions>(options =>
+        {
+            var section = configuration.GetSection(SellerVerificationEvidenceOptions.SectionName);
+            options.LocalRootPath = section["LocalRootPath"] ?? options.LocalRootPath;
+            if (long.TryParse(section["MaxFileBytes"], out var maxFileBytes))
+            {
+                options.MaxFileBytes = maxFileBytes;
+            }
+
+            if (int.TryParse(section["MaxActiveFilesPerSeller"], out var maxActiveFiles))
+            {
+                options.MaxActiveFilesPerSeller = maxActiveFiles;
+            }
+
+            var allowedTypes = section.GetSection("AllowedContentTypes")
+                .GetChildren()
+                .Select(child => child.Value)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value!.Trim())
+                .ToArray();
+            if (allowedTypes.Length > 0)
+            {
+                options.AllowedContentTypes = allowedTypes;
+            }
+        });
         services.Configure<EmailDeliveryOptions>(options =>
         {
             var section = configuration.GetSection(EmailDeliveryOptions.SectionName);
@@ -235,6 +261,7 @@ public static class DependencyInjection
         services.AddSingleton<MediaImageProcessor>();
         services.AddScoped<IProductMediaUploadService, ProductMediaUploadService>();
         services.AddScoped<IMediaCleanupService, EfMediaCleanupService>();
+        services.AddScoped<ISellerVerificationEvidenceStorage, LocalSellerVerificationEvidenceStorage>();
         services.AddSingleton<ProductModerationService>();
         services.AddSingleton<AiPromptBuilder>();
         services.AddSingleton<AiSuggestionValidator>();

@@ -10,8 +10,14 @@ describe('SellerAnalyticsPageComponent', () => {
   let analyticsService: jasmine.SpyObj<SellerAnalyticsService>;
 
   beforeEach(async () => {
-    analyticsService = jasmine.createSpyObj<SellerAnalyticsService>('SellerAnalyticsService', ['getSummary']);
+    analyticsService = jasmine.createSpyObj<SellerAnalyticsService>('SellerAnalyticsService', [
+      'getSummary',
+      'getPerformance',
+      'getCsvExportUrl'
+    ]);
     analyticsService.getSummary.and.resolveTo(createSummary());
+    analyticsService.getPerformance.and.resolveTo(createPerformance());
+    analyticsService.getCsvExportUrl.and.callFake(report => `/api/seller/analytics/export.csv?report=${report}`);
 
     await TestBed.configureTestingModule({
       imports: [SellerAnalyticsPageComponent],
@@ -32,11 +38,23 @@ describe('SellerAnalyticsPageComponent', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Total sales');
-    expect(compiled.textContent).toContain('Top products');
+    expect(compiled.textContent).toContain('Product performance');
+    expect(compiled.textContent).toContain('Sales trend');
     expect(compiled.textContent).toContain('Seller One Product');
-    expect(compiled.textContent).toContain('Ad campaign performance');
+    expect(compiled.textContent).toContain('Customer care');
     expect(compiled.textContent).toContain('AI usage');
-    expect(compiled.textContent).toContain('Products improved');
+    expect(compiled.querySelector('a[href*="report=Products"]')).not.toBeNull();
+  });
+
+  it('reloads performance data when filters are applied', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+
+    expect(analyticsService.getPerformance).toHaveBeenCalled();
   });
 });
 
@@ -100,6 +118,76 @@ function createSummary(): SellerAnalyticsSummaryResponse {
       qualityScoreImprovementNote: 'Pre-AI baseline quality scores are not captured yet.',
       fieldValuesAccepted: 1,
       fieldValuesEdited: 1
+    }
+  };
+}
+
+function createPerformance() {
+  return {
+    sellerId: 'seller-id',
+    fromUtc: '2026-05-01T00:00:00.000Z',
+    toUtc: '2026-05-31T00:00:00.000Z',
+    bucket: 'Day' as const,
+    salesTrend: [{
+      periodStartUtc: '2026-05-01T00:00:00.000Z',
+      periodEndUtc: '2026-05-02T00:00:00.000Z',
+      orderCount: 1,
+      grossSales: 998,
+      refundedAmount: 100,
+      netSales: 898,
+      unitsSold: 2
+    }],
+    productPerformance: [{
+      productId: 'product-id',
+      productTitle: 'Seller One Product',
+      productSlug: 'seller-one-product',
+      status: 'Published',
+      unitsSold: 2,
+      grossSales: 998,
+      refundedAmount: 100,
+      returnCount: 1,
+      returnRate: 0.5,
+      stockQuantity: 3,
+      reservedQuantity: 0,
+      availableQuantity: 3
+    }],
+    inventoryPerformance: [{
+      productId: 'product-id',
+      productTitle: 'Seller One Product',
+      productVariantId: 'variant-id',
+      sku: 'SKU-1',
+      barcode: 'BARCODE-1',
+      size: 'M',
+      colour: 'Black',
+      status: 'Active',
+      stockQuantity: 3,
+      reservedQuantity: 0,
+      availableQuantity: 3,
+      isLowStock: true,
+      isOutOfStock: false,
+      lastMovementAtUtc: '2026-05-01T00:00:00.000Z'
+    }],
+    adPerformance: [{
+      adCampaignId: 'campaign-id',
+      name: 'Launch campaign',
+      status: 'Active',
+      impressions: 100,
+      clicks: 5,
+      clickThroughRate: 0.05,
+      spend: 25,
+      ordersGenerated: 1,
+      revenueGenerated: 499,
+      returnOnAdSpend: 19.96
+    }],
+    customerCareSummary: {
+      returnCount: 1,
+      openReturnCount: 1,
+      refundCount: 1,
+      refundedAmount: 100,
+      supportTicketCount: 1,
+      openSupportTicketCount: 1,
+      disputeCount: 1,
+      activeDisputeCount: 1
     }
   };
 }

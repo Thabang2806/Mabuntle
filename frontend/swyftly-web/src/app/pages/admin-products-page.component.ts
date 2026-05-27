@@ -6,7 +6,11 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
-import { AdminProductRevisionSummaryResponse, AdminProductSummaryResponse } from '../admin/admin-product.models';
+import {
+  AdminProductRevisionSummaryResponse,
+  AdminProductSummaryResponse,
+  AdminProductVariantRevisionSummaryResponse
+} from '../admin/admin-product.models';
 import { AdminProductService } from '../admin/admin-product.service';
 import { getApiErrorMessage } from '../auth/api-error';
 import { EmptyStateComponent } from '../shared/ui/empty-state.component';
@@ -94,6 +98,45 @@ import { WorkspaceShellComponent } from '../shared/ui/workspace-shell.component'
                   </span>
                   <span role="cell">
                     <a mat-stroked-button [routerLink]="['/admin/products/revisions', revision.revisionId]">Review revision</a>
+                  </span>
+                </div>
+              }
+            </div>
+          </article>
+        }
+
+        @if (pendingVariantRevisions().length > 0) {
+          <article class="route-card admin-detail-card">
+            <div class="hf-admin-card-heading">
+              <div>
+                <span>Variant and pricing edits</span>
+                <h2>Pending variant revisions</h2>
+              </div>
+              <app-status-badge [label]="pendingVariantRevisions().length + ' pending'" tone="warning" />
+            </div>
+            <div class="admin-table" role="table" aria-label="Pending product variant revisions">
+              <div class="admin-table-row heading" role="row">
+                <span role="columnheader">Product</span>
+                <span role="columnheader">Seller</span>
+                <span role="columnheader">Changes</span>
+                <span role="columnheader">Action</span>
+              </div>
+              @for (revision of pendingVariantRevisions(); track revision.revisionId) {
+                <div class="admin-table-row" role="row">
+                  <span role="cell">
+                    <strong>{{ revision.productTitle ?? 'Untitled product' }}</strong>
+                    <small>{{ revision.status }}</small>
+                  </span>
+                  <span role="cell">
+                    <strong>{{ revision.sellerDisplayName ?? 'Unnamed seller' }}</strong>
+                    <small>{{ revision.sellerVerificationStatus ?? 'Unknown seller status' }}</small>
+                  </span>
+                  <span role="cell">
+                    <strong>{{ revision.itemCount }} staged change{{ revision.itemCount === 1 ? '' : 's' }}</strong>
+                    <small>{{ revision.submittedAtUtc ? (revision.submittedAtUtc | date:'mediumDate') : 'Not submitted' }}</small>
+                  </span>
+                  <span role="cell">
+                    <a mat-stroked-button [routerLink]="['/admin/products/variant-revisions', revision.revisionId]">Review variants</a>
                   </span>
                 </div>
               }
@@ -243,6 +286,7 @@ export class AdminProductsPageComponent implements OnInit {
 
   protected readonly pendingProducts = signal<AdminProductSummaryResponse[]>([]);
   protected readonly pendingRevisions = signal<AdminProductRevisionSummaryResponse[]>([]);
+  protected readonly pendingVariantRevisions = signal<AdminProductVariantRevisionSummaryResponse[]>([]);
   protected readonly selectedProductId = signal<string | null>(null);
   protected readonly filters = signal({ search: '', status: '', seller: '', risk: '' });
   protected readonly isLoading = signal(true);
@@ -316,9 +360,9 @@ export class AdminProductsPageComponent implements OnInit {
       },
       {
         label: 'Pending revisions',
-        value: this.pendingRevisions().length.toString(),
+        value: (this.pendingRevisions().length + this.pendingVariantRevisions().length).toString(),
         badge: 'Published edits',
-        tone: this.pendingRevisions().length > 0 ? 'warning' as StatusBadgeTone : 'success' as StatusBadgeTone
+        tone: (this.pendingRevisions().length + this.pendingVariantRevisions().length) > 0 ? 'warning' as StatusBadgeTone : 'success' as StatusBadgeTone
       },
       {
         label: 'Seller count',
@@ -389,12 +433,14 @@ export class AdminProductsPageComponent implements OnInit {
     this.errorMessage.set(null);
 
     try {
-      const [products, revisions] = await Promise.all([
+      const [products, revisions, variantRevisions] = await Promise.all([
         this.adminProductService.getPendingReviewProducts(),
-        this.adminProductService.getPendingRevisions()
+        this.adminProductService.getPendingRevisions(),
+        this.adminProductService.getPendingVariantRevisions()
       ]);
       this.pendingProducts.set(products);
       this.pendingRevisions.set(revisions);
+      this.pendingVariantRevisions.set(variantRevisions);
       this.selectedProductId.set(products[0]?.productId ?? null);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));

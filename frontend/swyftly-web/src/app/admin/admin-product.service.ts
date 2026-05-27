@@ -8,7 +8,9 @@ import {
   AdminProductReasonRequest,
   AdminProductRevisionDetailResponse,
   AdminProductRevisionSummaryResponse,
-  AdminProductSummaryResponse
+  AdminProductSummaryResponse,
+  AdminProductVariantRevisionDetailResponse,
+  AdminProductVariantRevisionSummaryResponse
 } from './admin-product.models';
 
 @Injectable({ providedIn: 'root' })
@@ -24,12 +26,20 @@ export class AdminProductService {
     return firstValueFrom(this.http.get<AdminProductRevisionSummaryResponse[]>(`${this.baseUrl}/pending-revisions`));
   }
 
+  getPendingVariantRevisions(): Promise<AdminProductVariantRevisionSummaryResponse[]> {
+    return firstValueFrom(this.http.get<AdminProductVariantRevisionSummaryResponse[]>(`${this.baseUrl}/pending-variant-revisions`));
+  }
+
   getProduct(productId: string): Promise<AdminProductDetailResponse> {
     return firstValueFrom(this.http.get<AdminProductDetailResponse>(`${this.baseUrl}/${productId}`));
   }
 
   getRevision(revisionId: string): Promise<AdminProductRevisionDetailResponse> {
     return firstValueFrom(this.http.get<AdminProductRevisionDetailResponse>(`${this.baseUrl}/revisions/${revisionId}`));
+  }
+
+  getVariantRevision(revisionId: string): Promise<AdminProductVariantRevisionDetailResponse> {
+    return firstValueFrom(this.http.get<AdminProductVariantRevisionDetailResponse>(`${this.baseUrl}/variant-revisions/${revisionId}`));
   }
 
   approveProduct(productId: string, request: AdminProductApproveRequest = {}): Promise<AdminProductDetailResponse> {
@@ -50,5 +60,13 @@ export class AdminProductService {
 
   rejectRevision(revisionId: string, request: AdminProductReasonRequest): Promise<AdminProductRevisionDetailResponse> {
     return firstValueFrom(this.http.post<AdminProductRevisionDetailResponse>(`${this.baseUrl}/revisions/${revisionId}/reject`, request));
+  }
+
+  approveVariantRevision(revisionId: string): Promise<AdminProductVariantRevisionDetailResponse> {
+    return firstValueFrom(this.http.post<AdminProductVariantRevisionDetailResponse>(`${this.baseUrl}/variant-revisions/${revisionId}/approve`, {}));
+  }
+
+  rejectVariantRevision(revisionId: string, request: AdminProductReasonRequest): Promise<AdminProductVariantRevisionDetailResponse> {
+    return firstValueFrom(this.http.post<AdminProductVariantRevisionDetailResponse>(`${this.baseUrl}/variant-revisions/${revisionId}/reject`, request));
   }
 }

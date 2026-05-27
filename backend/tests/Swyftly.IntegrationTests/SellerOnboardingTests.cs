@@ -3,15 +3,19 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Swyftly.Api.Admin;
 using Swyftly.Api.Authentication;
 using Swyftly.Api.Sellers;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Sellers;
+using Swyftly.Infrastructure.Identity;
 using Swyftly.Infrastructure.Persistence;
 
 namespace Swyftly.IntegrationTests;
@@ -125,6 +129,189 @@ public class SellerOnboardingTests
 
         Assert.Equal("UnderReview", onboarding.VerificationStatus);
         Assert.True(onboarding.CanSubmitForVerification);
+        Assert.NotNull(onboarding.LatestVerificationReview);
+        Assert.NotNull(onboarding.LatestVerificationReview!.SubmittedAtUtc);
+        Assert.Null(onboarding.LatestVerificationReview.ReviewedAtUtc);
+        Assert.Null(onboarding.LatestVerificationReview.RejectionReason);
+        Assert.Null(onboarding.LatestVerificationReview.SuspensionReason);
+    }
+
+    [Fact]
+    public async Task Seller_CanCreateUpdateAndReadStorePolicy()
+    {
+        await using var factory = new SellerOnboardingTestFactory();
+        using var client = factory.CreateClient();
+
+        var seller = await RegisterAndLoginAsync(client, "seller-policy@example.test", SwyftlyRoles.Seller);
+
+        using var updateResponse = await PutAsSellerAsync(
+            client,
+            seller.AccessToken,
+            "/api/seller/store-policy",
+            new SellerStorePolicyRequest(
+                14,
+                "Returns are reviewed for delivered items in original condition.",
+                "Exchanges depend on stock availability.",
+                "Orders are usually dispatched within 2-3 business days.",
+                "Message support with order issues and product questions.",
+                "Follow product care notes on each item.",
+                "Colour and fit may vary slightly by screen and size."));
+
+        var updated = await ReadJsonAsync<SellerPolicyResponse>(updateResponse);
+        Assert.True(updated.IsComplete);
+        Assert.Empty(updated.MissingFields);
+        Assert.Equal(14, updated.ReturnWindowDays);
+
+        var fetched = await GetSellerStorePolicyAsync(client, seller.AccessToken);
+        Assert.Equal("Returns are reviewed for delivered items in original condition.", fetched.ReturnPolicy);
+        Assert.Equal("Exchanges depend on stock availability.", fetched.ExchangePolicy);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        Assert.Equal(1, await dbContext.AuditLogs.CountAsync(auditLog => auditLog.ActionType == "SellerStorePolicyCreated"));
+    }
+
+    [Fact]
+    public async Task SellerStorePolicy_RejectsInvalidDataAndNonSellerAccess()
+    {
+        await using var factory = new SellerOnboardingTestFactory();
+        using var client = factory.CreateClient();
+
+        var seller = await RegisterAndLoginAsync(client, "seller-policy-invalid@example.test", SwyftlyRoles.Seller);
+        var buyer = await RegisterAndLoginAsync(client, "buyer-policy-invalid@example.test", SwyftlyRoles.Buyer);
+
+        using var invalidResponse = await PutAsSellerAsync(
+            client,
+            seller.AccessToken,
+            "/api/seller/store-policy",
+            new SellerStorePolicyRequest(-1, null, null, null, null, null, null),
+            ensureSuccess: false);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidResponse.StatusCode);
+
+        using var buyerResponse = await PutAsSellerAsync(
+            client,
+            buyer.AccessToken,
+            "/api/seller/store-policy",
+            new SellerStorePolicyRequest(14, null, null, null, null, null, null),
+            ensureSuccess: false);
+        Assert.Equal(HttpStatusCode.Forbidden, buyerResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Seller_CanUploadDownloadAndRemoveVerificationEvidence()
+    {
+        await using var factory = new SellerOnboardingTestFactory();
+        using var client = factory.CreateClient();
+
+        var seller = await RegisterAndLoginAsync(client, "seller-evidence@example.test", SwyftlyRoles.Seller);
+
+        using var uploadResponse = await UploadEvidenceAsync(client, seller.AccessToken);
+        var uploaded = await ReadJsonAsync<SellerVerificationEvidenceResponse>(uploadResponse);
+
+        Assert.Equal("BusinessRegistration", uploaded.EvidenceType);
+        Assert.Equal("registration.pdf", uploaded.OriginalFileName);
+        Assert.Equal("application/pdf", uploaded.ContentType);
+        Assert.Null(uploaded.RemovedAtUtc);
+
+        var listed = await GetEvidenceAsync(client, seller.AccessToken);
+        var listedItem = Assert.Single(listed);
+        Assert.Equal(uploaded.EvidenceId, listedItem.EvidenceId);
+
+        using var downloadResponse = await GetAsSellerAsync(
+            client,
+            seller.AccessToken,
+            $"/api/seller/verification-evidence/{uploaded.EvidenceId}/download");
+        await EnsureSuccessAsync(downloadResponse);
+        Assert.Equal("application/pdf", downloadResponse.Content.Headers.ContentType?.MediaType);
+
+        using var removeResponse = await DeleteAsSellerAsync(
+            client,
+            seller.AccessToken,
+            $"/api/seller/verification-evidence/{uploaded.EvidenceId}");
+        Assert.Equal(HttpStatusCode.NoContent, removeResponse.StatusCode);
+
+        Assert.Empty(await GetEvidenceAsync(client, seller.AccessToken));
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        Assert.Equal(1, await dbContext.AuditLogs.CountAsync(auditLog => auditLog.ActionType == "SellerVerificationEvidenceUploaded"));
+        Assert.Equal(1, await dbContext.AuditLogs.CountAsync(auditLog => auditLog.ActionType == "SellerVerificationEvidenceRemoved"));
+    }
+
+    [Fact]
+    public async Task VerificationEvidence_IsSellerScopedAndValidated()
+    {
+        await using var factory = new SellerOnboardingTestFactory();
+        using var client = factory.CreateClient();
+
+        var sellerOne = await RegisterAndLoginAsync(client, "seller-evidence-one@example.test", SwyftlyRoles.Seller);
+        var sellerTwo = await RegisterAndLoginAsync(client, "seller-evidence-two@example.test", SwyftlyRoles.Seller);
+        var buyer = await RegisterAndLoginAsync(client, "buyer-evidence@example.test", SwyftlyRoles.Buyer);
+
+        using var uploadResponse = await UploadEvidenceAsync(client, sellerOne.AccessToken);
+        var uploaded = await ReadJsonAsync<SellerVerificationEvidenceResponse>(uploadResponse);
+
+        using var otherSellerResponse = await GetAsSellerAsync(
+            client,
+            sellerTwo.AccessToken,
+            $"/api/seller/verification-evidence/{uploaded.EvidenceId}/download",
+            ensureSuccess: false);
+        Assert.Equal(HttpStatusCode.NotFound, otherSellerResponse.StatusCode);
+
+        using var buyerResponse = await GetAsSellerAsync(
+            client,
+            buyer.AccessToken,
+            "/api/seller/verification-evidence",
+            ensureSuccess: false);
+        Assert.Equal(HttpStatusCode.Forbidden, buyerResponse.StatusCode);
+
+        using var invalidResponse = await UploadEvidenceAsync(
+            client,
+            sellerOne.AccessToken,
+            content: "not a pdf"u8.ToArray(),
+            contentType: "application/pdf",
+            ensureSuccess: false);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminSellerDetail_IncludesEvidenceAndAdminCanDownload()
+    {
+        await using var factory = new SellerOnboardingTestFactory();
+        using var client = factory.CreateClient();
+
+        var seller = await RegisterAndLoginAsync(client, "seller-admin-evidence@example.test", SwyftlyRoles.Seller);
+        var adminAccessToken = await CreateAndLoginAdminAsync(factory, client, "admin-evidence@example.test");
+        var onboarding = await GetOnboardingAsync(client, seller.AccessToken);
+
+        using var uploadResponse = await UploadEvidenceAsync(
+            client,
+            seller.AccessToken,
+            evidenceType: "FulfilmentAddress",
+            note: "Lease document for fulfilment address.");
+        var uploaded = await ReadJsonAsync<SellerVerificationEvidenceResponse>(uploadResponse);
+
+        using var detailRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/admin/sellers/{onboarding.SellerId}");
+        detailRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAccessToken);
+        using var detailResponse = await client.SendAsync(detailRequest);
+        await EnsureSuccessAsync(detailResponse);
+        var detail = await ReadJsonAsync<AdminSellerDetailResponse>(detailResponse);
+
+        var evidence = Assert.Single(detail.VerificationEvidence);
+        Assert.Equal(uploaded.EvidenceId, evidence.EvidenceId);
+        Assert.Equal("FulfilmentAddress", evidence.EvidenceType);
+
+        using var downloadRequest = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/api/admin/sellers/{onboarding.SellerId}/verification-evidence/{uploaded.EvidenceId}/download");
+        downloadRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminAccessToken);
+        using var downloadResponse = await client.SendAsync(downloadRequest);
+        await EnsureSuccessAsync(downloadResponse);
+        Assert.Equal("application/pdf", downloadResponse.Content.Headers.ContentType?.MediaType);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        Assert.Equal(1, await dbContext.AuditLogs.CountAsync(auditLog => auditLog.ActionType == "SellerVerificationEvidenceDownloaded"));
     }
 
     private static async Task CompleteRequiredOnboardingAsync(HttpClient client, string accessToken)
@@ -181,6 +368,96 @@ public class SellerOnboardingTests
         return await ReadJsonAsync<SellerOnboardingResponse>(response);
     }
 
+    private static async Task<SellerPolicyResponse> GetSellerStorePolicyAsync(HttpClient client, string accessToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/seller/store-policy");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await client.SendAsync(request);
+
+        await EnsureSuccessAsync(response);
+        return await ReadJsonAsync<SellerPolicyResponse>(response);
+    }
+
+    private static async Task<IReadOnlyCollection<SellerVerificationEvidenceResponse>> GetEvidenceAsync(
+        HttpClient client,
+        string accessToken)
+    {
+        using var response = await GetAsSellerAsync(client, accessToken, "/api/seller/verification-evidence");
+        return await ReadJsonAsync<IReadOnlyCollection<SellerVerificationEvidenceResponse>>(response);
+    }
+
+    private static async Task<HttpResponseMessage> UploadEvidenceAsync(
+        HttpClient client,
+        string accessToken,
+        string evidenceType = "BusinessRegistration",
+        string? note = "CIPC registration document",
+        byte[]? content = null,
+        string contentType = "application/pdf",
+        bool ensureSuccess = true)
+    {
+        var bytes = content ?? "%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF"u8.ToArray();
+        using var multipart = new MultipartFormDataContent();
+        var file = new ByteArrayContent(bytes);
+        file.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        multipart.Add(file, "file", "registration.pdf");
+        multipart.Add(new StringContent(evidenceType), "evidenceType");
+        if (note is not null)
+        {
+            multipart.Add(new StringContent(note), "note");
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/seller/verification-evidence/upload")
+        {
+            Content = multipart
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var response = await client.SendAsync(request);
+        if (ensureSuccess)
+        {
+            await EnsureSuccessAsync(response);
+        }
+
+        return response;
+    }
+
+    private static async Task<HttpResponseMessage> GetAsSellerAsync(
+        HttpClient client,
+        string accessToken,
+        string uri,
+        bool ensureSuccess = true)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var response = await client.SendAsync(request);
+        if (ensureSuccess)
+        {
+            await EnsureSuccessAsync(response);
+        }
+
+        return response;
+    }
+
+    private static async Task<HttpResponseMessage> DeleteAsSellerAsync(
+        HttpClient client,
+        string accessToken,
+        string uri,
+        bool ensureSuccess = true)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, uri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var response = await client.SendAsync(request);
+        if (ensureSuccess)
+        {
+            await EnsureSuccessAsync(response);
+        }
+
+        return response;
+    }
+
     private static async Task<HttpResponseMessage> PutAsSellerAsync<T>(
         HttpClient client,
         string accessToken,
@@ -217,6 +494,37 @@ public class SellerOnboardingTests
         await EnsureSuccessAsync(loginResponse);
 
         return await ReadJsonAsync<AuthResponse>(loginResponse);
+    }
+
+    private static async Task<string> CreateAndLoginAdminAsync(
+        SellerOnboardingTestFactory factory,
+        HttpClient client,
+        string email)
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var admin = new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                EmailConfirmed = true,
+                CreatedAtUtc = DateTimeOffset.UtcNow
+            };
+
+            var createResult = await userManager.CreateAsync(admin, TestPassword);
+            Assert.True(createResult.Succeeded, string.Join("; ", createResult.Errors.Select(error => error.Description)));
+
+            var roleResult = await userManager.AddToRoleAsync(admin, SwyftlyRoles.Admin);
+            Assert.True(roleResult.Succeeded, string.Join("; ", roleResult.Errors.Select(error => error.Description)));
+        }
+
+        using var loginResponse = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest(email, TestPassword));
+        await EnsureSuccessAsync(loginResponse);
+
+        return (await ReadJsonAsync<AuthResponse>(loginResponse)).AccessToken;
     }
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response)

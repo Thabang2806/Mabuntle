@@ -127,6 +127,27 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               </div>
             </div>
 
+            <section class="product-purchase-section seller-policy-context">
+              <div class="product-section-heading product-section-heading--compact">
+                <span>
+                  <h2>Seller policies</h2>
+                  <p>Current seller guidance. Checkout keeps a policy snapshot on your order.</p>
+                </span>
+              </div>
+              @if (sellerPolicyEntries().length > 0) {
+                <div class="settings-summary-list">
+                  @for (entry of sellerPolicyEntries(); track entry.label) {
+                    <div>
+                      <span>{{ entry.label }}</span>
+                      <strong>{{ entry.value }}</strong>
+                    </div>
+                  }
+                </div>
+              } @else {
+                <app-ui-alert tone="info">This seller has not published detailed store policies yet. Order support and return workflows remain available through your account.</app-ui-alert>
+              }
+            </section>
+
             @if (addToCartMessage()) {
               <app-ui-alert tone="success">{{ addToCartMessage() }}</app-ui-alert>
             }
@@ -346,6 +367,22 @@ export class ProductDetailPageComponent implements OnInit {
       key,
       value: this.formatAttributeValue(value)
     }));
+  });
+  protected readonly sellerPolicyEntries = computed(() => {
+    const policy = this.productDetail()?.sellerPolicy;
+    if (!policy) {
+      return [];
+    }
+
+    return [
+      policy.returnWindowDays === null ? null : { label: 'Return window', value: `${policy.returnWindowDays} day${policy.returnWindowDays === 1 ? '' : 's'}` },
+      policy.returnPolicy ? { label: 'Returns', value: policy.returnPolicy } : null,
+      policy.exchangePolicy ? { label: 'Exchanges', value: policy.exchangePolicy } : null,
+      policy.fulfilmentPolicy ? { label: 'Fulfilment', value: policy.fulfilmentPolicy } : null,
+      policy.supportPolicy ? { label: 'Support', value: policy.supportPolicy } : null,
+      policy.careInstructions ? { label: 'Care', value: policy.careInstructions } : null,
+      policy.productDisclaimer ? { label: 'Disclaimer', value: policy.productDisclaimer } : null
+    ].filter((entry): entry is { label: string; value: string } => entry !== null);
   });
 
   async ngOnInit(): Promise<void> {

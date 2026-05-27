@@ -66,6 +66,7 @@ function createCampaign() {
       isEligible: true,
       sellerReasons: [],
       products: []
-    }
+    },
+    moderationEvents: []
   };
 }

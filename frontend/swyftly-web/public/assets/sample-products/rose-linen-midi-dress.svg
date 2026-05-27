@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1200" role="img" aria-labelledby="title desc">
+  <title id="title">Rose Linen Midi Dress</title>
+  <desc id="desc">Editorial product illustration for a rose linen midi dress.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff8f1"/>
+      <stop offset="0.55" stop-color="#f4d8d5"/>
+      <stop offset="1" stop-color="#4a1836"/>
+    </linearGradient>
+    <linearGradient id="dress" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4a9a6"/>
+      <stop offset="1" stop-color="#b75f6a"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1200" fill="url(#bg)"/>
+  <rect x="86" y="92" width="728" height="1016" rx="42" fill="#fffaf4" opacity="0.76"/>
+  <path d="M355 260h190l42 200 126 430H187l126-430z" fill="url(#dress)"/>
+  <path d="M355 260c27 64 61 96 95 96s68-32 95-96" fill="#fff4ed" opacity="0.85"/>
+  <path d="M330 458h240" stroke="#7a2c47" stroke-width="18" stroke-linecap="round"/>
+  <path d="M314 900c80 42 192 52 272 0" fill="none" stroke="#fff4ed" stroke-width="14" stroke-linecap="round"/>
+  <text x="450" y="1036" text-anchor="middle" font-family="Georgia, serif" font-size="46" fill="#3d102b">Rose linen midi</text>
+</svg>

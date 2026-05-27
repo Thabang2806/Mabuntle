@@ -6,6 +6,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
+import { SellerInventoryMovementResponse, SellerInventoryMovementType } from '../seller/seller-inventory.models';
+import { SellerInventoryService } from '../seller/seller-inventory.service';
 import { SellerOrderResult } from '../seller/seller-order.models';
 import { SellerOrderService } from '../seller/seller-order.service';
 import { SellerWorkspaceNavComponent } from '../seller/seller-workspace-nav.component';
@@ -287,6 +289,31 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </div>
               }
             </section>
+
+            <section class="seller-panel">
+              <h2>Stock ledger</h2>
+              <p>Reservation and payment stock events for this order. Paid settlement confirms reservations but does not deduct physical stock automatically.</p>
+              @if (isStockLedgerLoading()) {
+                <p>Loading stock ledger...</p>
+              } @else if (stockLedgerError()) {
+                <app-ui-alert tone="warning">{{ stockLedgerError() }}</app-ui-alert>
+              } @else if (stockLedger().length === 0) {
+                <p>No reservation or stock ledger events have been recorded for this order yet.</p>
+              } @else {
+                <div class="seller-timeline">
+                  @for (movement of stockLedger(); track movement.movementId) {
+                    <article class="seller-timeline-item">
+                      <app-status-badge [label]="movementLabel(movement)" [tone]="movementTone(movement)" />
+                      <strong>{{ movement.productTitle }}</strong>
+                      <small>{{ movement.sku }} - {{ movement.occurredAtUtc | date:'medium' }}</small>
+                      <small>Stock {{ movement.stockQuantityBefore }} -> {{ movement.stockQuantityAfter }} ({{ movement.quantityDelta > 0 ? '+' : '' }}{{ movement.quantityDelta }})</small>
+                      <small>Reserved {{ movement.reservedQuantityBefore }} -> {{ movement.reservedQuantityAfter }} ({{ movement.reservedQuantityDelta > 0 ? '+' : '' }}{{ movement.reservedQuantityDelta }})</small>
+                      <p>{{ movement.reason }}</p>
+                    </article>
+                  }
+                </div>
+              }
+            </section>
           </div>
         }
       }
@@ -295,6 +322,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 })
 export class SellerOrderDetailPageComponent implements OnInit {
   private readonly formBuilder = inject(NonNullableFormBuilder);
+  private readonly inventoryService = inject(SellerInventoryService);
   private readonly orderService = inject(SellerOrderService);
   private readonly route = inject(ActivatedRoute);
 
@@ -303,6 +331,9 @@ export class SellerOrderDetailPageComponent implements OnInit {
   protected readonly isActing = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly successMessage = signal<string | null>(null);
+  protected readonly stockLedger = signal<SellerInventoryMovementResponse[]>([]);
+  protected readonly isStockLedgerLoading = signal(false);
+  protected readonly stockLedgerError = signal<string | null>(null);
 
   protected readonly trackingForm = this.formBuilder.group({
     carrierName: ['', [Validators.required]],
@@ -479,16 +510,72 @@ export class SellerOrderDetailPageComponent implements OnInit {
       : `${order.deliveryEstimatedMinDays}-${order.deliveryEstimatedMaxDays} days`;
   }
 
+  protected movementTone(movement: SellerInventoryMovementResponse): StatusBadgeTone {
+    if (movement.movementType === 'PaymentFailedReservationReleased' || movement.movementType === 'ReturnRequested') {
+      return 'warning';
+    }
+
+    if (movement.movementType === 'RefundCompleted') {
+      return 'accent';
+    }
+
+    if (movement.movementType === 'ReturnRestocked') {
+      return 'success';
+    }
+
+    if (movement.reservedQuantityDelta > 0) {
+      return 'success';
+    }
+
+    if (movement.reservedQuantityDelta < 0) {
+      return 'accent';
+    }
+
+    return 'neutral';
+  }
+
+  protected movementLabel(movement: SellerInventoryMovementResponse): string {
+    const labels: Record<SellerInventoryMovementType, string> = {
+      SellerAdjustment: 'Adjustment',
+      BulkImportAdjustment: 'Bulk import',
+      ReservationCreated: 'Reserved',
+      ReservationReleased: 'Released',
+      ReservationExpired: 'Expired',
+      ReservationConfirmed: 'Confirmed',
+      PaymentFailedReservationReleased: 'Payment release',
+      ReturnRequested: 'Return requested',
+      RefundCompleted: 'Refund completed',
+      ReturnRestocked: 'Restocked'
+    };
+
+    return labels[movement.movementType] ?? movement.movementType;
+  }
+
   private async loadOrder(): Promise<void> {
     this.isLoading.set(true);
     this.errorMessage.set(null);
 
     try {
-      this.order.set(await this.orderService.getOrder(this.orderId()));
+      const order = await this.orderService.getOrder(this.orderId());
+      this.order.set(order);
+      await this.loadStockLedger(order.orderId);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
     } finally {
       this.isLoading.set(false);
+    }
+  }
+
+  private async loadStockLedger(orderId: string): Promise<void> {
+    this.isStockLedgerLoading.set(true);
+    this.stockLedgerError.set(null);
+
+    try {
+      this.stockLedger.set(await this.inventoryService.listHistory({ orderId }));
+    } catch (error) {
+      this.stockLedgerError.set(getApiErrorMessage(error));
+    } finally {
+      this.isStockLedgerLoading.set(false);
     }
   }
 
@@ -502,7 +589,9 @@ export class SellerOrderDetailPageComponent implements OnInit {
     this.successMessage.set(null);
 
     try {
-      this.order.set(await action());
+      const order = await action();
+      this.order.set(order);
+      await this.loadStockLedger(order.orderId);
       this.successMessage.set(successMessage);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));

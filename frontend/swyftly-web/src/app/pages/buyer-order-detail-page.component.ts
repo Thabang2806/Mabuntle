@@ -123,6 +123,20 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             }
 
             <section class="buyer-panel">
+              <h2>Store policy snapshot</h2>
+              <p>Policy context copied at checkout. Later seller edits do not change this order record.</p>
+              @if (sellerPolicySnapshotEntries().length > 0) {
+                <dl class="seller-facts">
+                  @for (entry of sellerPolicySnapshotEntries(); track entry.label) {
+                    <div><dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd></div>
+                  }
+                </dl>
+              } @else {
+                <app-ui-alert tone="info">This order does not have a store-policy snapshot.</app-ui-alert>
+              }
+            </section>
+
+            <section class="buyer-panel">
               <h2>After-sales options</h2>
               @if (canRequestReturn()) {
                 <p>Delivered orders can be submitted for return review. Choose one line item per request.</p>
@@ -461,6 +475,23 @@ export class BuyerOrderDetailPageComponent implements OnInit {
     return order.deliveryEstimatedMinDays === order.deliveryEstimatedMaxDays
       ? `${order.deliveryEstimatedMinDays} day${order.deliveryEstimatedMinDays === 1 ? '' : 's'}`
       : `${order.deliveryEstimatedMinDays}-${order.deliveryEstimatedMaxDays} days`;
+  }
+
+  protected sellerPolicySnapshotEntries(): { label: string; value: string }[] {
+    const snapshot = this.order()?.sellerPolicySnapshot;
+    if (!snapshot) {
+      return [];
+    }
+
+    return [
+      snapshot.returnWindowDays === null ? null : { label: 'Return window', value: `${snapshot.returnWindowDays} day${snapshot.returnWindowDays === 1 ? '' : 's'}` },
+      snapshot.returnPolicy ? { label: 'Returns', value: snapshot.returnPolicy } : null,
+      snapshot.exchangePolicy ? { label: 'Exchanges', value: snapshot.exchangePolicy } : null,
+      snapshot.fulfilmentPolicy ? { label: 'Fulfilment', value: snapshot.fulfilmentPolicy } : null,
+      snapshot.supportPolicy ? { label: 'Support', value: snapshot.supportPolicy } : null,
+      snapshot.careInstructions ? { label: 'Care', value: snapshot.careInstructions } : null,
+      snapshot.productDisclaimer ? { label: 'Disclaimer', value: snapshot.productDisclaimer } : null
+    ].filter((entry): entry is { label: string; value: string } => entry !== null);
   }
 
   private selectedReturnItem() {

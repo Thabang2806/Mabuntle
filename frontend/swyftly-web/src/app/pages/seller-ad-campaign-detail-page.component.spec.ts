@@ -127,6 +127,7 @@ function createCampaign(overrides: Record<string, unknown> = {}) {
         reasons: []
       }]
     },
+    moderationEvents: [],
     ...overrides
   };
 }

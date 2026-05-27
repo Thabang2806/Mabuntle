@@ -73,7 +73,7 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
             </dl>
 
             <div class="form-grid">
-              <mat-form-field appearance="outline">
+              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
                 <mat-label>Display name</mat-label>
                 <input matInput formControlName="displayName" maxlength="160">
                 @if (profileForm.controls.displayName.hasError('maxlength')) {
@@ -81,7 +81,7 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
                 }
               </mat-form-field>
 
-              <mat-form-field appearance="outline">
+              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
                 <mat-label>Phone number</mat-label>
                 <input matInput formControlName="phoneNumber" maxlength="64">
                 @if (profileForm.controls.phoneNumber.hasError('maxlength')) {
@@ -161,57 +161,57 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
             }
 
             <form [formGroup]="addressForm" (ngSubmit)="saveDeliveryAddress()" class="buyer-form-grid" novalidate>
-              <mat-form-field appearance="outline">
+              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
                 <mat-label>Label</mat-label>
                 <input matInput formControlName="label" maxlength="80">
               </mat-form-field>
 
-              <mat-form-field appearance="outline">
+              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
                 <mat-label>Recipient name</mat-label>
                 <input matInput formControlName="recipientName" maxlength="160">
               </mat-form-field>
 
-              <mat-form-field appearance="outline">
+              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
                 <mat-label>Phone number</mat-label>
                 <input matInput formControlName="phoneNumber" maxlength="64">
               </mat-form-field>
 
-              <mat-form-field appearance="outline">
+              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
                 <mat-label>Address line 1</mat-label>
                 <input matInput formControlName="addressLine1" maxlength="240">
               </mat-form-field>
 
-              <mat-form-field appearance="outline">
+              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
                 <mat-label>Address line 2</mat-label>
                 <input matInput formControlName="addressLine2" maxlength="240">
               </mat-form-field>
 
-              <mat-form-field appearance="outline">
+              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
                 <mat-label>Suburb</mat-label>
                 <input matInput formControlName="suburb" maxlength="120">
               </mat-form-field>
 
-              <mat-form-field appearance="outline">
+              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
                 <mat-label>City</mat-label>
                 <input matInput formControlName="city" maxlength="120">
               </mat-form-field>
 
-              <mat-form-field appearance="outline">
+              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
                 <mat-label>Province</mat-label>
                 <input matInput formControlName="province" maxlength="120">
               </mat-form-field>
 
-              <mat-form-field appearance="outline">
+              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
                 <mat-label>Postal code</mat-label>
                 <input matInput formControlName="postalCode" maxlength="32">
               </mat-form-field>
 
-              <mat-form-field appearance="outline">
+              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
                 <mat-label>Country code</mat-label>
                 <input matInput formControlName="countryCode" maxlength="2">
               </mat-form-field>
 
-              <mat-form-field appearance="outline">
+              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
                 <mat-label>Delivery instructions</mat-label>
                 <textarea matInput rows="3" formControlName="deliveryInstructions" maxlength="500"></textarea>
                 @if (addressForm.controls.deliveryInstructions.hasError('maxlength')) {

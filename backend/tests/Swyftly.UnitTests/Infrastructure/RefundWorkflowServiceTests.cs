@@ -5,6 +5,8 @@ using Swyftly.Application.Common.Errors;
 using Swyftly.Application.Common.Results;
 using Swyftly.Application.Payments;
 using Swyftly.Application.Refunds;
+using Swyftly.Domain.Catalog;
+using Swyftly.Domain.Inventory;
 using Swyftly.Domain.Ledger;
 using Swyftly.Domain.Orders;
 using Swyftly.Domain.Payments;
@@ -40,6 +42,12 @@ public sealed class RefundWorkflowServiceTests
         Assert.Equal(RefundStatus.Processing, statusObservedByProvider);
         Assert.Equal(1, provider.RefundCallCount);
         Assert.Equal("Refunded", result.Value.Status);
+        var movement = await dbContext.InventoryMovements.SingleAsync(movement => movement.MovementType == InventoryMovementType.RefundCompleted);
+        Assert.Equal(seed.RefundId, movement.RefundId);
+        Assert.Equal(seed.PaymentId, movement.PaymentId);
+        Assert.Equal(seed.OrderId, movement.OrderId);
+        Assert.Equal(0, movement.QuantityDelta);
+        Assert.Equal(0, movement.ReservedQuantityAfter - movement.ReservedQuantityBefore);
     }
 
     [Fact]
@@ -102,8 +110,10 @@ public sealed class RefundWorkflowServiceTests
         var now = DateTimeOffset.Parse("2026-05-18T12:00:00Z");
         var buyerId = Guid.NewGuid();
         var sellerId = Guid.NewGuid();
+        var product = new Product(sellerId);
+        var variant = new ProductVariant(product.Id, "SKU-REFUND", "M", "Black", 1000m, 1200m, 5);
         var order = new Order(buyerId, sellerId, Guid.NewGuid(), now);
-        order.AddItem(Guid.NewGuid(), Guid.NewGuid(), "Refundable Item", "SKU-REFUND", "M", "Black", 1000m, 1);
+        order.AddItem(product.Id, variant.Id, "Refundable Item", variant.Sku, variant.Size, variant.Colour, variant.Price, 1);
         order.ChangeStatus(OrderStatus.Paid, now.AddMinutes(1), "TestPaid");
         order.ChangeStatus(OrderStatus.Delivered, now.AddMinutes(2), "TestDelivered");
         var payment = new Payment(order.Id, buyerId, "Fake", 1000m, "ZAR", now);
@@ -113,6 +123,8 @@ public sealed class RefundWorkflowServiceTests
         var balance = new SellerBalance(sellerId, "ZAR");
         balance.CreditPending(875m);
 
+        dbContext.Products.Add(product);
+        dbContext.ProductVariants.Add(variant);
         dbContext.Orders.Add(order);
         dbContext.Payments.Add(payment);
         dbContext.Refunds.Add(refund);

@@ -35,6 +35,40 @@ describe('SellerAnalyticsService', () => {
     expect(response.totalSales).toBe(998);
     expect(response.adPerformance.clicks).toBe(5);
   });
+
+  it('loads seller analytics performance with filters', async () => {
+    const promise = service.getPerformance({
+      fromUtc: '2026-05-01T00:00:00.000Z',
+      toUtc: '2026-05-31T00:00:00.000Z',
+      bucket: 'Week'
+    });
+
+    const request = httpTestingController.expectOne(req =>
+      req.url === `${environment.apiBaseUrl}/api/seller/analytics/performance`
+      && req.params.get('fromUtc') === '2026-05-01T00:00:00.000Z'
+      && req.params.get('toUtc') === '2026-05-31T00:00:00.000Z'
+      && req.params.get('bucket') === 'Week');
+    expect(request.request.method).toBe('GET');
+    request.flush(createPerformance());
+
+    const response = await promise;
+    expect(response.salesTrend[0].grossSales).toBe(998);
+    expect(response.productPerformance[0].productTitle).toBe('Seller One Product');
+  });
+
+  it('builds seller analytics csv export urls', () => {
+    const url = service.getCsvExportUrl('Products', {
+      fromUtc: '2026-05-01T00:00:00.000Z',
+      toUtc: '2026-05-31T00:00:00.000Z',
+      bucket: 'Day'
+    });
+
+    expect(url).toContain(`${environment.apiBaseUrl}/api/seller/analytics/export.csv?`);
+    expect(url).toContain('report=Products');
+    expect(url).toContain('fromUtc=2026-05-01T00:00:00.000Z');
+    expect(url).toContain('toUtc=2026-05-31T00:00:00.000Z');
+    expect(url).toContain('bucket=Day');
+  });
 });
 
 function createSummary() {
@@ -75,6 +109,50 @@ function createSummary() {
       qualityScoreImprovementNote: 'Pre-AI baseline quality scores are not captured yet.',
       fieldValuesAccepted: 1,
       fieldValuesEdited: 1
+    }
+  };
+}
+
+function createPerformance() {
+  return {
+    sellerId: 'seller-id',
+    fromUtc: '2026-05-01T00:00:00.000Z',
+    toUtc: '2026-05-31T00:00:00.000Z',
+    bucket: 'Week',
+    salesTrend: [{
+      periodStartUtc: '2026-05-01T00:00:00.000Z',
+      periodEndUtc: '2026-05-08T00:00:00.000Z',
+      orderCount: 1,
+      grossSales: 998,
+      refundedAmount: 100,
+      netSales: 898,
+      unitsSold: 2
+    }],
+    productPerformance: [{
+      productId: 'product-id',
+      productTitle: 'Seller One Product',
+      productSlug: 'seller-one-product',
+      status: 'Published',
+      unitsSold: 2,
+      grossSales: 998,
+      refundedAmount: 100,
+      returnCount: 1,
+      returnRate: 0.5,
+      stockQuantity: 3,
+      reservedQuantity: 0,
+      availableQuantity: 3
+    }],
+    inventoryPerformance: [],
+    adPerformance: [],
+    customerCareSummary: {
+      returnCount: 1,
+      openReturnCount: 1,
+      refundCount: 1,
+      refundedAmount: 100,
+      supportTicketCount: 1,
+      openSupportTicketCount: 1,
+      disputeCount: 1,
+      activeDisputeCount: 1
     }
   };
 }

@@ -113,3 +113,31 @@ export function createProduct() {
     publishedAtUtc: '2026-05-18T12:00:00Z'
   };
 }
+
+export function createSellerPolicy() {
+  return {
+    returnWindowDays: 14,
+    returnPolicy: 'Returns are reviewed for delivered items in original condition.',
+    exchangePolicy: 'Exchanges depend on stock availability.',
+    fulfilmentPolicy: 'Orders are usually dispatched within 2-3 business days.',
+    supportPolicy: 'Message support with order issues and product questions.',
+    careInstructions: 'Follow product care notes on each item.',
+    productDisclaimer: 'Colour and fit may vary slightly by screen and size.',
+    isComplete: true,
+    missingFields: [],
+    updatedAtUtc: '2026-05-21T10:00:00Z'
+  };
+}
+
+export function createSellerPolicySnapshot() {
+  return {
+    returnWindowDays: 14,
+    returnPolicy: 'Returns are reviewed for delivered items in original condition.',
+    exchangePolicy: 'Exchanges depend on stock availability.',
+    fulfilmentPolicy: 'Orders are usually dispatched within 2-3 business days.',
+    supportPolicy: 'Message support with order issues and product questions.',
+    careInstructions: 'Follow product care notes on each item.',
+    productDisclaimer: 'Colour and fit may vary slightly by screen and size.',
+    snapshotAtUtc: '2026-05-21T10:00:00Z'
+  };
+}

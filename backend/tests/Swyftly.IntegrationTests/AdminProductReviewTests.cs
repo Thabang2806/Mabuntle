@@ -12,7 +12,10 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Swyftly.Api.Admin;
 using Swyftly.Api.Authentication;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Notifications;
 using Swyftly.Domain.Ai;
+using Swyftly.Domain.Buyers;
+using Swyftly.Domain.Carts;
 using Swyftly.Domain.Catalog;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Identity;
@@ -74,6 +77,12 @@ public sealed class AdminProductReviewTests
         Assert.NotNull(detail);
         Assert.Equal("Published", detail!.Status);
         Assert.Contains(detail.AuditTrail, entry => entry.ActionType == "ProductApproved");
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        Assert.True(await dbContext.Notifications.AnyAsync(notification =>
+            notification.Type == SellerNotificationTypes.ProductApproved
+            && notification.RelatedEntityId == productId));
     }
 
     [Fact]
@@ -103,6 +112,12 @@ public sealed class AdminProductReviewTests
         Assert.Contains(
             detail.AuditTrail,
             entry => entry.ActionType == "ProductRejected" && entry.Reason == "Listing images do not match the product.");
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        Assert.True(await dbContext.Notifications.AnyAsync(notification =>
+            notification.Type == SellerNotificationTypes.ProductRejected
+            && notification.RelatedEntityId == productId));
     }
 
     [Fact]
@@ -132,6 +147,12 @@ public sealed class AdminProductReviewTests
         Assert.Contains(
             detail.AuditTrail,
             entry => entry.ActionType == "ProductChangesRequested" && entry.Reason == "Add clearer size measurements.");
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        Assert.True(await dbContext.Notifications.AnyAsync(notification =>
+            notification.Type == SellerNotificationTypes.ProductChangesRequested
+            && notification.RelatedEntityId == productId));
     }
 
     [Fact]
@@ -161,6 +182,40 @@ public sealed class AdminProductReviewTests
         Assert.Contains(
             detail.AuditTrail,
             entry => entry.ActionType == "ProductApproved" && entry.Reason == "Reviewed supplier documents manually.");
+    }
+
+    [Fact]
+    public async Task ApproveVariantRevision_AppliesChangesAndUpdatesActiveCartSnapshots()
+    {
+        using var factory = new AdminProductReviewTestFactory();
+        using var client = factory.CreateClient();
+        var seed = await CreatePublishedProductWithVariantRevisionAsync(factory);
+        var adminToken = await CreateAndLoginAdminAsync(factory, client);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/admin/products/variant-revisions/{seed.RevisionId}/approve",
+            new { });
+
+        response.EnsureSuccessStatusCode();
+        var detail = await response.Content.ReadFromJsonAsync<AdminProductVariantRevisionDetailResponse>();
+        Assert.NotNull(detail);
+        Assert.Equal("Approved", detail!.Status);
+        Assert.Contains(detail.AuditTrail, entry => entry.ActionType == "ProductVariantRevisionApproved");
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        var variant = await dbContext.ProductVariants.SingleAsync(item => item.Id == seed.VariantId);
+        var cartItem = await dbContext.CartItems.SingleAsync(item => item.Id == seed.CartItemId);
+
+        Assert.Equal("UPDATED-SKU-M-BLACK", variant.Sku);
+        Assert.Equal(599.99m, variant.Price);
+        Assert.Equal("UPDATED-SKU-M-BLACK", cartItem.Sku);
+        Assert.Equal(599.99m, cartItem.UnitPrice);
+        Assert.True(await dbContext.Notifications.AnyAsync(notification =>
+            notification.Type == SellerNotificationTypes.ProductVariantRevisionApproved
+            && notification.RelatedEntityId == seed.ProductId));
     }
 
     private static async Task<string> RegisterAndLoginBuyerAsync(HttpClient client)
@@ -303,6 +358,114 @@ public sealed class AdminProductReviewTests
         await dbContext.SaveChangesAsync();
         return product.Id;
     }
+
+    private static async Task<VariantRevisionSeed> CreatePublishedProductWithVariantRevisionAsync(
+        AdminProductReviewTestFactory factory)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+
+        var seller = new SellerProfile(Guid.NewGuid());
+        seller.UpdateProfile(
+            "Variant Review Seller",
+            "variant-review-seller@example.test",
+            "+27110000000",
+            SellerBusinessType.RegisteredBusiness,
+            "Variant Review Trading");
+
+        var storefront = new SellerStorefront(seller.Id, "Variant Review Seller", $"variant-review-{Guid.NewGuid():N}");
+        var address = new SellerAddress(
+            seller.Id,
+            "1 Market Street",
+            null,
+            "Johannesburg",
+            "Gauteng",
+            "2000",
+            "ZA");
+        var payout = new SellerPayoutProfilePlaceholder(seller.Id, "provider-ref-456");
+        payout.MarkAdminApproved(Guid.NewGuid(), DateTimeOffset.UtcNow);
+        seller.MarkVerified(storefront, address, payout);
+
+        var product = new Product(seller.Id);
+        product.UpdateDraftDetails(
+            CatalogSeedData.WomenDresses,
+            null,
+            "Published Variant Dress",
+            $"published-variant-dress-{Guid.NewGuid():N}",
+            "A live published product.",
+            "A live published product with variant revisions.");
+        product.SubmitForReview(hasAtLeastOneImage: true, hasAtLeastOneActiveVariant: true);
+        product.Publish(DateTimeOffset.UtcNow);
+
+        var variant = new ProductVariant(
+            product.Id,
+            "LIVE-SKU-M-BLACK",
+            "M",
+            "Black",
+            499.99m,
+            699.99m,
+            10);
+        var revision = new ProductVariantRevision(product.Id, seller.Id);
+        var revisionItem = new ProductVariantRevisionItem(
+            revision.Id,
+            ProductVariantRevisionItemOperation.Update,
+            variant.Id,
+            "UPDATED-SKU-M-BLACK",
+            "M",
+            "Black",
+            599.99m,
+            799.99m,
+            null,
+            ProductVariantStatus.Active,
+            "BAR-UPDATED");
+        revision.UpdateSellerReason("Corrected retail price.");
+        revision.SubmitForReview(hasAtLeastOneItem: true, DateTimeOffset.UtcNow);
+
+        var buyer = new BuyerProfile(Guid.NewGuid());
+        var cart = new Cart(buyer.Id);
+        cart.AddOrUpdateItem(
+            product.Id,
+            variant.Id,
+            seller.Id,
+            product.Title,
+            variant.Sku,
+            variant.Size,
+            variant.Colour,
+            variant.Price,
+            1,
+            variant.AvailableQuantity);
+        var cartItemId = cart.Items.Single().Id;
+
+        dbContext.SellerProfiles.Add(seller);
+        dbContext.SellerStorefronts.Add(storefront);
+        dbContext.SellerAddresses.Add(address);
+        dbContext.SellerPayoutProfiles.Add(payout);
+        dbContext.Products.Add(product);
+        dbContext.ProductAttributeValues.Add(new ProductAttributeValue(product.Id, "size", "\"M\""));
+        dbContext.ProductAttributeValues.Add(new ProductAttributeValue(product.Id, "colour", "\"Black\""));
+        dbContext.ProductVariants.Add(variant);
+        dbContext.ProductImages.Add(new ProductImage(
+            product.Id,
+            "https://example.test/published-variant-dress.jpg",
+            $"products/{product.Id:N}/primary.jpg",
+            "Published variant dress",
+            0,
+            isPrimary: true,
+            DateTimeOffset.UtcNow));
+        dbContext.ProductVariantRevisions.Add(revision);
+        dbContext.ProductVariantRevisionItems.Add(revisionItem);
+        dbContext.BuyerProfiles.Add(buyer);
+        dbContext.Carts.Add(cart);
+
+        await dbContext.SaveChangesAsync();
+        return new VariantRevisionSeed(product.Id, variant.Id, revision.Id, cartItemId);
+    }
+
+    private sealed record VariantRevisionSeed(
+        Guid ProductId,
+        Guid VariantId,
+        Guid RevisionId,
+        Guid CartItemId);
 
     private sealed class AdminProductReviewTestFactory : WebApplicationFactory<Program>
     {

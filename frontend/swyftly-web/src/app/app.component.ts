@@ -3,6 +3,8 @@ import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/rou
 import { AuthService } from './auth/auth.service';
 import { BuyerNotificationResponse } from './buyer/buyer-engagement.models';
 import { BuyerNotificationRealtimeService } from './buyer/buyer-notification-realtime.service';
+import { SellerNotificationResponse } from './seller/seller-notification.models';
+import { SellerNotificationRealtimeService } from './seller/seller-notification-realtime.service';
 import { MobileBottomNavComponent, MobileBottomNavItem } from './shared/ui/mobile-bottom-nav.component';
 
 type NavigationItem = {
@@ -20,18 +22,19 @@ type NavigationItem = {
 export class AppComponent implements OnInit {
   protected readonly authService = inject(AuthService);
   protected readonly notificationRealtime = inject(BuyerNotificationRealtimeService);
+  protected readonly sellerNotificationRealtime = inject(SellerNotificationRealtimeService);
   private readonly router = inject(Router);
 
   protected readonly publicNavigationItems: NavigationItem[] = [
-    { label: 'Shop', route: '/shop' }
+    { label: 'Shop', route: '/shop' },
+    { label: 'Sell', route: '/sell' }
   ];
 
   protected readonly authNavigationItems = computed<NavigationItem[]>(() => {
     if (!this.authService.isAuthenticated()) {
       return [
         { label: 'Sign in', route: '/login' },
-        { label: 'Join', route: '/register/buyer' },
-        { label: 'Sell', route: '/register/seller' }
+        { label: 'Join', route: '/register/buyer' }
       ];
     }
 
@@ -59,7 +62,7 @@ export class AppComponent implements OnInit {
     }
 
     return [
-      { label: 'Seller', route: '/seller' }
+      { label: 'Seller', route: '/seller', badge: this.sellerNotificationRealtime.unreadCount() }
     ];
   });
 
@@ -110,6 +113,7 @@ export class AppComponent implements OnInit {
       return [
         ...items,
         { label: 'Seller', route: '/seller' },
+        { label: 'Alerts', route: '/seller/notifications', badge: this.sellerNotificationRealtime.unreadCount() },
         { label: 'Orders', route: '/seller/orders' },
         { label: 'Payouts', route: '/seller/payouts' }
       ];
@@ -127,7 +131,7 @@ export class AppComponent implements OnInit {
 
     return [
       ...items,
-      { label: 'Sell', route: '/register/seller' },
+      { label: 'Sell', route: '/sell' },
       { label: 'Join', route: '/register/buyer' },
       { label: 'Sign in', route: '/login' }
     ];
@@ -160,5 +164,21 @@ export class AppComponent implements OnInit {
     }
 
     return '/account/notifications';
+  }
+
+  protected sellerNotificationRoute(notification: SellerNotificationResponse): string {
+    if (notification.relatedEntityType === 'Product' && notification.relatedEntityId) {
+      return `/seller/products/${notification.relatedEntityId}/edit`;
+    }
+
+    if (notification.relatedEntityType === 'AdCampaign' && notification.relatedEntityId) {
+      return `/seller/ads/${notification.relatedEntityId}`;
+    }
+
+    if (notification.relatedEntityType === 'SellerProfile') {
+      return '/seller';
+    }
+
+    return '/seller/notifications';
   }
 }

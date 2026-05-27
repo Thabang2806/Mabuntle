@@ -31,6 +31,15 @@ export interface SellerAdCampaignResponse {
   productIds: string[];
   budget: AdBudgetResponse | null;
   eligibility: AdCampaignEligibilityResponse;
+  moderationEvents: SellerAdCampaignModerationEventResponse[];
+}
+
+export interface SellerAdCampaignModerationEventResponse {
+  auditLogId: string;
+  actionType: string;
+  actorRole: string | null;
+  reason: string | null;
+  createdAtUtc: string;
 }
 
 export interface AdBudgetResponse {

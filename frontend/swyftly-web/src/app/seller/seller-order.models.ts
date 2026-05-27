@@ -1,3 +1,5 @@
+import { SellerPolicySnapshotResponse } from '../shared/seller-policy.models';
+
 export interface SellerOrderResult {
   orderId: string;
   buyerId: string;
@@ -17,6 +19,7 @@ export interface SellerOrderResult {
   deliveryEstimatedMinDays?: number | null;
   deliveryEstimatedMaxDays?: number | null;
   pickupPoint?: SellerOrderPickupPointResult | null;
+  sellerPolicySnapshot?: SellerPolicySnapshotResponse | null;
   statusHistory: SellerOrderStatusHistoryResult[];
   shipments: SellerShipmentResult[];
 }

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1200" role="img" aria-labelledby="title desc">
+  <title id="title">Champagne Mini Crossbody Bag</title>
+  <desc id="desc">Editorial product illustration for a champagne mini crossbody bag.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff9f3"/>
+      <stop offset="0.6" stop-color="#edd6a4"/>
+      <stop offset="1" stop-color="#5c2141"/>
+    </linearGradient>
+    <linearGradient id="bag" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7dfaa"/>
+      <stop offset="1" stop-color="#bd9150"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1200" fill="url(#bg)"/>
+  <rect x="98" y="104" width="704" height="992" rx="44" fill="#fffaf4" opacity="0.72"/>
+  <path d="M232 368c150 116 286 128 436 8" fill="none" stroke="#4a1836" stroke-width="22" stroke-linecap="round"/>
+  <rect x="268" y="494" width="364" height="284" rx="48" fill="url(#bag)"/>
+  <path d="M300 578h300" stroke="#fff5dd" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="450" cy="654" r="28" fill="#4a1836" opacity="0.76"/>
+  <text x="450" y="1038" text-anchor="middle" font-family="Georgia, serif" font-size="38" fill="#3d102b">Champagne crossbody</text>
+</svg>

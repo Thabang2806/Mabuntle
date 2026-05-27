@@ -23,7 +23,7 @@ import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
 
           <div class="market-home-actions">
             <a mat-flat-button routerLink="/shop">Shop new arrivals</a>
-            <a mat-stroked-button routerLink="/register/seller">Start selling</a>
+            <a mat-stroked-button routerLink="/sell">Start selling</a>
           </div>
 
           <a class="market-search-entry" routerLink="/shop" aria-label="Open product search">
@@ -99,7 +99,7 @@ import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
             </p>
           </div>
           <div class="market-home-actions">
-            <a mat-flat-button routerLink="/register/seller">Create seller account</a>
+            <a mat-flat-button routerLink="/sell">Learn about selling</a>
             <a mat-stroked-button routerLink="/login">Seller sign in</a>
           </div>
         </div>
@@ -197,8 +197,8 @@ export class HomePageComponent {
       eyebrow: 'Sellers',
       heading: 'Guided listing flow',
       description: 'Seller tools support onboarding, product drafts, images, variants, stock, and listing review.',
-      action: 'Start selling',
-      route: '/register/seller'
+      action: 'Learn about selling',
+      route: '/sell'
     },
     {
       eyebrow: 'Support',

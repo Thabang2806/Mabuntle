@@ -124,6 +124,7 @@ function createCampaign(overrides: Record<string, unknown> = {}) {
       sellerReasons: [],
       products: []
     },
+    moderationEvents: [],
     ...overrides
   };
 }

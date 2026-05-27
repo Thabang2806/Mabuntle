@@ -11,6 +11,8 @@ import {
   SellerInventoryBulkAdjustmentResponse,
   SellerInventoryBulkAdjustmentRowResponse,
   SellerInventoryItemResponse,
+  SellerInventoryMovementResponse,
+  SellerInventoryMovementType,
   SellerInventoryVariantStatus
 } from '../seller/seller-inventory.models';
 import { SellerInventoryService } from '../seller/seller-inventory.service';
@@ -22,6 +24,7 @@ import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge
 import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
 type InventoryFilter = 'All' | 'LowStock' | 'OutOfStock' | 'Reserved';
+type InventoryHistoryTypeFilter = 'All' | SellerInventoryMovementType;
 
 @Component({
   selector: 'app-seller-inventory-page',
@@ -72,8 +75,23 @@ type InventoryFilter = 'All' | 'LowStock' | 'OutOfStock' | 'Reserved';
         <section class="seller-filter-bar" aria-label="Inventory filters">
           <mat-form-field appearance="outline">
             <mat-label>Search inventory</mat-label>
-            <input matInput [value]="searchTerm()" (input)="updateSearch($event)" />
+            <input matInput [value]="searchTerm()" (input)="updateSearch($event)" placeholder="Product, SKU, or barcode" />
           </mat-form-field>
+
+          <mat-form-field appearance="outline" class="seller-scanner-field">
+            <mat-label>Scanner quick search</mat-label>
+            <input
+              matInput
+              [value]="scannerTerm()"
+              (input)="updateScannerTerm($event)"
+              (keydown.enter)="submitScannerSearch($event)"
+              placeholder="Scan SKU or barcode"
+            />
+          </mat-form-field>
+
+          <button mat-stroked-button type="button" class="seller-scanner-action" (click)="submitScannerSearch()">
+            Find scanned item
+          </button>
 
           <mat-form-field appearance="outline">
             <mat-label>Stock state</mat-label>
@@ -84,7 +102,76 @@ type InventoryFilter = 'All' | 'LowStock' | 'OutOfStock' | 'Reserved';
               <mat-option value="Reserved">Reserved stock</mat-option>
             </mat-select>
           </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>History type</mat-label>
+            <mat-select [value]="historyTypeFilter()" (selectionChange)="updateHistoryTypeFilter($event)">
+              @for (option of historyTypeOptions; track option.value) {
+                <mat-option [value]="option.value">{{ option.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
         </section>
+
+        @if (scannerMessage()) {
+          <app-ui-alert tone="info">{{ scannerMessage() }}</app-ui-alert>
+        }
+
+        <section class="route-card seller-inventory-history-summary" aria-label="Inventory movement search">
+          <div>
+            <span class="eyebrow">Movement history</span>
+            <h2>Search stock changes</h2>
+            <p>Use product, SKU, or barcode search, or scan into the quick search field and press Enter to open an exact variant match.</p>
+          </div>
+          <button mat-stroked-button type="button" [disabled]="isHistoryLoading()" (click)="loadFilteredHistory()">
+            {{ isHistoryLoading() ? 'Loading history...' : 'Load matching history' }}
+          </button>
+        </section>
+
+        @if (historyErrorMessage()) {
+          <app-ui-alert tone="error">{{ historyErrorMessage() }}</app-ui-alert>
+        }
+
+        @if (filteredHistory().length > 0) {
+          <section class="route-card seller-inventory-history-card" aria-label="Filtered inventory movement history">
+            <div class="seller-section-heading">
+              <span class="eyebrow">Recent movements</span>
+              <h2>{{ filteredHistory().length }} matching stock changes</h2>
+            </div>
+            <div class="admin-table seller-ops-table seller-inventory-history-table" role="table" aria-label="Inventory movement history">
+              <div class="admin-table-row heading seller-ops-table-row" role="row">
+                <span role="columnheader">Variant</span>
+                <span role="columnheader">Movement</span>
+                <span role="columnheader">Stock / reserved</span>
+                <span role="columnheader">Reason</span>
+              </div>
+              @for (movement of filteredHistory(); track movement.movementId) {
+                <div class="admin-table-row seller-ops-table-row" role="row">
+                  <span role="cell">
+                    <strong>{{ movement.productTitle }}</strong>
+                    <small>{{ movement.sku }}{{ movement.barcode ? ' / ' + movement.barcode : '' }}</small>
+                  </span>
+                  <span role="cell">
+                    <app-status-badge [label]="movementLabel(movement)" [tone]="movementTone(movement)" />
+                    <small>{{ movement.occurredAtUtc | date:'medium' }}</small>
+                  </span>
+                  <span role="cell">
+                    <strong>Stock {{ movement.stockQuantityBefore }} -> {{ movement.stockQuantityAfter }}</strong>
+                    <small>{{ movement.quantityDelta > 0 ? '+' : '' }}{{ movement.quantityDelta }} stock units</small>
+                    <small>Reserved {{ movement.reservedQuantityBefore }} -> {{ movement.reservedQuantityAfter }} ({{ movement.reservedQuantityDelta > 0 ? '+' : '' }}{{ movement.reservedQuantityDelta }})</small>
+                  </span>
+                  <span role="cell">
+                    <strong>{{ movement.reason }}</strong>
+                    <small>{{ movement.batchReference ?? movement.source }}</small>
+                    @if (movement.relatedRoute) {
+                      <a [routerLink]="movement.relatedRoute">Open related record</a>
+                    }
+                  </span>
+                </div>
+              }
+            </div>
+          </section>
+        }
 
         <section class="route-card seller-inventory-bulk" aria-label="Bulk inventory import and export">
           <div>
@@ -163,7 +250,7 @@ type InventoryFilter = 'All' | 'LowStock' | 'OutOfStock' | 'Reserved';
                   <span role="cell">#{{ row.rowNumber }}</span>
                   <span role="cell">
                     <strong>{{ row.productTitle ?? row.sku ?? row.variantId ?? 'Unmatched row' }}</strong>
-                    <small>{{ row.size ?? '-' }} / {{ row.colour ?? '-' }}</small>
+                    <small>{{ row.size ?? '-' }} / {{ row.colour ?? '-' }}{{ row.barcode ? ' / ' + row.barcode : '' }}</small>
                   </span>
                   <span role="cell">
                     <strong>{{ row.currentStockQuantity ?? '-' }} stock</strong>
@@ -211,7 +298,11 @@ type InventoryFilter = 'All' | 'LowStock' | 'OutOfStock' | 'Reserved';
               </div>
 
               @for (item of filteredItems(); track item.variantId) {
-                <div class="admin-table-row seller-ops-table-row" role="row">
+                <div
+                  class="admin-table-row seller-ops-table-row"
+                  [class.seller-inventory-row-scanned]="selectedItem()?.variantId === item.variantId"
+                  role="row"
+                >
                   <span role="cell" class="seller-inventory-product-cell">
                     @if (item.primaryImageUrl) {
                       <img [src]="item.primaryImageUrl" [alt]="item.primaryImageAltText ?? item.productTitle ?? 'Product image'" />
@@ -226,6 +317,9 @@ type InventoryFilter = 'All' | 'LowStock' | 'OutOfStock' | 'Reserved';
                   <span role="cell">
                     <strong>{{ item.sku }}</strong>
                     <small>{{ item.size }} / {{ item.colour }} / {{ item.price | currency:'ZAR':'symbol-narrow' }}</small>
+                    @if (item.barcode) {
+                      <small>Barcode {{ item.barcode }}</small>
+                    }
                   </span>
                   <span role="cell">
                     <strong>{{ item.availableQuantity }} available</strong>
@@ -237,6 +331,7 @@ type InventoryFilter = 'All' | 'LowStock' | 'OutOfStock' | 'Reserved';
                   </span>
                   <span role="cell" class="auth-actions">
                     <button mat-stroked-button type="button" (click)="selectItem(item)">Adjust</button>
+                    <button mat-button type="button" (click)="selectItem(item)">History</button>
                     <a mat-button [routerLink]="['/seller/products', item.productId, 'edit']">Product</a>
                   </span>
                 </div>
@@ -248,6 +343,9 @@ type InventoryFilter = 'All' | 'LowStock' | 'OutOfStock' | 'Reserved';
                 <span class="eyebrow">Adjust stock</span>
                 <h2>{{ selected.productTitle ?? 'Selected product' }}</h2>
                 <p>{{ selected.sku }} currently has {{ selected.availableQuantity }} available and {{ selected.reservedQuantity }} reserved.</p>
+                @if (selected.barcode) {
+                  <p class="seller-muted-copy">Barcode {{ selected.barcode }}</p>
+                }
 
                 <form [formGroup]="adjustmentForm" (ngSubmit)="submitAdjustment()" class="wizard-form" novalidate>
                   <mat-form-field appearance="outline">
@@ -287,6 +385,37 @@ type InventoryFilter = 'All' | 'LowStock' | 'OutOfStock' | 'Reserved';
                     {{ isSaving() ? 'Saving...' : 'Save adjustment' }}
                   </button>
                 </form>
+
+                <div class="seller-inventory-history-panel">
+                  <div class="seller-section-heading">
+                    <span class="eyebrow">Variant history</span>
+                    <h3>Recent stock changes</h3>
+                  </div>
+
+                  @if (isVariantHistoryLoading()) {
+                    <p>Loading movement history...</p>
+                  } @else if (selectedHistory().length === 0) {
+                    <p>No stock movement history has been recorded for this variant yet.</p>
+                  } @else {
+                    <div class="seller-timeline">
+                      @for (movement of selectedHistory(); track movement.movementId) {
+                        <article class="seller-timeline-item">
+                          <app-status-badge [label]="movementLabel(movement)" [tone]="movementTone(movement)" />
+                          <strong>{{ movement.stockQuantityBefore }} -> {{ movement.stockQuantityAfter }} stock</strong>
+                          <small>{{ movement.quantityDelta > 0 ? '+' : '' }}{{ movement.quantityDelta }} stock units, {{ movement.occurredAtUtc | date:'medium' }}</small>
+                          <small>Reserved {{ movement.reservedQuantityBefore }} -> {{ movement.reservedQuantityAfter }} ({{ movement.reservedQuantityDelta > 0 ? '+' : '' }}{{ movement.reservedQuantityDelta }})</small>
+                          <p>{{ movement.reason }}</p>
+                          @if (movement.batchReference) {
+                            <small>Batch {{ movement.batchReference }}</small>
+                          }
+                          @if (movement.relatedRoute) {
+                            <a [routerLink]="movement.relatedRoute">Open related record</a>
+                          }
+                        </article>
+                      }
+                    </div>
+                  }
+                </div>
               } @else {
                 <span class="eyebrow">Stock control</span>
                 <h2>Select a variant</h2>
@@ -306,17 +435,38 @@ export class SellerInventoryPageComponent implements OnInit {
   protected readonly items = signal<SellerInventoryItemResponse[]>([]);
   protected readonly selectedItem = signal<SellerInventoryItemResponse | null>(null);
   protected readonly searchTerm = signal('');
+  protected readonly scannerTerm = signal('');
   protected readonly stockFilter = signal<InventoryFilter>('All');
+  protected readonly historyTypeFilter = signal<InventoryHistoryTypeFilter>('All');
   protected readonly isLoading = signal(true);
   protected readonly isSaving = signal(false);
   protected readonly isDownloading = signal(false);
   protected readonly isPreviewing = signal(false);
   protected readonly isApplyingBulk = signal(false);
+  protected readonly isHistoryLoading = signal(false);
+  protected readonly isVariantHistoryLoading = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
+  protected readonly historyErrorMessage = signal<string | null>(null);
+  protected readonly scannerMessage = signal<string | null>(null);
   protected readonly successMessage = signal<string | null>(null);
   protected readonly selectedImportFile = signal<File | null>(null);
   protected readonly importPreview = signal<SellerInventoryBulkAdjustmentResponse | null>(null);
+  protected readonly filteredHistory = signal<SellerInventoryMovementResponse[]>([]);
+  protected readonly selectedHistory = signal<SellerInventoryMovementResponse[]>([]);
   protected readonly variantStatuses: readonly SellerInventoryVariantStatus[] = ['Active', 'Inactive', 'OutOfStock'];
+  protected readonly historyTypeOptions: readonly { value: InventoryHistoryTypeFilter; label: string }[] = [
+    { value: 'All', label: 'All movements' },
+    { value: 'SellerAdjustment', label: 'Single adjustments' },
+    { value: 'BulkImportAdjustment', label: 'Bulk imports' },
+    { value: 'ReservationCreated', label: 'Reservations created' },
+    { value: 'ReservationReleased', label: 'Reservations released' },
+    { value: 'ReservationExpired', label: 'Reservations expired' },
+    { value: 'ReservationConfirmed', label: 'Reservations confirmed' },
+    { value: 'PaymentFailedReservationReleased', label: 'Payment-failed releases' },
+    { value: 'ReturnRequested', label: 'Return requests' },
+    { value: 'RefundCompleted', label: 'Refund completions' },
+    { value: 'ReturnRestocked', label: 'Return restocks' }
+  ];
 
   protected readonly adjustmentForm = this.formBuilder.group({
     stockQuantity: [0, [Validators.required, Validators.min(0)]],
@@ -337,6 +487,7 @@ export class SellerInventoryPageComponent implements OnInit {
         (item.productTitle ?? '').toLowerCase().includes(search) ||
         (item.productSlug ?? '').toLowerCase().includes(search) ||
         item.sku.toLowerCase().includes(search) ||
+        (item.barcode ?? '').toLowerCase().includes(search) ||
         item.size.toLowerCase().includes(search) ||
         item.colour.toLowerCase().includes(search);
       const matchesFilter = filter === 'All' ||
@@ -360,8 +511,39 @@ export class SellerInventoryPageComponent implements OnInit {
     this.searchTerm.set((event.target as HTMLInputElement).value);
   }
 
+  protected updateScannerTerm(event: Event): void {
+    this.scannerTerm.set((event.target as HTMLInputElement).value);
+  }
+
+  protected submitScannerSearch(event?: Event): void {
+    event?.preventDefault();
+    const term = this.scannerTerm().trim();
+    this.scannerMessage.set(null);
+    if (!term) {
+      return;
+    }
+
+    const termLower = term.toLowerCase();
+    const match = this.items().find(item =>
+      item.sku.toLowerCase() === termLower ||
+      (item.barcode ?? '').toLowerCase() === termLower);
+
+    this.searchTerm.set(term);
+    if (!match) {
+      this.scannerMessage.set(`No exact SKU or barcode match was found for ${term}.`);
+      return;
+    }
+
+    this.selectItem(match);
+    this.scannerMessage.set(`Scanner matched ${match.sku}. The variant is selected and its stock history is loading.`);
+  }
+
   protected updateStockFilter(event: MatSelectChange): void {
     this.stockFilter.set(event.value as InventoryFilter);
+  }
+
+  protected updateHistoryTypeFilter(event: MatSelectChange): void {
+    this.historyTypeFilter.set(event.value as InventoryHistoryTypeFilter);
   }
 
   protected onImportFileSelected(event: Event): void {
@@ -426,6 +608,7 @@ export class SellerInventoryPageComponent implements OnInit {
           .map(row => ({
             variantId: row.variantId,
             sku: row.sku,
+            barcode: row.barcode,
             stockQuantity: row.proposedStockQuantity ?? 0,
             status: row.proposedStatus as SellerInventoryVariantStatus
           }))
@@ -433,6 +616,7 @@ export class SellerInventoryPageComponent implements OnInit {
 
       this.importPreview.set(result);
       await this.loadInventory();
+      await this.refreshSelectedHistory();
       this.successMessage.set(`Bulk inventory applied: ${result.changedRows} changed, ${result.unchangedRows} unchanged.`);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
@@ -449,6 +633,7 @@ export class SellerInventoryPageComponent implements OnInit {
       status: item.variantStatus,
       reason: ''
     });
+    void this.loadVariantHistory(item.variantId);
   }
 
   protected async submitAdjustment(): Promise<void> {
@@ -472,6 +657,7 @@ export class SellerInventoryPageComponent implements OnInit {
 
       this.items.update(items => items.map(item => item.variantId === adjusted.variantId ? adjusted : item));
       this.selectItem(adjusted);
+      await this.loadFilteredHistory({ silentIfEmpty: true });
       this.successMessage.set('Inventory adjustment saved.');
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
@@ -504,9 +690,105 @@ export class SellerInventoryPageComponent implements OnInit {
     return row.rowStatus === 'Changed' ? 'accent' : 'neutral';
   }
 
+  protected movementTone(movement: SellerInventoryMovementResponse): StatusBadgeTone {
+    if (movement.movementType === 'PaymentFailedReservationReleased' || movement.movementType === 'ReturnRequested') {
+      return 'warning';
+    }
+
+    if (movement.movementType === 'RefundCompleted') {
+      return 'accent';
+    }
+
+    if (movement.movementType === 'ReturnRestocked') {
+      return 'success';
+    }
+
+    if (movement.quantityDelta < 0) {
+      return 'warning';
+    }
+
+    if (movement.quantityDelta > 0 || movement.reservedQuantityDelta > 0) {
+      return 'success';
+    }
+
+    if (movement.reservedQuantityDelta < 0) {
+      return 'accent';
+    }
+
+    return movement.statusBefore === movement.statusAfter ? 'neutral' : 'accent';
+  }
+
+  protected movementLabel(movement: SellerInventoryMovementResponse): string {
+    const labels: Record<SellerInventoryMovementType, string> = {
+      SellerAdjustment: 'Adjustment',
+      BulkImportAdjustment: 'Bulk import',
+      ReservationCreated: 'Reserved',
+      ReservationReleased: 'Released',
+      ReservationExpired: 'Expired',
+      ReservationConfirmed: 'Confirmed',
+      PaymentFailedReservationReleased: 'Payment release',
+      ReturnRequested: 'Return requested',
+      RefundCompleted: 'Refund completed',
+      ReturnRestocked: 'Restocked'
+    };
+
+    return labels[movement.movementType] ?? movement.movementType;
+  }
+
+  protected async loadFilteredHistory(options: { silentIfEmpty?: boolean } = {}): Promise<void> {
+    if (this.isHistoryLoading()) {
+      return;
+    }
+
+    const search = this.searchTerm().trim();
+    const movementType = this.historyTypeFilter();
+    const searchLower = search.toLowerCase();
+    const matchedVariant = search.length > 0
+      ? this.items().find(item => item.sku.toLowerCase() === searchLower || (item.barcode ?? '').toLowerCase() === searchLower)
+      : null;
+    this.isHistoryLoading.set(true);
+    this.historyErrorMessage.set(null);
+
+    try {
+      const history = await this.inventoryService.listHistory({
+        variantId: matchedVariant?.variantId ?? null,
+        movementType: movementType === 'All' ? null : movementType
+      });
+      this.filteredHistory.set(history);
+      if (!options.silentIfEmpty && history.length === 0) {
+        this.successMessage.set('No inventory movement history matched the current filters.');
+      }
+    } catch (error) {
+      this.historyErrorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isHistoryLoading.set(false);
+    }
+  }
+
   protected stockBelowReserved(): boolean {
     const selected = this.selectedItem();
     return selected !== null && this.adjustmentForm.controls.stockQuantity.value < selected.reservedQuantity;
+  }
+
+  private async loadVariantHistory(variantId: string): Promise<void> {
+    this.isVariantHistoryLoading.set(true);
+    this.historyErrorMessage.set(null);
+
+    try {
+      this.selectedHistory.set(await this.inventoryService.listVariantHistory(variantId));
+    } catch (error) {
+      this.selectedHistory.set([]);
+      this.historyErrorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isVariantHistoryLoading.set(false);
+    }
+  }
+
+  private async refreshSelectedHistory(): Promise<void> {
+    const selected = this.selectedItem();
+    if (selected) {
+      await this.loadVariantHistory(selected.variantId);
+    }
   }
 
   private async loadInventory(): Promise<void> {

@@ -6,7 +6,14 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
-import { SellerReturnRequestResult } from '../seller/seller-return.models';
+import { SellerInventoryMovementResponse, SellerInventoryMovementType } from '../seller/seller-inventory.models';
+import { SellerInventoryService } from '../seller/seller-inventory.service';
+import {
+  SellerReturnItemResult,
+  SellerReturnRequestResult,
+  SellerReturnRestockCondition,
+  SellerReturnRestockDecisionResponse
+} from '../seller/seller-return.models';
 import { SellerReturnService } from '../seller/seller-return.service';
 import { SellerWorkspaceNavComponent } from '../seller/seller-workspace-nav.component';
 import { PageHeaderComponent } from '../shared/ui/page-header.component';
@@ -86,6 +93,20 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </div>
               </form>
             </section>
+
+            <section class="seller-panel">
+              <h2>Store policy snapshot</h2>
+              <p>Checkout-time policy context for this order. Use it as guidance, not automatic approval logic.</p>
+              @if (sellerPolicySnapshotEntries().length > 0) {
+                <dl class="seller-facts">
+                  @for (entry of sellerPolicySnapshotEntries(); track entry.label) {
+                    <div><dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd></div>
+                  }
+                </dl>
+              } @else {
+                <app-ui-alert tone="info">This return does not have checkout-time store-policy context.</app-ui-alert>
+              }
+            </section>
           </div>
 
           <section class="seller-panel">
@@ -105,6 +126,106 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </div>
               }
             </div>
+          </section>
+
+          <section class="seller-panel">
+            <h2>Restock decision</h2>
+            <p>Record what happened to the returned stock after inspection. This is traceability only; refunds and return status do not restock items automatically.</p>
+
+            @if (restockError()) {
+              <app-ui-alert tone="warning">{{ restockError() }}</app-ui-alert>
+            }
+
+            @if (isRestockLoading()) {
+              <p>Loading restock decisions...</p>
+            } @else {
+              @if (restockDecisions().length > 0) {
+                <div class="seller-timeline">
+                  @for (decision of restockDecisions(); track decision.restockDecisionId) {
+                    <article class="seller-timeline-item">
+                      <app-status-badge [label]="restockConditionLabel(decision.condition)" [tone]="decision.quantityRestocked > 0 ? 'accent' : 'neutral'" />
+                      <strong>{{ decision.sku }} - {{ decision.size }} / {{ decision.colour }}</strong>
+                      <small>{{ decision.createdAtUtc | date:'medium' }}</small>
+                      <small>{{ decision.quantityRestocked }} of {{ decision.quantityReturned }} returned item{{ decision.quantityReturned === 1 ? '' : 's' }} restocked</small>
+                      <p>{{ decision.reason }}</p>
+                    </article>
+                  }
+                </div>
+              }
+
+              @if (!canRecordRestockDecisions()) {
+                <app-ui-alert tone="info">Restock decisions become available after the return is approved, returned, refunded, or closed.</app-ui-alert>
+              } @else if (pendingRestockItems().length === 0) {
+                <app-ui-alert tone="success">Restock decisions have been recorded for every item on this return.</app-ui-alert>
+              } @else {
+                <form [formGroup]="restockForm" class="seller-form-grid" novalidate (ngSubmit)="recordRestockDecision()">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Return item</mat-label>
+                    <select matNativeControl formControlName="returnItemId">
+                      @for (item of pendingRestockItems(); track item.returnItemId) {
+                        <option [value]="item.returnItemId">{{ item.quantity }} x {{ item.reason }} - {{ item.productVariantId }}</option>
+                      }
+                    </select>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Quantity restocked</mat-label>
+                    <input
+                      matInput
+                      type="number"
+                      min="0"
+                      [attr.max]="selectedRestockItem()?.quantity ?? null"
+                      formControlName="quantityRestocked"
+                    />
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Inspection condition</mat-label>
+                    <select matNativeControl formControlName="condition">
+                      @for (condition of restockConditions; track condition.value) {
+                        <option [value]="condition.value">{{ condition.label }}</option>
+                      }
+                    </select>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Decision reason</mat-label>
+                    <textarea matInput rows="3" formControlName="reason"></textarea>
+                  </mat-form-field>
+
+                  <div class="seller-action-row">
+                    <button mat-flat-button type="submit" [disabled]="isRestocking() || pendingRestockItems().length === 0">
+                      Record restock decision
+                    </button>
+                  </div>
+                </form>
+              }
+            }
+          </section>
+
+          <section class="seller-panel">
+            <h2>Stock ledger context</h2>
+            <p>Return and refund stock ledger events are informational. Returns and refunds do not automatically restock inventory.</p>
+            @if (isStockLedgerLoading()) {
+              <p>Loading stock ledger...</p>
+            } @else if (stockLedgerError()) {
+              <app-ui-alert tone="warning">{{ stockLedgerError() }}</app-ui-alert>
+            } @else if (stockLedger().length === 0) {
+              <p>No return or refund stock ledger events have been recorded yet.</p>
+            } @else {
+              <div class="seller-timeline">
+                @for (movement of stockLedger(); track movement.movementId) {
+                  <article class="seller-timeline-item">
+                    <app-status-badge [label]="movementLabel(movement)" [tone]="movementTone(movement)" />
+                    <strong>{{ movement.productTitle }}</strong>
+                    <small>{{ movement.sku }} - {{ movement.occurredAtUtc | date:'medium' }}</small>
+                    <small>Stock {{ movement.stockQuantityBefore }} -> {{ movement.stockQuantityAfter }} ({{ movement.quantityDelta > 0 ? '+' : '' }}{{ movement.quantityDelta }})</small>
+                    <small>Reserved {{ movement.reservedQuantityBefore }} -> {{ movement.reservedQuantityAfter }} ({{ movement.reservedQuantityDelta > 0 ? '+' : '' }}{{ movement.reservedQuantityDelta }})</small>
+                    <p>{{ movement.reason }}</p>
+                  </article>
+                }
+              </div>
+            }
           </section>
 
           <section class="seller-panel">
@@ -130,6 +251,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 })
 export class SellerReturnDetailPageComponent implements OnInit {
   private readonly formBuilder = inject(NonNullableFormBuilder);
+  private readonly inventoryService = inject(SellerInventoryService);
   private readonly returnService = inject(SellerReturnService);
   private readonly route = inject(ActivatedRoute);
 
@@ -138,9 +260,31 @@ export class SellerReturnDetailPageComponent implements OnInit {
   protected readonly isActing = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly successMessage = signal<string | null>(null);
+  protected readonly stockLedger = signal<SellerInventoryMovementResponse[]>([]);
+  protected readonly isStockLedgerLoading = signal(false);
+  protected readonly stockLedgerError = signal<string | null>(null);
+  protected readonly restockDecisions = signal<SellerReturnRestockDecisionResponse[]>([]);
+  protected readonly isRestockLoading = signal(false);
+  protected readonly isRestocking = signal(false);
+  protected readonly restockError = signal<string | null>(null);
+
+  protected readonly restockConditions: { value: SellerReturnRestockCondition; label: string }[] = [
+    { value: 'Sellable', label: 'Sellable' },
+    { value: 'Damaged', label: 'Damaged' },
+    { value: 'OpenedOrUsed', label: 'Opened or used' },
+    { value: 'Missing', label: 'Missing' },
+    { value: 'Other', label: 'Other' }
+  ];
 
   protected readonly responseForm = this.formBuilder.group({
     message: ['']
+  });
+
+  protected readonly restockForm = this.formBuilder.group({
+    returnItemId: [''],
+    quantityRestocked: [0],
+    condition: ['Sellable' as SellerReturnRestockCondition],
+    reason: ['']
   });
 
   async ngOnInit(): Promise<void> {
@@ -159,6 +303,53 @@ export class SellerReturnDetailPageComponent implements OnInit {
       'Return rejected.');
   }
 
+  protected async recordRestockDecision(): Promise<void> {
+    if (this.isRestocking()) {
+      return;
+    }
+
+    const returnItem = this.selectedRestockItem();
+    const reason = this.restockForm.controls.reason.value.trim();
+    if (!returnItem) {
+      this.restockError.set('Choose a return item before recording a restock decision.');
+      return;
+    }
+
+    if (reason.length === 0) {
+      this.restockError.set('Add a reason so the stock ledger explains the decision.');
+      return;
+    }
+
+    this.isRestocking.set(true);
+    this.restockError.set(null);
+    this.successMessage.set(null);
+
+    try {
+      const quantityRestocked = Number(this.restockForm.controls.quantityRestocked.value);
+      if (!Number.isInteger(quantityRestocked) || quantityRestocked < 0 || quantityRestocked > returnItem.quantity) {
+        this.restockError.set(`Quantity restocked must be between 0 and ${returnItem.quantity}.`);
+        return;
+      }
+
+      const decisions = await this.returnService.createRestockDecisions(this.returnRequestId(), {
+        items: [{
+          returnItemId: returnItem.returnItemId,
+          quantityRestocked,
+          condition: this.restockForm.controls.condition.value,
+          reason
+        }]
+      });
+      this.restockDecisions.set(decisions);
+      this.selectNextRestockItem();
+      await this.loadStockLedger(this.returnRequestId());
+      this.successMessage.set('Restock decision recorded.');
+    } catch (error) {
+      this.restockError.set(getApiErrorMessage(error));
+    } finally {
+      this.isRestocking.set(false);
+    }
+  }
+
   protected statusTone(status: string): StatusBadgeTone {
     if (['Requested', 'AwaitingSellerResponse', 'ReturnInTransit', 'ReturnedToSeller', 'RefundPending'].includes(status)) {
       return 'warning';
@@ -175,16 +366,114 @@ export class SellerReturnDetailPageComponent implements OnInit {
     return 'neutral';
   }
 
+  protected sellerPolicySnapshotEntries(): { label: string; value: string }[] {
+    const snapshot = this.returnRequest()?.sellerPolicySnapshot;
+    if (!snapshot) {
+      return [];
+    }
+
+    return [
+      snapshot.returnWindowDays === null ? null : { label: 'Return window', value: `${snapshot.returnWindowDays} day${snapshot.returnWindowDays === 1 ? '' : 's'}` },
+      snapshot.returnPolicy ? { label: 'Returns', value: snapshot.returnPolicy } : null,
+      snapshot.exchangePolicy ? { label: 'Exchanges', value: snapshot.exchangePolicy } : null,
+      snapshot.fulfilmentPolicy ? { label: 'Fulfilment', value: snapshot.fulfilmentPolicy } : null,
+      snapshot.supportPolicy ? { label: 'Support', value: snapshot.supportPolicy } : null,
+      snapshot.careInstructions ? { label: 'Care', value: snapshot.careInstructions } : null,
+      snapshot.productDisclaimer ? { label: 'Disclaimer', value: snapshot.productDisclaimer } : null
+    ].filter((entry): entry is { label: string; value: string } => entry !== null);
+  }
+
+  protected movementTone(movement: SellerInventoryMovementResponse): StatusBadgeTone {
+    if (movement.movementType === 'RefundCompleted') {
+      return 'accent';
+    }
+
+    if (movement.movementType === 'ReturnRestocked') {
+      return 'success';
+    }
+
+    if (movement.movementType === 'ReturnRequested') {
+      return 'warning';
+    }
+
+    return movement.quantityDelta === 0 && movement.reservedQuantityDelta === 0 ? 'neutral' : 'accent';
+  }
+
+  protected movementLabel(movement: SellerInventoryMovementResponse): string {
+    const labels: Record<SellerInventoryMovementType, string> = {
+      SellerAdjustment: 'Adjustment',
+      BulkImportAdjustment: 'Bulk import',
+      ReservationCreated: 'Reserved',
+      ReservationReleased: 'Released',
+      ReservationExpired: 'Expired',
+      ReservationConfirmed: 'Confirmed',
+      PaymentFailedReservationReleased: 'Payment release',
+      ReturnRequested: 'Return requested',
+      RefundCompleted: 'Refund completed',
+      ReturnRestocked: 'Restocked'
+    };
+
+    return labels[movement.movementType] ?? movement.movementType;
+  }
+
+  protected canRecordRestockDecisions(): boolean {
+    return ['Approved', 'ReturnedToSeller', 'RefundPending', 'Refunded', 'Closed'].includes(this.returnRequest()?.status ?? '');
+  }
+
+  protected pendingRestockItems(): SellerReturnItemResult[] {
+    const decidedItemIds = new Set(this.restockDecisions().map(decision => decision.returnItemId));
+    return this.returnRequest()?.items.filter(item => !decidedItemIds.has(item.returnItemId)) ?? [];
+  }
+
+  protected selectedRestockItem(): SellerReturnItemResult | null {
+    const selectedId = this.restockForm.controls.returnItemId.value;
+    return this.pendingRestockItems().find(item => item.returnItemId === selectedId) ?? this.pendingRestockItems()[0] ?? null;
+  }
+
+  protected restockConditionLabel(condition: SellerReturnRestockCondition): string {
+    return this.restockConditions.find(item => item.value === condition)?.label ?? condition;
+  }
+
   private async loadReturn(): Promise<void> {
     this.isLoading.set(true);
     this.errorMessage.set(null);
 
     try {
-      this.returnRequest.set(await this.returnService.getReturn(this.returnRequestId()));
+      const returnRequest = await this.returnService.getReturn(this.returnRequestId());
+      this.returnRequest.set(returnRequest);
+      await this.loadRestockDecisions(returnRequest.returnRequestId);
+      await this.loadStockLedger(returnRequest.returnRequestId);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
     } finally {
       this.isLoading.set(false);
+    }
+  }
+
+  private async loadRestockDecisions(returnRequestId: string): Promise<void> {
+    this.isRestockLoading.set(true);
+    this.restockError.set(null);
+
+    try {
+      this.restockDecisions.set(await this.returnService.listRestockDecisions(returnRequestId));
+      this.selectNextRestockItem();
+    } catch (error) {
+      this.restockError.set(getApiErrorMessage(error));
+    } finally {
+      this.isRestockLoading.set(false);
+    }
+  }
+
+  private async loadStockLedger(returnRequestId: string): Promise<void> {
+    this.isStockLedgerLoading.set(true);
+    this.stockLedgerError.set(null);
+
+    try {
+      this.stockLedger.set(await this.inventoryService.listHistory({ returnRequestId }));
+    } catch (error) {
+      this.stockLedgerError.set(getApiErrorMessage(error));
+    } finally {
+      this.isStockLedgerLoading.set(false);
     }
   }
 
@@ -198,7 +487,10 @@ export class SellerReturnDetailPageComponent implements OnInit {
     this.successMessage.set(null);
 
     try {
-      this.returnRequest.set(await action());
+      const returnRequest = await action();
+      this.returnRequest.set(returnRequest);
+      await this.loadRestockDecisions(returnRequest.returnRequestId);
+      await this.loadStockLedger(returnRequest.returnRequestId);
       this.successMessage.set(successMessage);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
@@ -214,5 +506,15 @@ export class SellerReturnDetailPageComponent implements OnInit {
 
   private returnRequestId(): string {
     return this.route.snapshot.paramMap.get('returnRequestId') ?? '';
+  }
+
+  private selectNextRestockItem(): void {
+    const nextItem = this.pendingRestockItems()[0];
+    this.restockForm.patchValue({
+      returnItemId: nextItem?.returnItemId ?? '',
+      quantityRestocked: 0,
+      condition: 'Sellable',
+      reason: ''
+    });
   }
 }

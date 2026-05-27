@@ -4,9 +4,12 @@ using Swyftly.Application.Common.Results;
 using Swyftly.Application.Common.Validation;
 using Swyftly.Application.Ledger;
 using Swyftly.Application.Returns;
+using Swyftly.Application.Sellers;
 using Swyftly.Domain.Ledger;
 using Swyftly.Domain.Orders;
 using Swyftly.Domain.Returns;
+using Swyftly.Domain.Inventory;
+using Swyftly.Infrastructure.Inventory;
 using Swyftly.Infrastructure.Persistence;
 
 namespace Swyftly.Infrastructure.Returns;
@@ -94,6 +97,26 @@ public sealed class EfReturnWorkflowService(
         order.ChangeStatus(OrderStatus.ReturnRequested, request.RequestedAtUtc, "ReturnRequested");
         TrackLatestOrderStatusHistory(order);
         dbContext.ReturnRequests.Add(returnRequest);
+        foreach (var returnItem in returnRequest.Items)
+        {
+            var snapshot = await InventoryMovementRecorder.LoadSnapshotAsync(
+                dbContext,
+                returnItem.ProductVariantId,
+                cancellationToken);
+            if (snapshot is not null)
+            {
+                dbContext.InventoryMovements.Add(InventoryMovementRecorder.CreateContext(
+                    snapshot,
+                    InventoryMovementType.ReturnRequested,
+                    "ReturnWorkflow",
+                    "Buyer requested a return; stock and reserved quantities were not changed automatically.",
+                    actorUserId: request.BuyerUserId,
+                    batchReference: null,
+                    occurredAtUtc: request.RequestedAtUtc,
+                    orderId: order.Id,
+                    returnRequestId: returnRequest.Id));
+            }
+        }
 
         var payoutHoldResult = await HoldLinkedPayoutsAsync(
             order.Id,
@@ -107,7 +130,7 @@ public sealed class EfReturnWorkflowService(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Result<ReturnRequestResult>.Success(Map(returnRequest));
+        return Result<ReturnRequestResult>.Success(Map(returnRequest, MapSellerPolicySnapshot(order.SellerPolicySnapshot)));
     }
 
     public async Task<Result<ReturnRequestResult>> ApproveReturnAsync(
@@ -130,8 +153,9 @@ public sealed class EfReturnWorkflowService(
             return Validation("returnRequest", exception.Message);
         }
 
+        var order = await dbContext.Orders.SingleAsync(existing => existing.Id == returnRequest.OrderId, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Result<ReturnRequestResult>.Success(Map(returnRequest));
+        return Result<ReturnRequestResult>.Success(Map(returnRequest, MapSellerPolicySnapshot(order.SellerPolicySnapshot)));
     }
 
     public async Task<Result<ReturnRequestResult>> RejectReturnAsync(
@@ -159,8 +183,9 @@ public sealed class EfReturnWorkflowService(
             return Validation("returnRequest", exception.Message);
         }
 
+        var order = await dbContext.Orders.SingleAsync(existing => existing.Id == returnRequest.OrderId, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Result<ReturnRequestResult>.Success(Map(returnRequest));
+        return Result<ReturnRequestResult>.Success(Map(returnRequest, MapSellerPolicySnapshot(order.SellerPolicySnapshot)));
     }
 
     public async Task<Result<ReturnRequestResult>> DisputeReturnAsync(
@@ -200,7 +225,7 @@ public sealed class EfReturnWorkflowService(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Result<ReturnRequestResult>.Success(Map(returnRequest));
+        return Result<ReturnRequestResult>.Success(Map(returnRequest, MapSellerPolicySnapshot(order.SellerPolicySnapshot)));
     }
 
     private async Task<Result> HoldLinkedPayoutsAsync(
@@ -343,7 +368,9 @@ public sealed class EfReturnWorkflowService(
             new ValidationFailure(propertyName, message)
         ]));
 
-    public static ReturnRequestResult Map(ReturnRequest returnRequest) =>
+    public static ReturnRequestResult Map(
+        ReturnRequest returnRequest,
+        SellerPolicySnapshotResponse? sellerPolicySnapshot = null) =>
         new(
             returnRequest.Id,
             returnRequest.OrderId,
@@ -377,7 +404,21 @@ public sealed class EfReturnWorkflowService(
                     message.SenderRole,
                     message.Message,
                     message.CreatedAtUtc))
-                .ToArray());
+                .ToArray(),
+            sellerPolicySnapshot);
+
+    private static SellerPolicySnapshotResponse? MapSellerPolicySnapshot(OrderSellerPolicySnapshot? snapshot) =>
+        snapshot is null
+            ? null
+            : new SellerPolicySnapshotResponse(
+                snapshot.ReturnWindowDays,
+                snapshot.ReturnPolicy,
+                snapshot.ExchangePolicy,
+                snapshot.FulfilmentPolicy,
+                snapshot.SupportPolicy,
+                snapshot.CareInstructions,
+                snapshot.ProductDisclaimer,
+                snapshot.SnapshotAtUtc);
 
     private sealed record ParsedCreateReturnRequest(
         ReturnReason ReturnReason,

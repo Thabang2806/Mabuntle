@@ -1,10 +1,13 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Swyftly.Api.Catalog;
+using Swyftly.Api.Notifications;
 using Swyftly.Application.Admin;
 using Swyftly.Application.Ai;
 using Swyftly.Application.Catalog;
 using Swyftly.Application.Identity;
+using Swyftly.Application.Notifications;
 using Swyftly.Application.Search;
 using Swyftly.Domain.Ai;
 using Swyftly.Domain.Catalog;
@@ -53,6 +56,33 @@ public static class AdminProductEndpoints
             .WithName("RejectProductListingRevision")
             .WithSummary("Rejects a published product listing revision without changing the live product.")
             .Produces<AdminProductRevisionDetailResponse>(StatusCodes.Status200OK)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapGet("/pending-variant-revisions", GetPendingVariantRevisionsAsync)
+            .WithName("GetPendingProductVariantRevisions")
+            .WithSummary("Returns published product variant and pricing revisions waiting for admin review.")
+            .Produces<IReadOnlyCollection<AdminProductVariantRevisionSummaryResponse>>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
+
+        group.MapGet("/variant-revisions/{revisionId:guid}", GetVariantRevisionByIdAsync)
+            .WithName("GetAdminProductVariantRevision")
+            .WithSummary("Returns a published product variant and pricing revision for admin review.")
+            .Produces<AdminProductVariantRevisionDetailResponse>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapPost("/variant-revisions/{revisionId:guid}/approve", ApproveVariantRevisionAsync)
+            .WithName("ApproveProductVariantRevision")
+            .WithSummary("Approves a published product variant and pricing revision and applies it to the live variants.")
+            .Produces<AdminProductVariantRevisionDetailResponse>(StatusCodes.Status200OK)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapPost("/variant-revisions/{revisionId:guid}/reject", RejectVariantRevisionAsync)
+            .WithName("RejectProductVariantRevision")
+            .WithSummary("Rejects a published product variant and pricing revision without changing live variants.")
+            .Produces<AdminProductVariantRevisionDetailResponse>(StatusCodes.Status200OK)
             .ProducesValidationProblem()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
@@ -193,6 +223,8 @@ public static class AdminProductEndpoints
         IAuditLogService auditLogService,
         IProductSearchIndexer productSearchIndexer,
         IProductEmbeddingGenerator productEmbeddingGenerator,
+        INotificationService notificationService,
+        ILoggerFactory loggerFactory,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -290,6 +322,18 @@ public static class AdminProductEndpoints
         await dbContext.SaveChangesAsync(cancellationToken);
         await productSearchIndexer.IndexProductAsync(product.Id, cancellationToken);
         await productEmbeddingGenerator.GenerateForProductAsync(product.Id, cancellationToken);
+        await SellerNotificationDispatcher.NotifySellerAsync(
+            revision.SellerId,
+            SellerNotificationTypes.ProductListingRevisionApproved,
+            "Published listing revision approved",
+            $"Your published listing revision for {product.Title ?? "a product"} was approved and is now live.",
+            "Product",
+            product.Id,
+            timeProvider.GetUtcNow(),
+            dbContext,
+            notificationService,
+            loggerFactory.CreateLogger(nameof(AdminProductEndpoints)),
+            cancellationToken);
 
         return HttpResults.Ok(await CreateRevisionDetailResponseAsync(revision.Id, dbContext, cancellationToken));
     }
@@ -301,6 +345,8 @@ public static class AdminProductEndpoints
         HttpContext httpContext,
         SwyftlyDbContext dbContext,
         IAuditLogService auditLogService,
+        INotificationService notificationService,
+        ILoggerFactory loggerFactory,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -344,7 +390,265 @@ public static class AdminProductEndpoints
             cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await SellerNotificationDispatcher.NotifySellerAsync(
+            revision.SellerId,
+            SellerNotificationTypes.ProductListingRevisionRejected,
+            "Published listing revision rejected",
+            $"Your published listing revision for {revision.Title ?? "a product"} was rejected. Reason: {request.Reason.Trim()}",
+            "Product",
+            revision.ProductId,
+            timeProvider.GetUtcNow(),
+            dbContext,
+            notificationService,
+            loggerFactory.CreateLogger(nameof(AdminProductEndpoints)),
+            cancellationToken);
         return HttpResults.Ok(await CreateRevisionDetailResponseAsync(revision.Id, dbContext, cancellationToken));
+    }
+
+    private static async Task<IResult> GetPendingVariantRevisionsAsync(
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var revisions = await dbContext.ProductVariantRevisions
+            .Where(revision => revision.Status == ProductVariantRevisionStatus.PendingReview)
+            .OrderBy(revision => revision.SubmittedAtUtc)
+            .Select(revision => new
+            {
+                revision.Id,
+                revision.ProductId,
+                revision.SellerId,
+                revision.Status,
+                revision.SubmittedAtUtc,
+                revision.UpdatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        var responses = new List<AdminProductVariantRevisionSummaryResponse>();
+        foreach (var revision in revisions)
+        {
+            var product = await dbContext.Products.SingleOrDefaultAsync(
+                product => product.Id == revision.ProductId,
+                cancellationToken);
+            var seller = await dbContext.SellerProfiles.SingleOrDefaultAsync(
+                seller => seller.Id == revision.SellerId,
+                cancellationToken);
+            var itemCount = await dbContext.ProductVariantRevisionItems.CountAsync(
+                item => item.RevisionId == revision.Id,
+                cancellationToken);
+
+            responses.Add(new AdminProductVariantRevisionSummaryResponse(
+                revision.Id,
+                revision.ProductId,
+                revision.SellerId,
+                seller?.DisplayName,
+                seller?.VerificationStatus.ToString(),
+                product?.Title,
+                revision.Status.ToString(),
+                itemCount,
+                revision.SubmittedAtUtc,
+                revision.UpdatedAtUtc));
+        }
+
+        return HttpResults.Ok(responses);
+    }
+
+    private static async Task<IResult> GetVariantRevisionByIdAsync(
+        Guid revisionId,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var detail = await CreateVariantRevisionDetailResponseAsync(revisionId, dbContext, cancellationToken);
+        return detail is null ? ProductNotFound() : HttpResults.Ok(detail);
+    }
+
+    private static async Task<IResult> ApproveVariantRevisionAsync(
+        Guid revisionId,
+        ClaimsPrincipal principal,
+        HttpContext httpContext,
+        SwyftlyDbContext dbContext,
+        IAuditLogService auditLogService,
+        IProductSearchIndexer productSearchIndexer,
+        IProductEmbeddingGenerator productEmbeddingGenerator,
+        INotificationService notificationService,
+        ILoggerFactory loggerFactory,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var revision = await dbContext.ProductVariantRevisions.SingleOrDefaultAsync(
+            revision => revision.Id == revisionId,
+            cancellationToken);
+        if (revision is null)
+        {
+            return ProductNotFound();
+        }
+
+        if (revision.Status != ProductVariantRevisionStatus.PendingReview)
+        {
+            return Validation("revision", "Only pending variant revisions can be approved.");
+        }
+
+        var product = await dbContext.Products.SingleOrDefaultAsync(
+            product => product.Id == revision.ProductId,
+            cancellationToken);
+        if (product is null)
+        {
+            return ProductNotFound();
+        }
+
+        if (product.Status != ProductStatus.Published)
+        {
+            return Validation("product", "Variant revisions can be approved only for published products.");
+        }
+
+        var seller = await dbContext.SellerProfiles.SingleOrDefaultAsync(seller => seller.Id == product.SellerId, cancellationToken);
+        if (seller?.VerificationStatus != SellerVerificationStatus.Verified)
+        {
+            return Validation("seller", "Only products from verified sellers can apply approved variant revisions.");
+        }
+
+        if (!TryGetUserId(principal, out var reviewedByUserId))
+        {
+            return Validation("user", "Authenticated user id is required.");
+        }
+
+        var items = await dbContext.ProductVariantRevisionItems
+            .Where(item => item.RevisionId == revision.Id)
+            .ToListAsync(cancellationToken);
+        var validation = await ProductVariantRevisionRules.ValidateAsync(product.Id, items, dbContext, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return HttpResults.ValidationProblem(validation.Errors);
+        }
+
+        var previousValue = JsonSerializer.Serialize(new
+        {
+            Variants = await ReadProductVariantsForAuditAsync(product.Id, dbContext, cancellationToken)
+        });
+
+        try
+        {
+            await ApplyVariantRevisionAsync(product.Id, items, dbContext, cancellationToken);
+            revision.Approve(reviewedByUserId, timeProvider.GetUtcNow());
+        }
+        catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException or InvalidOperationException)
+        {
+            return Validation("revision", exception.Message);
+        }
+
+        await AddVariantRevisionAuditLogAsync(
+            auditLogService,
+            principal,
+            httpContext,
+            "ProductVariantRevisionApproved",
+            revision,
+            previousValue,
+            JsonSerializer.Serialize(new
+            {
+                FinalVariants = validation.FinalVariants.Select(variant => new
+                {
+                    variant.SourceVariantId,
+                    variant.ChangeType,
+                    variant.Sku,
+                    variant.Size,
+                    variant.Colour,
+                    variant.Price,
+                    variant.CompareAtPrice,
+                    Status = variant.Status.ToString()
+                })
+            }),
+            null,
+            cancellationToken);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await productSearchIndexer.IndexProductAsync(product.Id, cancellationToken);
+        await productEmbeddingGenerator.GenerateForProductAsync(product.Id, cancellationToken);
+        await SellerNotificationDispatcher.NotifySellerAsync(
+            revision.SellerId,
+            SellerNotificationTypes.ProductVariantRevisionApproved,
+            "Variant and pricing revision approved",
+            $"Your variant and pricing revision for {product.Title ?? "a product"} was approved and is now live.",
+            "Product",
+            product.Id,
+            timeProvider.GetUtcNow(),
+            dbContext,
+            notificationService,
+            loggerFactory.CreateLogger(nameof(AdminProductEndpoints)),
+            cancellationToken);
+
+        return HttpResults.Ok(await CreateVariantRevisionDetailResponseAsync(revision.Id, dbContext, cancellationToken));
+    }
+
+    private static async Task<IResult> RejectVariantRevisionAsync(
+        Guid revisionId,
+        AdminProductReasonRequest request,
+        ClaimsPrincipal principal,
+        HttpContext httpContext,
+        SwyftlyDbContext dbContext,
+        IAuditLogService auditLogService,
+        INotificationService notificationService,
+        ILoggerFactory loggerFactory,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            return ReasonRequired();
+        }
+
+        var revision = await dbContext.ProductVariantRevisions.SingleOrDefaultAsync(
+            revision => revision.Id == revisionId,
+            cancellationToken);
+        if (revision is null)
+        {
+            return ProductNotFound();
+        }
+
+        if (!TryGetUserId(principal, out var reviewedByUserId))
+        {
+            return Validation("user", "Authenticated user id is required.");
+        }
+
+        var previousStatus = revision.Status;
+        try
+        {
+            revision.Reject(request.Reason, reviewedByUserId, timeProvider.GetUtcNow());
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            return Validation("revision", exception.Message);
+        }
+
+        await AddVariantRevisionAuditLogAsync(
+            auditLogService,
+            principal,
+            httpContext,
+            "ProductVariantRevisionRejected",
+            revision,
+            JsonSerializer.Serialize(new { status = previousStatus.ToString() }),
+            JsonSerializer.Serialize(new { status = revision.Status.ToString(), reason = revision.RejectionReason }),
+            request.Reason,
+            cancellationToken);
+
+        var productTitle = await dbContext.Products
+            .Where(product => product.Id == revision.ProductId)
+            .Select(product => product.Title)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await SellerNotificationDispatcher.NotifySellerAsync(
+            revision.SellerId,
+            SellerNotificationTypes.ProductVariantRevisionRejected,
+            "Variant and pricing revision rejected",
+            $"Your variant and pricing revision for {productTitle ?? "a product"} was rejected. Reason: {request.Reason.Trim()}",
+            "Product",
+            revision.ProductId,
+            timeProvider.GetUtcNow(),
+            dbContext,
+            notificationService,
+            loggerFactory.CreateLogger(nameof(AdminProductEndpoints)),
+            cancellationToken);
+
+        return HttpResults.Ok(await CreateVariantRevisionDetailResponseAsync(revision.Id, dbContext, cancellationToken));
     }
 
     private static async Task<IResult> GetByIdAsync(
@@ -365,6 +669,8 @@ public static class AdminProductEndpoints
         IAuditLogService auditLogService,
         IProductSearchIndexer productSearchIndexer,
         IProductEmbeddingGenerator productEmbeddingGenerator,
+        INotificationService notificationService,
+        ILoggerFactory loggerFactory,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -410,6 +716,18 @@ public static class AdminProductEndpoints
         await dbContext.SaveChangesAsync(cancellationToken);
         await productSearchIndexer.IndexProductAsync(product.Id, cancellationToken);
         await productEmbeddingGenerator.GenerateForProductAsync(product.Id, cancellationToken);
+        await SellerNotificationDispatcher.NotifySellerAsync(
+            product.SellerId,
+            SellerNotificationTypes.ProductApproved,
+            "Product approved",
+            $"Your product {product.Title ?? "listing"} has been approved and published.",
+            "Product",
+            product.Id,
+            timeProvider.GetUtcNow(),
+            dbContext,
+            notificationService,
+            loggerFactory.CreateLogger(nameof(AdminProductEndpoints)),
+            cancellationToken);
         return HttpResults.Ok(await CreateDetailResponseAsync(product.Id, dbContext, cancellationToken));
     }
 
@@ -420,6 +738,8 @@ public static class AdminProductEndpoints
         HttpContext httpContext,
         SwyftlyDbContext dbContext,
         IAuditLogService auditLogService,
+        INotificationService notificationService,
+        ILoggerFactory loggerFactory,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -456,6 +776,18 @@ public static class AdminProductEndpoints
             cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await SellerNotificationDispatcher.NotifySellerAsync(
+            product.SellerId,
+            SellerNotificationTypes.ProductRejected,
+            "Product rejected",
+            $"Your product {product.Title ?? "listing"} was rejected. Reason: {request.Reason.Trim()}",
+            "Product",
+            product.Id,
+            timeProvider.GetUtcNow(),
+            dbContext,
+            notificationService,
+            loggerFactory.CreateLogger(nameof(AdminProductEndpoints)),
+            cancellationToken);
         return HttpResults.Ok(await CreateDetailResponseAsync(product.Id, dbContext, cancellationToken));
     }
 
@@ -466,6 +798,8 @@ public static class AdminProductEndpoints
         HttpContext httpContext,
         SwyftlyDbContext dbContext,
         IAuditLogService auditLogService,
+        INotificationService notificationService,
+        ILoggerFactory loggerFactory,
         TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
@@ -502,6 +836,18 @@ public static class AdminProductEndpoints
             cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await SellerNotificationDispatcher.NotifySellerAsync(
+            product.SellerId,
+            SellerNotificationTypes.ProductChangesRequested,
+            "Product changes requested",
+            $"Changes were requested for {product.Title ?? "your product listing"}. Reason: {request.Reason.Trim()}",
+            "Product",
+            product.Id,
+            timeProvider.GetUtcNow(),
+            dbContext,
+            notificationService,
+            loggerFactory.CreateLogger(nameof(AdminProductEndpoints)),
+            cancellationToken);
         return HttpResults.Ok(await CreateDetailResponseAsync(product.Id, dbContext, cancellationToken));
     }
 
@@ -706,6 +1052,222 @@ public static class AdminProductEndpoints
                 ReadRevisionAttributes(revision.AttributesJson),
                 proposedImages),
             auditTrail);
+    }
+
+    private static async Task<AdminProductVariantRevisionDetailResponse?> CreateVariantRevisionDetailResponseAsync(
+        Guid revisionId,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var revision = await dbContext.ProductVariantRevisions.SingleOrDefaultAsync(
+            revision => revision.Id == revisionId,
+            cancellationToken);
+        if (revision is null)
+        {
+            return null;
+        }
+
+        var product = await dbContext.Products.SingleOrDefaultAsync(
+            product => product.Id == revision.ProductId,
+            cancellationToken);
+        if (product is null)
+        {
+            return null;
+        }
+
+        var seller = await dbContext.SellerProfiles.SingleOrDefaultAsync(
+            seller => seller.Id == revision.SellerId,
+            cancellationToken);
+        var currentVariants = await dbContext.ProductVariants
+            .Where(variant => variant.ProductId == product.Id)
+            .OrderBy(variant => variant.Size)
+            .ThenBy(variant => variant.Colour)
+            .Select(variant => new AdminProductVariantRevisionFinalVariantResponse(
+                variant.Id,
+                "Live",
+                variant.Sku,
+                variant.Size,
+                variant.Colour,
+                variant.Price,
+                variant.CompareAtPrice,
+                variant.StockQuantity,
+                variant.ReservedQuantity,
+                variant.Status.ToString(),
+                variant.Barcode,
+                variant.AvailableQuantity))
+            .ToListAsync(cancellationToken);
+        var rawItems = await dbContext.ProductVariantRevisionItems
+            .Where(item => item.RevisionId == revision.Id)
+            .ToListAsync(cancellationToken);
+        var stagedItems = rawItems
+            .OrderBy(item => item.Operation)
+            .ThenBy(item => item.Size)
+            .ThenBy(item => item.Colour)
+            .Select(item => new AdminProductVariantRevisionItemResponse(
+                item.Id,
+                item.Operation.ToString(),
+                item.SourceVariantId,
+                item.Sku,
+                item.Size,
+                item.Colour,
+                item.Price,
+                item.CompareAtPrice,
+                item.InitialStockQuantity,
+                item.ProposedStatus.ToString(),
+                item.Barcode))
+            .ToArray();
+        var validation = await ProductVariantRevisionRules.ValidateAsync(
+            revision.ProductId,
+            rawItems,
+            dbContext,
+            cancellationToken);
+        var proposedFinalVariants = validation.FinalVariants
+            .Select(variant => new AdminProductVariantRevisionFinalVariantResponse(
+                variant.SourceVariantId,
+                variant.ChangeType,
+                variant.Sku,
+                variant.Size,
+                variant.Colour,
+                variant.Price,
+                variant.CompareAtPrice,
+                variant.StockQuantity,
+                variant.ReservedQuantity,
+                variant.Status.ToString(),
+                variant.Barcode,
+                variant.AvailableQuantity))
+            .ToArray();
+        var auditTrail = await dbContext.AuditLogs
+            .Where(auditLog => auditLog.EntityType == "ProductVariantRevision" && auditLog.EntityId == revision.Id.ToString())
+            .OrderByDescending(auditLog => auditLog.CreatedAtUtc)
+            .Select(auditLog => new AdminAuditLogResponse(
+                auditLog.Id,
+                auditLog.ActionType,
+                auditLog.ActorUserId,
+                auditLog.ActorRole,
+                auditLog.Reason,
+                auditLog.CreatedAtUtc))
+            .ToListAsync(cancellationToken);
+
+        return new AdminProductVariantRevisionDetailResponse(
+            revision.Id,
+            revision.ProductId,
+            revision.SellerId,
+            new AdminProductSellerResponse(
+                seller?.DisplayName,
+                seller?.ContactEmail,
+                seller?.VerificationStatus.ToString()),
+            product.Title,
+            product.Slug,
+            revision.Status.ToString(),
+            revision.SellerReason,
+            revision.RejectionReason,
+            revision.SubmittedAtUtc,
+            revision.ReviewedAtUtc,
+            currentVariants,
+            stagedItems,
+            proposedFinalVariants,
+            validation.Errors,
+            auditTrail);
+    }
+
+    private static async Task<IReadOnlyCollection<object>> ReadProductVariantsForAuditAsync(
+        Guid productId,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var variants = await dbContext.ProductVariants
+            .Where(variant => variant.ProductId == productId)
+            .OrderBy(variant => variant.Size)
+            .ThenBy(variant => variant.Colour)
+            .Select(variant => new
+            {
+                variant.Id,
+                variant.Sku,
+                variant.Size,
+                variant.Colour,
+                variant.Price,
+                variant.CompareAtPrice,
+                variant.StockQuantity,
+                variant.ReservedQuantity,
+                Status = variant.Status.ToString(),
+                variant.Barcode
+            })
+            .ToListAsync(cancellationToken);
+
+        return variants.Cast<object>().ToArray();
+    }
+
+    private static async Task ApplyVariantRevisionAsync(
+        Guid productId,
+        IReadOnlyCollection<ProductVariantRevisionItem> items,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var variants = await dbContext.ProductVariants
+            .Where(variant => variant.ProductId == productId)
+            .ToDictionaryAsync(variant => variant.Id, cancellationToken);
+
+        foreach (var item in items)
+        {
+            if (item.Operation == ProductVariantRevisionItemOperation.Add)
+            {
+                dbContext.ProductVariants.Add(new ProductVariant(
+                    productId,
+                    item.Sku,
+                    item.Size,
+                    item.Colour,
+                    item.Price,
+                    item.CompareAtPrice,
+                    item.InitialStockQuantity ?? 0,
+                    reservedQuantity: 0,
+                    ProductVariantStatus.Active,
+                    item.Barcode));
+                continue;
+            }
+
+            if (!item.SourceVariantId.HasValue || !variants.TryGetValue(item.SourceVariantId.Value, out var variant))
+            {
+                throw new InvalidOperationException("A staged source variant could not be found.");
+            }
+
+            if (item.Operation == ProductVariantRevisionItemOperation.Deactivate)
+            {
+                variant.Deactivate();
+                continue;
+            }
+
+            variant.Update(
+                item.Sku,
+                item.Size,
+                item.Colour,
+                item.Price,
+                item.CompareAtPrice,
+                variant.StockQuantity,
+                variant.ReservedQuantity,
+                variant.Status,
+                item.Barcode);
+            await RefreshActiveCartVariantSnapshotsAsync(variant, dbContext, cancellationToken);
+        }
+    }
+
+    private static async Task RefreshActiveCartVariantSnapshotsAsync(
+        ProductVariant variant,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var activeCartItems = await dbContext.CartItems
+            .Where(item => item.ProductVariantId == variant.Id)
+            .Join(
+                dbContext.Carts.Where(cart => cart.Status == Domain.Carts.CartStatus.Active),
+                item => item.CartId,
+                cart => cart.Id,
+                (item, _) => item)
+            .ToListAsync(cancellationToken);
+
+        foreach (var item in activeCartItems)
+        {
+            item.RefreshVariantSnapshot(variant.Sku, variant.Size, variant.Colour, variant.Price);
+        }
     }
 
     private static async Task<IResult?> ValidateRevisionForApprovalAsync(
@@ -935,6 +1497,35 @@ public static class AdminProductEndpoints
             cancellationToken);
     }
 
+    private static async Task AddVariantRevisionAuditLogAsync(
+        IAuditLogService auditLogService,
+        ClaimsPrincipal principal,
+        HttpContext httpContext,
+        string actionType,
+        ProductVariantRevision revision,
+        string? previousValue,
+        string? newValue,
+        string? reason,
+        CancellationToken cancellationToken)
+    {
+        var actorRole = principal.IsInRole(SwyftlyRoles.SuperAdmin)
+            ? SwyftlyRoles.SuperAdmin
+            : SwyftlyRoles.Admin;
+
+        await auditLogService.RecordAsync(
+            new CreateAuditLogEntry(
+                principal.FindFirstValue(ClaimTypes.NameIdentifier),
+                actorRole,
+                actionType,
+                "ProductVariantRevision",
+                revision.Id.ToString(),
+                previousValue,
+                newValue,
+                reason,
+                httpContext.Connection.RemoteIpAddress?.ToString()),
+            cancellationToken);
+    }
+
     private static bool TryGetUserId(ClaimsPrincipal principal, out Guid userId) =>
         Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out userId) && userId != Guid.Empty;
 
@@ -1015,6 +1606,18 @@ public sealed record AdminProductRevisionSummaryResponse(
     DateTimeOffset? SubmittedAtUtc,
     DateTimeOffset UpdatedAtUtc);
 
+public sealed record AdminProductVariantRevisionSummaryResponse(
+    Guid RevisionId,
+    Guid ProductId,
+    Guid SellerId,
+    string? SellerDisplayName,
+    string? SellerVerificationStatus,
+    string? ProductTitle,
+    string Status,
+    int ItemCount,
+    DateTimeOffset? SubmittedAtUtc,
+    DateTimeOffset UpdatedAtUtc);
+
 public sealed record AdminProductDetailResponse(
     Guid ProductId,
     Guid SellerId,
@@ -1062,6 +1665,51 @@ public sealed record AdminProductListingSnapshotResponse(
     IReadOnlyCollection<string> Tags,
     IReadOnlyDictionary<string, string> Attributes,
     IReadOnlyCollection<AdminProductRevisionImageResponse> Images);
+
+public sealed record AdminProductVariantRevisionDetailResponse(
+    Guid RevisionId,
+    Guid ProductId,
+    Guid SellerId,
+    AdminProductSellerResponse Seller,
+    string? ProductTitle,
+    string? ProductSlug,
+    string Status,
+    string? SellerReason,
+    string? RejectionReason,
+    DateTimeOffset? SubmittedAtUtc,
+    DateTimeOffset? ReviewedAtUtc,
+    IReadOnlyCollection<AdminProductVariantRevisionFinalVariantResponse> CurrentVariants,
+    IReadOnlyCollection<AdminProductVariantRevisionItemResponse> Items,
+    IReadOnlyCollection<AdminProductVariantRevisionFinalVariantResponse> ProposedFinalVariants,
+    IReadOnlyDictionary<string, string[]> ValidationErrors,
+    IReadOnlyCollection<AdminAuditLogResponse> AuditTrail);
+
+public sealed record AdminProductVariantRevisionItemResponse(
+    Guid RevisionItemId,
+    string Operation,
+    Guid? SourceVariantId,
+    string Sku,
+    string Size,
+    string Colour,
+    decimal Price,
+    decimal? CompareAtPrice,
+    int? InitialStockQuantity,
+    string ProposedStatus,
+    string? Barcode);
+
+public sealed record AdminProductVariantRevisionFinalVariantResponse(
+    Guid? SourceVariantId,
+    string ChangeType,
+    string Sku,
+    string Size,
+    string Colour,
+    decimal Price,
+    decimal? CompareAtPrice,
+    int StockQuantity,
+    int ReservedQuantity,
+    string Status,
+    string? Barcode,
+    int AvailableQuantity);
 
 public sealed record AdminProductSellerResponse(
     string? DisplayName,

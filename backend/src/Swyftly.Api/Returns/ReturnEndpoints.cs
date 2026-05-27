@@ -1,11 +1,15 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Swyftly.Api.Notifications;
 using Swyftly.Api.Results;
+using Swyftly.Api.Sellers;
+using Swyftly.Application.Admin;
 using Swyftly.Application.Identity;
 using Swyftly.Application.Notifications;
 using Swyftly.Application.Returns;
 using Swyftly.Domain.Buyers;
+using Swyftly.Domain.Inventory;
 using Swyftly.Domain.Returns;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Persistence;
@@ -82,6 +86,20 @@ public static class ReturnEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
+        sellerGroup.MapGet("/{returnRequestId:guid}/restock-decisions", GetSellerReturnRestockDecisionsAsync)
+            .WithName("GetSellerReturnRestockDecisions")
+            .WithSummary("Lists seller restock decisions recorded for a return request.")
+            .Produces<IReadOnlyCollection<SellerReturnRestockDecisionResponse>>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        sellerGroup.MapPost("/{returnRequestId:guid}/restock-decisions", CreateSellerReturnRestockDecisionsAsync)
+            .WithName("CreateSellerReturnRestockDecisions")
+            .WithSummary("Records seller restock decisions for returned items without changing return/refund state.")
+            .Produces<IReadOnlyCollection<SellerReturnRestockDecisionResponse>>(StatusCodes.Status200OK)
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
         var adminGroup = app.MapGroup("/api/admin/returns")
             .WithTags("Admin Returns")
             .RequireAuthorization(SwyftlyPolicies.AdminOnly);
@@ -149,7 +167,7 @@ public static class ReturnEndpoints
             .OrderByDescending(returnRequest => returnRequest.RequestedAtUtc)
             .ToListAsync(cancellationToken);
 
-        return HttpResults.Ok(returns.Select(EfReturnWorkflowService.Map).ToArray());
+        return HttpResults.Ok(await MapReturnsAsync(returns, dbContext, cancellationToken));
     }
 
     private static async Task<IResult> GetBuyerReturnAsync(
@@ -171,7 +189,7 @@ public static class ReturnEndpoints
 
         return returnRequest is null
             ? ReturnNotFound()
-            : HttpResults.Ok(EfReturnWorkflowService.Map(returnRequest));
+            : HttpResults.Ok(await MapReturnAsync(returnRequest, dbContext, cancellationToken));
     }
 
     private static async Task<IResult> DisputeReturnAsync(
@@ -222,7 +240,7 @@ public static class ReturnEndpoints
             .OrderByDescending(returnRequest => returnRequest.RequestedAtUtc)
             .ToListAsync(cancellationToken);
 
-        return HttpResults.Ok(returns.Select(EfReturnWorkflowService.Map).ToArray());
+        return HttpResults.Ok(await MapReturnsAsync(returns, dbContext, cancellationToken));
     }
 
     private static async Task<IResult> GetSellerReturnAsync(
@@ -244,7 +262,7 @@ public static class ReturnEndpoints
 
         return returnRequest is null
             ? ReturnNotFound()
-            : HttpResults.Ok(EfReturnWorkflowService.Map(returnRequest));
+            : HttpResults.Ok(await MapReturnAsync(returnRequest, dbContext, cancellationToken));
     }
 
     private static async Task<IResult> ApproveReturnAsync(
@@ -347,6 +365,224 @@ public static class ReturnEndpoints
         return result.ToHttpResult(HttpResults.Ok);
     }
 
+    private static async Task<IResult> GetSellerReturnRestockDecisionsAsync(
+        Guid returnRequestId,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var seller = await GetCurrentSellerAsync(principal, dbContext, cancellationToken);
+        if (seller is null)
+        {
+            return SellerNotFound();
+        }
+
+        var returnExists = await dbContext.ReturnRequests
+            .AsNoTracking()
+            .AnyAsync(
+                returnRequest => returnRequest.Id == returnRequestId && returnRequest.SellerId == seller.Id,
+                cancellationToken);
+        if (!returnExists)
+        {
+            return ReturnNotFound();
+        }
+
+        var decisions = await CreateRestockDecisionQuery(dbContext, seller.Id, returnRequestId)
+            .ToArrayAsync(cancellationToken);
+
+        return HttpResults.Ok(decisions);
+    }
+
+    private static async Task<IResult> CreateSellerReturnRestockDecisionsAsync(
+        Guid returnRequestId,
+        SellerReturnRestockDecisionApiRequest request,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        IAuditLogService auditLogService,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var seller = await GetCurrentSellerAsync(principal, dbContext, cancellationToken);
+        if (seller is null)
+        {
+            return SellerNotFound();
+        }
+
+        if (!TryGetUserId(principal, out var sellerUserId))
+        {
+            return UserNotFound();
+        }
+
+        if (request.Items is null || request.Items.Count == 0)
+        {
+            return Validation("items", "At least one restock decision item is required.");
+        }
+
+        if (request.Items.Count > 50)
+        {
+            return Validation("items", "A restock decision request cannot contain more than 50 items.");
+        }
+
+        var duplicateRequestedItemId = request.Items
+            .GroupBy(item => item.ReturnItemId)
+            .Where(group => group.Key != Guid.Empty && group.Count() > 1)
+            .Select(group => group.Key)
+            .FirstOrDefault();
+        if (duplicateRequestedItemId != Guid.Empty)
+        {
+            return Validation("items", "Each return item can appear only once in a restock decision request.");
+        }
+
+        var returnRequest = await dbContext.ReturnRequests
+            .Include(existing => existing.Items)
+            .SingleOrDefaultAsync(
+                existing => existing.Id == returnRequestId && existing.SellerId == seller.Id,
+                cancellationToken);
+        if (returnRequest is null)
+        {
+            return ReturnNotFound();
+        }
+
+        if (!CanRecordRestockDecision(returnRequest.Status))
+        {
+            return Conflict(
+                "Returns.RestockNotAllowed",
+                "Restock decisions can only be recorded after a return has been approved, returned, refunded, or closed.");
+        }
+
+        var returnItemsById = returnRequest.Items.ToDictionary(item => item.Id);
+        foreach (var item in request.Items)
+        {
+            if (item.ReturnItemId == Guid.Empty || !returnItemsById.TryGetValue(item.ReturnItemId, out var returnItem))
+            {
+                return Validation("items", "Every restock decision item must reference an item from this return request.");
+            }
+
+            if (item.QuantityRestocked < 0 || item.QuantityRestocked > returnItem.Quantity)
+            {
+                return Validation("quantityRestocked", "Quantity restocked must be between zero and the returned item quantity.");
+            }
+
+            if (!Enum.TryParse<ReturnRestockCondition>(item.Condition, ignoreCase: true, out var condition)
+                || !Enum.IsDefined(condition))
+            {
+                return Validation("condition", $"Condition must be one of: {string.Join(", ", Enum.GetNames<ReturnRestockCondition>())}.");
+            }
+
+            var reason = item.Reason?.Trim();
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                return Validation("reason", "Restock decision reason is required.");
+            }
+
+            if (reason.Length > ReturnRestockDecision.ReasonMaxLength)
+            {
+                return Validation("reason", $"Restock decision reason cannot exceed {ReturnRestockDecision.ReasonMaxLength} characters.");
+            }
+        }
+
+        var requestedItemIds = request.Items.Select(item => item.ReturnItemId).ToArray();
+        var existingDecisionItemId = await dbContext.ReturnRestockDecisions
+            .AsNoTracking()
+            .Where(decision => requestedItemIds.Contains(decision.ReturnItemId))
+            .Select(decision => decision.ReturnItemId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (existingDecisionItemId != Guid.Empty)
+        {
+            return Conflict(
+                "Returns.RestockDecisionExists",
+                "A restock decision has already been recorded for one or more selected return items.");
+        }
+
+        var variantIds = request.Items
+            .Select(item => returnItemsById[item.ReturnItemId].ProductVariantId)
+            .Distinct()
+            .ToArray();
+        var variants = await dbContext.ProductVariants
+            .Where(variant => variantIds.Contains(variant.Id))
+            .ToDictionaryAsync(variant => variant.Id, cancellationToken);
+
+        var decidedAtUtc = timeProvider.GetUtcNow();
+        var batchReference = request.Items.Count > 1 ? $"return-restock-{Guid.NewGuid():N}" : null;
+
+        foreach (var item in request.Items)
+        {
+            var returnItem = returnItemsById[item.ReturnItemId];
+            var variant = variants[returnItem.ProductVariantId];
+            var condition = Enum.Parse<ReturnRestockCondition>(item.Condition, ignoreCase: true);
+            var reason = item.Reason!.Trim();
+
+            var previousStockQuantity = variant.StockQuantity;
+            var previousReservedQuantity = variant.ReservedQuantity;
+            var previousStatus = variant.Status;
+            if (item.QuantityRestocked > 0)
+            {
+                variant.AdjustInventory(variant.StockQuantity + item.QuantityRestocked, variant.Status);
+                dbContext.InventoryMovements.Add(new InventoryMovement(
+                    seller.Id,
+                    returnItem.ProductId,
+                    returnItem.ProductVariantId,
+                    InventoryMovementType.ReturnRestocked,
+                    previousStockQuantity,
+                    variant.StockQuantity,
+                    previousReservedQuantity,
+                    variant.ReservedQuantity,
+                    previousStatus,
+                    variant.Status,
+                    "SellerReturnRestock",
+                    reason,
+                    sellerUserId,
+                    batchReference,
+                    decidedAtUtc,
+                    orderId: returnRequest.OrderId,
+                    returnRequestId: returnRequest.Id));
+            }
+
+            var decision = new ReturnRestockDecision(
+                seller.Id,
+                returnRequest.Id,
+                returnItem.Id,
+                returnItem.ProductId,
+                returnItem.ProductVariantId,
+                item.QuantityRestocked,
+                condition,
+                reason,
+                sellerUserId,
+                decidedAtUtc);
+            dbContext.ReturnRestockDecisions.Add(decision);
+
+            await auditLogService.RecordAsync(
+                new CreateAuditLogEntry(
+                    sellerUserId.ToString(),
+                    "Seller",
+                    "SellerReturnRestockDecisionRecorded",
+                    "ReturnItem",
+                    returnItem.Id.ToString(),
+                    JsonSerializer.Serialize(new
+                    {
+                        StockQuantity = previousStockQuantity,
+                        ReservedQuantity = previousReservedQuantity,
+                        Status = previousStatus.ToString()
+                    }),
+                    JsonSerializer.Serialize(new
+                    {
+                        item.QuantityRestocked,
+                        Condition = condition.ToString(),
+                        reason,
+                        StockQuantityAfter = variant.StockQuantity
+                    }),
+                    reason),
+                cancellationToken);
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var decisions = await CreateRestockDecisionQuery(dbContext, seller.Id, returnRequestId)
+            .ToArrayAsync(cancellationToken);
+
+        return HttpResults.Ok(decisions);
+    }
+
     private static async Task<IResult> GetDisputedReturnsAsync(
         SwyftlyDbContext dbContext,
         CancellationToken cancellationToken)
@@ -356,7 +592,41 @@ public static class ReturnEndpoints
             .OrderBy(returnRequest => returnRequest.DisputedAtUtc)
             .ToListAsync(cancellationToken);
 
-        return HttpResults.Ok(returns.Select(EfReturnWorkflowService.Map).ToArray());
+        return HttpResults.Ok(await MapReturnsAsync(returns, dbContext, cancellationToken));
+    }
+
+    private static async Task<ReturnRequestResult> MapReturnAsync(
+        ReturnRequest returnRequest,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var order = await dbContext.Orders
+            .AsNoTracking()
+            .SingleOrDefaultAsync(existing => existing.Id == returnRequest.OrderId, cancellationToken);
+
+        return EfReturnWorkflowService.Map(
+            returnRequest,
+            SellerPolicyResponseMapper.MapSnapshot(order?.SellerPolicySnapshot));
+    }
+
+    private static async Task<IReadOnlyCollection<ReturnRequestResult>> MapReturnsAsync(
+        IReadOnlyCollection<ReturnRequest> returnRequests,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var orderIds = returnRequests.Select(returnRequest => returnRequest.OrderId).Distinct().ToArray();
+        var orders = await dbContext.Orders
+            .AsNoTracking()
+            .Where(order => orderIds.Contains(order.Id))
+            .ToDictionaryAsync(order => order.Id, cancellationToken);
+
+        return returnRequests
+            .Select(returnRequest => EfReturnWorkflowService.Map(
+                returnRequest,
+                orders.TryGetValue(returnRequest.OrderId, out var order)
+                    ? SellerPolicyResponseMapper.MapSnapshot(order.SellerPolicySnapshot)
+                    : null))
+            .ToArray();
     }
 
     private static IQueryable<ReturnRequest> ReturnQuery(SwyftlyDbContext dbContext) =>
@@ -364,6 +634,47 @@ public static class ReturnEndpoints
             .Include(returnRequest => returnRequest.Items)
             .Include(returnRequest => returnRequest.Messages)
             .AsNoTracking();
+
+    private static IQueryable<SellerReturnRestockDecisionResponse> CreateRestockDecisionQuery(
+        SwyftlyDbContext dbContext,
+        Guid sellerId,
+        Guid returnRequestId) =>
+        dbContext.ReturnRestockDecisions
+            .AsNoTracking()
+            .Where(decision => decision.SellerId == sellerId && decision.ReturnRequestId == returnRequestId)
+            .Join(
+                dbContext.ReturnItems.AsNoTracking(),
+                decision => decision.ReturnItemId,
+                item => item.Id,
+                (decision, item) => new { Decision = decision, Item = item })
+            .Join(
+                dbContext.ProductVariants.AsNoTracking(),
+                item => item.Decision.ProductVariantId,
+                variant => variant.Id,
+                (item, variant) => new { item.Decision, item.Item, Variant = variant })
+            .OrderBy(item => item.Decision.CreatedAtUtc)
+            .Select(item => new SellerReturnRestockDecisionResponse(
+                item.Decision.Id,
+                item.Decision.ReturnRequestId,
+                item.Decision.ReturnItemId,
+                item.Decision.ProductId,
+                item.Decision.ProductVariantId,
+                item.Variant.Sku,
+                item.Variant.Size,
+                item.Variant.Colour,
+                item.Item.Quantity,
+                item.Decision.QuantityRestocked,
+                item.Decision.Condition.ToString(),
+                item.Decision.Reason,
+                item.Decision.ActorUserId,
+                item.Decision.CreatedAtUtc));
+
+    private static bool CanRecordRestockDecision(ReturnStatus status) =>
+        status is ReturnStatus.Approved
+            or ReturnStatus.ReturnedToSeller
+            or ReturnStatus.RefundPending
+            or ReturnStatus.Refunded
+            or ReturnStatus.Closed;
 
     private static async Task<BuyerProfile?> GetCurrentBuyerAsync(
         ClaimsPrincipal principal,
@@ -416,6 +727,18 @@ public static class ReturnEndpoints
             title: "Returns.NotFound",
             detail: "Return request was not found.",
             statusCode: StatusCodes.Status404NotFound);
+
+    private static IResult Validation(string key, string message) =>
+        HttpResults.ValidationProblem(new Dictionary<string, string[]>
+        {
+            [key] = [message]
+        });
+
+    private static IResult Conflict(string title, string detail) =>
+        HttpResults.Problem(
+            title: title,
+            detail: detail,
+            statusCode: StatusCodes.Status409Conflict);
 }
 
 public sealed record CreateReturnRequestApiRequest(
@@ -433,3 +756,28 @@ public sealed record CreateReturnItemApiRequest(
 public sealed record SellerReturnResponseApiRequest(string? Message);
 
 public sealed record DisputeReturnRequestApiRequest(string Reason);
+
+public sealed record SellerReturnRestockDecisionApiRequest(
+    IReadOnlyCollection<SellerReturnRestockDecisionItemApiRequest> Items);
+
+public sealed record SellerReturnRestockDecisionItemApiRequest(
+    Guid ReturnItemId,
+    int QuantityRestocked,
+    string Condition,
+    string Reason);
+
+public sealed record SellerReturnRestockDecisionResponse(
+    Guid RestockDecisionId,
+    Guid ReturnRequestId,
+    Guid ReturnItemId,
+    Guid ProductId,
+    Guid ProductVariantId,
+    string Sku,
+    string Size,
+    string Colour,
+    int QuantityReturned,
+    int QuantityRestocked,
+    string Condition,
+    string Reason,
+    Guid ActorUserId,
+    DateTimeOffset CreatedAtUtc);

@@ -1,3 +1,4 @@
+import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import {
   AbstractControl,
@@ -25,9 +26,12 @@ import {
   SellerProductImageResponse,
   SellerProductRevisionImageResponse,
   SellerProductRevisionResponse,
+  SellerProductVariantRevisionItemResponse,
+  SellerProductVariantRevisionResponse,
   SellerProductVariantResponse,
   UpsertSellerProductRequest,
   UpsertSellerProductRevisionRequest,
+  UpsertSellerProductVariantRevisionItemRequest,
   UpsertSellerProductVariantRequest
 } from '../seller/seller-product.models';
 import { SellerProductService } from '../seller/seller-product.service';
@@ -42,6 +46,7 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
   imports: [
     MatButtonModule,
     MatCheckboxModule,
+    DatePipe,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
@@ -95,6 +100,34 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
         @if (product()?.rejectionReason) {
           <p class="auth-alert error" role="status">{{ product()?.rejectionReason }}</p>
         }
+
+        <article class="route-card admin-detail-card seller-moderation-card">
+          <div class="seller-products-header">
+            <div>
+              <span class="eyebrow">Moderation</span>
+              <h2>Review history</h2>
+              <p>Admin decisions and seller-facing reasons for this listing.</p>
+            </div>
+          </div>
+
+          @if (moderationTimeline().length === 0) {
+            <p class="form-helper">No admin review decisions have been recorded yet.</p>
+          } @else {
+            <div class="admin-audit-list">
+              @for (event of moderationTimeline(); track event.auditLogId) {
+                <div>
+                  <span class="status-pill">{{ moderationLabel(event.actionType) }}</span>
+                  <strong>{{ event.createdAtUtc | date:'medium' }}</strong>
+                  @if (event.reason) {
+                    <p>{{ event.reason }}</p>
+                  } @else {
+                    <p>No seller action is required from this decision.</p>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </article>
 
         <section class="ai-assistant-panel hf-ai-listing-assistant" aria-labelledby="ai-product-assistant-title">
           <div class="hf-ai-listing-layout">
@@ -559,6 +592,7 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                   <mat-form-field appearance="outline">
                     <mat-label>Barcode</mat-label>
                     <input matInput formControlName="barcode" />
+                    <mat-hint>Optional. Use the printed barcode value sellers scan in Inventory.</mat-hint>
                   </mat-form-field>
                   <button mat-flat-button type="submit" [disabled]="!isProductEditable() || isSaving()">
                     {{ editingVariantId() ? 'Save variant' : 'Add variant' }}
@@ -590,6 +624,10 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                       <div class="buyer-action-row">
                         <button mat-stroked-button type="button" [disabled]="!isProductEditable()" (click)="editVariant(variant)">Edit</button>
                         <button mat-stroked-button type="button" [disabled]="!isProductEditable()" (click)="removeVariant(variant.variantId)">Remove</button>
+                        @if (isRevisionMode()) {
+                          <button mat-stroked-button type="button" [disabled]="!variantRevision()?.canEdit" (click)="stageVariantRevisionUpdate(variant)">Stage update</button>
+                          <button mat-stroked-button type="button" [disabled]="!variantRevision()?.canEdit" (click)="stageVariantRevisionDeactivation(variant)">Stage deactivation</button>
+                        }
                       </div>
                     </article>
                   } @empty {
@@ -599,11 +637,119 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                     </div>
                   }
                 </div>
+
+                @if (isRevisionMode() && variantRevision()) {
+                  <article class="route-card admin-detail-card">
+                    <div class="admin-section-heading">
+                      <div>
+                        <span class="eyebrow">Published listing workflow</span>
+                        <h2>Variant and pricing revision</h2>
+                        <p class="form-helper">Stage SKU, size, colour, price, compare-at price, barcode, additions, and deactivations without changing the live listing until admin approval. Existing stock stays in Inventory.</p>
+                      </div>
+                      <span class="status-pill">{{ variantRevision()!.status }}</span>
+                    </div>
+
+                    @if (variantRevision()!.rejectionReason) {
+                      <p class="auth-alert error">Rejected: {{ variantRevision()!.rejectionReason }}</p>
+                    }
+
+                    <form [formGroup]="variantRevisionForm" (ngSubmit)="addVariantRevisionItem()" class="wizard-form" novalidate>
+                      <mat-form-field appearance="outline">
+                        <mat-label>Seller reason</mat-label>
+                        <textarea matInput rows="2" formControlName="sellerReason" placeholder="Explain why this variant or pricing change is needed."></textarea>
+                      </mat-form-field>
+
+                      <div class="form-grid">
+                        <mat-form-field appearance="outline">
+                          <mat-label>Revision action</mat-label>
+                          <mat-select formControlName="operation">
+                            <mat-option value="Add">Add new variant</mat-option>
+                            <mat-option value="Update">Update live variant</mat-option>
+                          </mat-select>
+                        </mat-form-field>
+                        <mat-form-field appearance="outline">
+                          <mat-label>Source variant</mat-label>
+                          <mat-select formControlName="sourceVariantId">
+                            <mat-option [value]="null">New variant</mat-option>
+                            @for (variant of product()?.variants ?? []; track variant.variantId) {
+                              <mat-option [value]="variant.variantId">{{ variant.sku }} / {{ variant.size }} / {{ variant.colour }}</mat-option>
+                            }
+                          </mat-select>
+                        </mat-form-field>
+                      </div>
+
+                      <div class="form-grid">
+                        <mat-form-field appearance="outline">
+                          <mat-label>SKU</mat-label>
+                          <input matInput formControlName="sku" />
+                        </mat-form-field>
+                        <mat-form-field appearance="outline">
+                          <mat-label>Barcode</mat-label>
+                          <input matInput formControlName="barcode" />
+                          <mat-hint>Optional scanner value for SKU/barcode lookup after approval.</mat-hint>
+                        </mat-form-field>
+                      </div>
+                      <div class="form-grid">
+                        <mat-form-field appearance="outline">
+                          <mat-label>Size</mat-label>
+                          <input matInput formControlName="size" />
+                        </mat-form-field>
+                        <mat-form-field appearance="outline">
+                          <mat-label>Colour</mat-label>
+                          <input matInput formControlName="colour" />
+                        </mat-form-field>
+                      </div>
+                      <div class="form-grid">
+                        <mat-form-field appearance="outline">
+                          <mat-label>Price</mat-label>
+                          <input matInput type="number" step="0.01" formControlName="price" />
+                        </mat-form-field>
+                        <mat-form-field appearance="outline">
+                          <mat-label>Compare-at price</mat-label>
+                          <input matInput type="number" step="0.01" formControlName="compareAtPrice" />
+                        </mat-form-field>
+                      </div>
+                      <mat-form-field appearance="outline">
+                        <mat-label>Initial stock for new variant</mat-label>
+                        <input matInput type="number" min="0" formControlName="initialStockQuantity" />
+                      </mat-form-field>
+
+                      <div class="buyer-action-row">
+                        <button mat-flat-button type="submit" [disabled]="!variantRevision()!.canEdit || isSaving()">Stage change</button>
+                        <button mat-stroked-button type="button" (click)="startVariantRevisionAdd()">New variant</button>
+                        <button mat-stroked-button type="button" [disabled]="!variantRevision()!.canEdit || variantRevision()!.items.length === 0 || isSaving()" (click)="submitVariantRevision()">Submit variant revision</button>
+                        <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="cancelVariantRevision()">Cancel revision</button>
+                      </div>
+                    </form>
+
+                    <div class="admin-table" role="table" aria-label="Staged variant changes">
+                      <div class="admin-table-row heading" role="row">
+                        <span role="columnheader">Change</span>
+                        <span role="columnheader">Variant</span>
+                        <span role="columnheader">Price</span>
+                        <span role="columnheader">Action</span>
+                      </div>
+                      @for (item of variantRevision()!.items; track item.revisionItemId) {
+                        <div class="admin-table-row" role="row">
+                          <span role="cell"><strong>{{ item.operation }}</strong><small>{{ item.proposedStatus }}</small></span>
+                          <span role="cell"><strong>{{ item.sku }}</strong><small>{{ item.size }} / {{ item.colour }}</small></span>
+                          <span role="cell"><strong>{{ formatCurrency(item.price) }}</strong><small>{{ item.compareAtPrice ? 'Was ' + formatCurrency(item.compareAtPrice) : 'No compare price' }}</small></span>
+                          <span role="cell"><button mat-stroked-button type="button" [disabled]="!variantRevision()!.canEdit || isSaving()" (click)="removeVariantRevisionItem(item)">Remove</button></span>
+                        </div>
+                      } @empty {
+                        <div class="product-editor-context">
+                          <strong>No staged variant changes</strong>
+                          <span>Use Stage update or add a new variant before submitting this revision.</span>
+                        </div>
+                      }
+                    </div>
+                  </article>
+                }
               }
               @case (4) {
                 <form [formGroup]="shippingForm" class="wizard-form" novalidate>
                   <h2>Shipping and returns</h2>
-                  <p class="form-helper">Shipping and return policies are not persisted from this editor yet. Use store settings and support workflows for operational policy changes until dedicated policy APIs exist.</p>
+                  <p class="form-helper">Product-level shipping notes remain internal planning context. Buyer-facing return, exchange, fulfilment, support, care, and disclaimer policies are managed in Store settings.</p>
                   <mat-form-field appearance="outline">
                     <mat-label>Shipping notes</mat-label>
                     <textarea matInput rows="4" formControlName="shippingNotes" placeholder="Internal planning notes only"></textarea>
@@ -667,6 +813,7 @@ export class SellerProductFormPageComponent implements OnInit {
   protected readonly categories = signal<SellerCatalogCategoryResponse[]>([]);
   protected readonly product = signal<SellerProductDetailResponse | null>(null);
   protected readonly revision = signal<SellerProductRevisionResponse | null>(null);
+  protected readonly variantRevision = signal<SellerProductVariantRevisionResponse | null>(null);
   protected readonly selectedCategoryId = signal<string | null>(null);
   protected readonly editingImageId = signal<string | null>(null);
   protected readonly editingVariantId = signal<string | null>(null);
@@ -708,6 +855,12 @@ export class SellerProductFormPageComponent implements OnInit {
       : null;
   });
 
+  protected readonly moderationTimeline = computed(() => [
+    ...(this.product()?.moderationEvents ?? []),
+    ...(this.revision()?.moderationEvents ?? []),
+    ...(this.variantRevision()?.moderationEvents ?? [])
+  ].sort((left, right) => right.createdAtUtc.localeCompare(left.createdAtUtc)));
+
   protected readonly basicForm = new FormGroup({
     categoryId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     title: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -739,6 +892,19 @@ export class SellerProductFormPageComponent implements OnInit {
     stockQuantity: new FormControl(0, { nonNullable: true, validators: [Validators.required, Validators.min(0)] }),
     reservedQuantity: new FormControl(0, { nonNullable: true, validators: [Validators.required, Validators.min(0)] }),
     status: new FormControl<'Active' | 'Inactive' | 'OutOfStock'>('Active', { nonNullable: true }),
+    barcode: new FormControl('', { nonNullable: true })
+  });
+
+  protected readonly variantRevisionForm = new FormGroup({
+    sellerReason: new FormControl('', { nonNullable: true }),
+    operation: new FormControl<'Add' | 'Update'>('Add', { nonNullable: true }),
+    sourceVariantId: new FormControl<string | null>(null),
+    sku: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    size: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    colour: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    price: new FormControl(0, { nonNullable: true, validators: [Validators.required, Validators.min(0.01)] }),
+    compareAtPrice: new FormControl<number | null>(null),
+    initialStockQuantity: new FormControl(0, { nonNullable: true, validators: [Validators.min(0)] }),
     barcode: new FormControl('', { nonNullable: true })
   });
 
@@ -1024,6 +1190,134 @@ export class SellerProductFormPageComponent implements OnInit {
       'Variant removed.');
   }
 
+  protected startVariantRevisionAdd(): void {
+    this.variantRevisionForm.patchValue({
+      operation: 'Add',
+      sourceVariantId: null,
+      sku: '',
+      size: '',
+      colour: '',
+      price: 0,
+      compareAtPrice: null,
+      initialStockQuantity: 0,
+      barcode: ''
+    });
+  }
+
+  protected stageVariantRevisionUpdate(variant: SellerProductVariantResponse): void {
+    this.variantRevisionForm.patchValue({
+      operation: 'Update',
+      sourceVariantId: variant.variantId,
+      sku: variant.sku,
+      size: variant.size,
+      colour: variant.colour,
+      price: variant.price,
+      compareAtPrice: variant.compareAtPrice,
+      initialStockQuantity: 0,
+      barcode: variant.barcode ?? ''
+    });
+  }
+
+  protected async addVariantRevisionItem(): Promise<void> {
+    const product = this.product();
+    const revision = this.variantRevision();
+    if (!product || !revision?.canEdit || !this.ensureValid(this.variantRevisionForm)) {
+      return;
+    }
+
+    const formValue = this.variantRevisionForm.getRawValue();
+    const nextItem: UpsertSellerProductVariantRevisionItemRequest = {
+      operation: formValue.operation,
+      sourceVariantId: formValue.operation === 'Add' ? null : formValue.sourceVariantId,
+      sku: formValue.sku,
+      size: formValue.size,
+      colour: formValue.colour,
+      price: formValue.price,
+      compareAtPrice: formValue.compareAtPrice,
+      initialStockQuantity: formValue.operation === 'Add' ? formValue.initialStockQuantity : null,
+      barcode: formValue.barcode || null
+    };
+    const existingItems = this.variantRevisionItemsAsRequests()
+      .filter(item => !sameVariantRevisionTarget(item, nextItem));
+
+    await this.runVariantRevisionAction(
+      () => this.productService.updateVariantRevision(product.productId, {
+        sellerReason: formValue.sellerReason || null,
+        items: [...existingItems, nextItem]
+      }),
+      'Variant revision staged.');
+    this.startVariantRevisionAdd();
+  }
+
+  protected async stageVariantRevisionDeactivation(variant: SellerProductVariantResponse): Promise<void> {
+    const product = this.product();
+    const revision = this.variantRevision();
+    if (!product || !revision?.canEdit) {
+      return;
+    }
+
+    const existingItems = this.variantRevisionItemsAsRequests()
+      .filter(item => item.sourceVariantId !== variant.variantId);
+    await this.runVariantRevisionAction(
+      () => this.productService.updateVariantRevision(product.productId, {
+        sellerReason: this.variantRevisionForm.controls.sellerReason.value || null,
+        items: [
+          ...existingItems,
+          {
+            operation: 'Deactivate',
+            sourceVariantId: variant.variantId,
+            sku: null,
+            size: null,
+            colour: null,
+            price: null,
+            compareAtPrice: null,
+            initialStockQuantity: null,
+            barcode: null
+          }
+        ]
+      }),
+      'Variant deactivation staged.');
+  }
+
+  protected async removeVariantRevisionItem(item: SellerProductVariantRevisionItemResponse): Promise<void> {
+    const product = this.product();
+    const revision = this.variantRevision();
+    if (!product || !revision?.canEdit) {
+      return;
+    }
+
+    const target = revisionItemResponseAsRequest(item);
+    await this.runVariantRevisionAction(
+      () => this.productService.updateVariantRevision(product.productId, {
+        sellerReason: this.variantRevisionForm.controls.sellerReason.value || null,
+        items: this.variantRevisionItemsAsRequests()
+          .filter(existingItem => !sameVariantRevisionTarget(existingItem, target))
+      }),
+      'Staged variant change removed.');
+  }
+
+  protected async submitVariantRevision(): Promise<void> {
+    const product = this.product();
+    if (!product || !this.variantRevision()?.canEdit) {
+      return;
+    }
+
+    await this.runVariantRevisionAction(
+      () => this.productService.submitVariantRevisionForReview(product.productId),
+      'Variant revision submitted for review.');
+  }
+
+  protected async cancelVariantRevision(): Promise<void> {
+    const product = this.product();
+    if (!product) {
+      return;
+    }
+
+    await this.runVariantRevisionAction(
+      () => this.productService.cancelVariantRevision(product.productId),
+      'Variant revision cancelled.');
+  }
+
   protected async submitForReview(): Promise<void> {
     const saved = await this.ensureProductSaved();
     if (!saved || !this.isListingEditable() || !this.canSubmitReview()) {
@@ -1199,6 +1493,12 @@ export class SellerProductFormPageComponent implements OnInit {
     return 'Listing content is locked while this product is in marketplace review.';
   }
 
+  protected moderationLabel(actionType: string): string {
+    return actionType
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace('Product Listing Revision', 'Revision');
+  }
+
   protected formatCurrency(amount: number): string {
     return `R${amount.toFixed(2)}`;
   }
@@ -1265,7 +1565,12 @@ export class SellerProductFormPageComponent implements OnInit {
         const product = await this.productService.getProduct(productId);
         this.setProduct(product);
         if (product.status === 'Published') {
-          this.setRevision(await this.productService.getRevision(product.productId));
+          const [revision, variantRevision] = await Promise.all([
+            this.productService.getRevision(product.productId),
+            this.productService.getVariantRevision(product.productId)
+          ]);
+          this.setRevision(revision);
+          this.setVariantRevision(variantRevision);
         }
       } else {
         this.rebuildAttributeControls({});
@@ -1281,6 +1586,7 @@ export class SellerProductFormPageComponent implements OnInit {
     this.product.set(product);
     if (product.status !== 'Published') {
       this.revision.set(null);
+      this.variantRevision.set(null);
     }
     this.selectedCategoryId.set(product.categoryId);
     this.basicForm.patchValue({
@@ -1309,6 +1615,13 @@ export class SellerProductFormPageComponent implements OnInit {
       fullDescription: revision.fullDescription ?? ''
     });
     this.rebuildAttributeControls(revision.attributes);
+  }
+
+  private setVariantRevision(revision: SellerProductVariantRevisionResponse): void {
+    this.variantRevision.set(revision);
+    this.variantRevisionForm.patchValue({
+      sellerReason: revision.sellerReason ?? ''
+    });
   }
 
   private rebuildAttributeControls(rawAttributes: Record<string, string>): void {
@@ -1350,6 +1663,20 @@ export class SellerProductFormPageComponent implements OnInit {
       status: value.status,
       barcode: emptyToNull(value.barcode)
     };
+  }
+
+  private variantRevisionItemsAsRequests(): UpsertSellerProductVariantRevisionItemRequest[] {
+    return this.variantRevision()?.items.map(item => ({
+      operation: normalizeVariantRevisionOperation(item.operation),
+      sourceVariantId: item.sourceVariantId,
+      sku: item.sku,
+      size: item.size,
+      colour: item.colour,
+      price: item.price,
+      compareAtPrice: item.compareAtPrice,
+      initialStockQuantity: item.initialStockQuantity,
+      barcode: item.barcode
+    })) ?? [];
   }
 
   private createAttributesRequest(): Record<string, unknown> {
@@ -1526,6 +1853,23 @@ export class SellerProductFormPageComponent implements OnInit {
     }
   }
 
+  private async runVariantRevisionAction(
+    action: () => Promise<SellerProductVariantRevisionResponse>,
+    successMessage: string): Promise<void> {
+    this.isSaving.set(true);
+    this.errorMessage.set(null);
+    this.successMessage.set(null);
+
+    try {
+      this.setVariantRevision(await action());
+      this.successMessage.set(successMessage);
+    } catch (error) {
+      this.errorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isSaving.set(false);
+    }
+  }
+
   private ensureValid(control: AbstractControl): boolean {
     if (control.invalid || this.isSaving()) {
       control.markAllAsTouched();
@@ -1539,6 +1883,38 @@ export class SellerProductFormPageComponent implements OnInit {
 function emptyToNull(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
+}
+
+function normalizeVariantRevisionOperation(operation: string): 'Add' | 'Update' | 'Deactivate' {
+  return operation === 'Deactivate' || operation === 'Update' ? operation : 'Add';
+}
+
+function revisionItemResponseAsRequest(
+  item: SellerProductVariantRevisionItemResponse): UpsertSellerProductVariantRevisionItemRequest {
+  return {
+    operation: normalizeVariantRevisionOperation(item.operation),
+    sourceVariantId: item.sourceVariantId,
+    sku: item.sku,
+    size: item.size,
+    colour: item.colour,
+    price: item.price,
+    compareAtPrice: item.compareAtPrice,
+    initialStockQuantity: item.initialStockQuantity,
+    barcode: item.barcode
+  };
+}
+
+function sameVariantRevisionTarget(
+  left: UpsertSellerProductVariantRevisionItemRequest,
+  right: UpsertSellerProductVariantRevisionItemRequest): boolean {
+  if (left.operation === 'Add' || right.operation === 'Add') {
+    return left.operation === right.operation
+      && left.sku?.trim().toLowerCase() === right.sku?.trim().toLowerCase()
+      && left.size?.trim().toLowerCase() === right.size?.trim().toLowerCase()
+      && left.colour?.trim().toLowerCase() === right.colour?.trim().toLowerCase();
+  }
+
+  return left.sourceVariantId === right.sourceVariantId;
 }
 
 function parseRawAttributeValue(
