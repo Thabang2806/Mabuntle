@@ -6,6 +6,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
+import { BuyerAiDiscoveryService } from '../buyer/buyer-ai-discovery.service';
 import { BuyerSettingsService } from '../buyer/buyer-settings.service';
 import {
   BuyerDeliveryAddressResponse,
@@ -145,10 +146,10 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
                       <p>Instructions: {{ address.deliveryInstructions }}</p>
                     }
                     @if (address.verificationStatus) {
-                      <p>Address check: {{ address.verificationStatus }}</p>
+                      <p>Address check: {{ addressCheckLabel(address.verificationStatus) }}</p>
                     }
                     @if ((address.verificationWarnings?.length ?? 0) > 0) {
-                      <p>Warnings: {{ address.verificationWarnings!.join(' ') }}</p>
+                      <p>Review notes: {{ address.verificationWarnings!.join(' ') }}</p>
                     }
                     <div class="buyer-action-row">
                       <button mat-stroked-button type="button" (click)="editDeliveryAddress(address)">Edit</button>
@@ -223,11 +224,11 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
 
               @if (addressVerificationPreview(); as verification) {
                 <app-ui-alert [tone]="verification.verificationStatus === 'Verified' ? 'success' : 'warning'">
-                  Address check: {{ verification.verificationStatus }}.
+                  Address check: {{ addressCheckLabel(verification.verificationStatus) }}.
                   @if (verification.verificationWarnings.length > 0) {
                     {{ verification.verificationWarnings.join(' ') }}
                   } @else {
-                    No local address warnings.
+                    No address review notes.
                   }
                 </app-ui-alert>
               }
@@ -246,9 +247,45 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
             </form>
           </section>
 
+          <section class="route-card wizard-form buyer-ai-history-settings">
+            <div>
+              <h2>AI discovery history</h2>
+              <p>
+                This is off by default. When enabled, Swyftly saves safe assistant and visual-search summaries:
+                category, colour, material, confidence, result count, and product ids only.
+              </p>
+              <p>
+                Prompts, uploaded images, image previews, base64 content, provider payloads, and full AI responses are not stored.
+                Browser-local recent prompts and references stay separate on each page.
+              </p>
+            </div>
+
+            <mat-checkbox [formControl]="aiHistoryForm.controls.historyEnabled">
+              Save AI discovery summaries across devices
+            </mat-checkbox>
+
+            <mat-checkbox [formControl]="aiHistoryForm.controls.personalizationEnabled">
+              Personalize assistant and visual-search results
+            </mat-checkbox>
+            <p>
+              Personalized AI discovery is optional. When enabled, Swyftly can use saved items, recent cart/order interest,
+              and enabled AI history summaries to reorder matching products and explain why they were suggested.
+            </p>
+
+            <div class="buyer-action-row">
+              <button mat-flat-button type="button" [disabled]="isSavingAiHistory()" (click)="saveAiHistoryPreference()">
+                {{ isSavingAiHistory() ? 'Saving...' : 'Save AI discovery preferences' }}
+              </button>
+              <button mat-stroked-button type="button" [disabled]="isClearingAiHistory()" (click)="clearAiHistory()">
+                {{ isClearingAiHistory() ? 'Clearing...' : 'Clear server history' }}
+              </button>
+              <a mat-stroked-button routerLink="/account/ai-history">View AI history</a>
+            </div>
+          </section>
+
           <aside class="route-card buyer-settings-note">
-            <h2>Not included yet</h2>
-            <p>SMS, push delivery channels, password or email changes, carrier delivery options, and verified address lookup are separate workflows.</p>
+            <h2>Account channel note</h2>
+            <p>In-app and email preferences are available now. SMS, push, password changes, email changes, and external address lookup will be handled in separate account workflows.</p>
           </aside>
         </div>
       }
@@ -257,11 +294,14 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
 })
 export class BuyerSettingsPageComponent implements OnInit {
   private readonly settingsService = inject(BuyerSettingsService);
+  private readonly aiDiscoveryService = inject(BuyerAiDiscoveryService);
 
   protected readonly profile = signal<BuyerProfileSettingsResponse | null>(null);
   protected readonly isLoading = signal(true);
   protected readonly isSavingProfile = signal(false);
   protected readonly isSavingPreferences = signal(false);
+  protected readonly isSavingAiHistory = signal(false);
+  protected readonly isClearingAiHistory = signal(false);
   protected readonly isSavingAddress = signal(false);
   protected readonly isVerifyingAddress = signal(false);
   protected readonly deliveryAddresses = signal<BuyerDeliveryAddressResponse[]>([]);
@@ -287,6 +327,11 @@ export class BuyerSettingsPageComponent implements OnInit {
     Returns: new FormControl(true, { nonNullable: true }),
     Reviews: new FormControl(true, { nonNullable: true }),
     Support: new FormControl(true, { nonNullable: true })
+  });
+
+  protected readonly aiHistoryForm = new FormGroup({
+    historyEnabled: new FormControl(false, { nonNullable: true }),
+    personalizationEnabled: new FormControl(false, { nonNullable: true })
   });
 
   protected readonly addressForm = new FormGroup({
@@ -385,6 +430,57 @@ export class BuyerSettingsPageComponent implements OnInit {
       this.errorMessage.set(getApiErrorMessage(error));
     } finally {
       this.isSavingPreferences.set(false);
+    }
+  }
+
+  protected async saveAiHistoryPreference(): Promise<void> {
+    if (this.isSavingAiHistory()) {
+      return;
+    }
+
+    this.isSavingAiHistory.set(true);
+    this.errorMessage.set(null);
+    this.successMessage.set(null);
+
+    try {
+      const response = await this.aiDiscoveryService.updatePreferences({
+        historyEnabled: this.aiHistoryForm.controls.historyEnabled.value,
+        personalizationEnabled: this.aiHistoryForm.controls.personalizationEnabled.value
+      });
+      this.aiHistoryForm.controls.historyEnabled.setValue(response.historyEnabled);
+      this.aiHistoryForm.controls.personalizationEnabled.setValue(response.personalizationEnabled);
+      if (response.historyEnabled && response.personalizationEnabled) {
+        this.successMessage.set('AI discovery history and personalized AI discovery are enabled.');
+      } else if (response.personalizationEnabled) {
+        this.successMessage.set('Personalized AI discovery enabled. Server history remains off unless you enable it separately.');
+      } else if (response.historyEnabled) {
+        this.successMessage.set('AI discovery history enabled. Future successful assistant and visual-search results can be saved.');
+      } else {
+        this.successMessage.set('AI discovery history and personalized AI discovery are disabled. Existing server history remains until you clear it.');
+      }
+    } catch (error) {
+      this.errorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isSavingAiHistory.set(false);
+    }
+  }
+
+  protected async clearAiHistory(): Promise<void> {
+    if (this.isClearingAiHistory()) {
+      return;
+    }
+
+    this.isClearingAiHistory.set(true);
+    this.errorMessage.set(null);
+    this.successMessage.set(null);
+
+    try {
+      await this.aiDiscoveryService.clearHistory();
+      this.successMessage.set('Server-side AI discovery history cleared. Browser-local recent prompts are managed on the assistant and visual-search pages.');
+    } catch (error) {
+      this.errorMessage.set(getApiErrorMessage(error));
+    } finally {
+      this.isClearingAiHistory.set(false);
     }
   }
 
@@ -542,15 +638,28 @@ export class BuyerSettingsPageComponent implements OnInit {
     ].filter(Boolean).join(', ');
   }
 
+  protected addressCheckLabel(status: string): string {
+    if (status === 'Verified') {
+      return 'Looks complete';
+    }
+
+    if (status === 'NeedsReview' || status === 'Warning') {
+      return 'Needs buyer review';
+    }
+
+    return status;
+  }
+
   private async loadSettings(): Promise<void> {
     this.isLoading.set(true);
     this.errorMessage.set(null);
 
     try {
-      const [profile, preferences, deliveryAddresses] = await Promise.all([
+      const [profile, preferences, deliveryAddresses, aiHistoryPreference] = await Promise.all([
         this.settingsService.getProfile(),
         this.settingsService.getNotificationPreferences(),
-        this.settingsService.listDeliveryAddresses()
+        this.settingsService.listDeliveryAddresses(),
+        this.aiDiscoveryService.getPreferences()
       ]);
       this.profile.set(profile);
       this.deliveryAddresses.set(deliveryAddresses);
@@ -559,6 +668,8 @@ export class BuyerSettingsPageComponent implements OnInit {
         phoneNumber: profile.phoneNumber
       });
       this.applyPreferences(preferences.preferences);
+      this.aiHistoryForm.controls.historyEnabled.setValue(aiHistoryPreference.historyEnabled);
+      this.aiHistoryForm.controls.personalizationEnabled.setValue(aiHistoryPreference.personalizationEnabled);
       this.resetDeliveryAddressForm();
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));

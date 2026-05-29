@@ -69,6 +69,8 @@ describe('ProductCardComponent', () => {
     expect(fallback).not.toBeNull();
     expect(fallback?.classList).toContain('hf-product-visual--jewel');
     expect(fallback?.textContent).toContain('Gold Hoop Earrings');
+    expect(compiled.textContent).toContain('gold');
+    expect(compiled.textContent).toContain('jewellery');
     expect(hasMojibakeMarker(compiled.textContent ?? '')).toBeFalse();
   });
 

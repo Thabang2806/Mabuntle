@@ -71,6 +71,20 @@ describe('BuyerDisputesPageComponent', () => {
       description: 'Photo'
     });
   });
+
+  it('explains that return escalations are not always standalone disputes', async () => {
+    disputeService.listDisputes.and.resolveTo([]);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+
+    expect(text).toContain('Standalone dispute cases will appear here');
+    expect(text).toContain('Return escalations stay on the related return');
+    expect(text).toContain('refund outcome appears under Refunds');
+  });
 });
 
 function createDispute(overrides: Partial<BuyerDisputeResponse> = {}): BuyerDisputeResponse {

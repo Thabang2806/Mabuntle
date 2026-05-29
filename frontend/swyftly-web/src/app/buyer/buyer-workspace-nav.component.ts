@@ -53,7 +53,8 @@ export class BuyerWorkspaceNavComponent implements OnInit {
       items: [
         { label: 'Dashboard', route: '/account', exact: true },
         { label: 'Orders', route: '/account/orders', exact: false },
-        { label: 'Returns', route: '/account/returns', exact: false }
+        { label: 'Returns', route: '/account/returns', exact: false },
+        { label: 'Refunds', route: '/account/refunds', exact: false }
       ]
     },
     {
@@ -62,6 +63,7 @@ export class BuyerWorkspaceNavComponent implements OnInit {
         { label: 'Wishlist', route: '/account/wishlist', exact: false },
         { label: 'Reviews', route: '/account/reviews', exact: false },
         { label: 'Notifications', route: '/account/notifications', exact: false },
+        { label: 'AI history', route: '/account/ai-history', exact: false },
         { label: 'Settings', route: '/account/settings', exact: false }
       ]
     },

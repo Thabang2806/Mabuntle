@@ -1,6 +1,11 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
+import { Subscription } from 'rxjs';
 import { getApiErrorMessage } from '../auth/api-error';
 import { ProductCardComponent } from '../shop/product-card.component';
 import { ProductSearchItemResponse, PublicCategoryResponse } from '../shop/public-catalog.models';
@@ -18,9 +23,13 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     EmptyStateComponent,
     LuxuryPublicStylesComponent,
     MatButtonModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
     PageHeaderComponent,
     ProductCardComponent,
     ProductVisualFallbackComponent,
+    ReactiveFormsModule,
     RouterLink,
     StatusBadgeComponent,
     UiAlertComponent
@@ -62,6 +71,37 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         </section>
       }
 
+      <form [formGroup]="filtersForm" (ngSubmit)="search(1)" class="category-filter-bar" novalidate>
+        <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
+          <mat-label>Search in category</mat-label>
+          <input matInput formControlName="query">
+        </mat-form-field>
+
+        <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
+          <mat-label>Availability</mat-label>
+          <mat-select formControlName="availability">
+            <mat-option value="">All products</mat-option>
+            <mat-option value="in_stock">In stock</mat-option>
+            <mat-option value="out_of_stock">Out of stock</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
+          <mat-label>Sort</mat-label>
+          <mat-select formControlName="sort">
+            <mat-option value="newest">Newest</mat-option>
+            <mat-option value="price_asc">Price low to high</mat-option>
+            <mat-option value="price_desc">Price high to low</mat-option>
+            <mat-option value="relevance">Relevance</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <div class="category-filter-actions">
+          <button mat-flat-button type="submit" [disabled]="isLoading()">Apply</button>
+          <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="clearFilters()">Clear</button>
+        </div>
+      </form>
+
       @if (isLoading()) {
         <div class="route-card">Loading category products...</div>
       } @else {
@@ -81,7 +121,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           <div class="category-product-header">
             <div>
               <h2>Products in this edit</h2>
-              <p>Listings are shown with seller, stock, and price context.</p>
+              <p>{{ totalCount() }} matching published product{{ totalCount() === 1 ? '' : 's' }} shown with seller, stock, and price context.</p>
             </div>
             <a mat-stroked-button routerLink="/shop">Adjust filters</a>
           </div>
@@ -91,20 +131,36 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               <app-product-card [product]="product"></app-product-card>
             }
           </div>
+
+          <div class="shop-pagination">
+            <button mat-stroked-button type="button" [disabled]="page() <= 1 || isLoading()" (click)="search(page() - 1)">Previous</button>
+            <button mat-stroked-button type="button" [disabled]="page() * pageSize() >= totalCount() || isLoading()" (click)="search(page() + 1)">Next</button>
+          </div>
         }
       }
     </section>
   `
 })
-export class CategoryPageComponent implements OnInit {
+export class CategoryPageComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
+  private readonly formBuilder = inject(NonNullableFormBuilder);
   private readonly publicCatalogService = inject(PublicCatalogService);
+  private routeSubscription: Subscription | null = null;
 
   protected readonly categories = signal<PublicCategoryResponse[]>([]);
   protected readonly products = signal<ProductSearchItemResponse[]>([]);
   protected readonly category = signal<PublicCategoryResponse | null>(null);
+  protected readonly currentSlug = signal('');
+  protected readonly totalCount = signal(0);
+  protected readonly page = signal(1);
+  protected readonly pageSize = signal(24);
   protected readonly isLoading = signal(true);
   protected readonly errorMessage = signal<string | null>(null);
+  protected readonly filtersForm = this.formBuilder.group({
+    query: [''],
+    availability: [''],
+    sort: ['newest']
+  });
   protected readonly categoryPath = computed(() => {
     const selected = this.category();
     if (!selected) {
@@ -124,8 +180,18 @@ export class CategoryPageComponent implements OnInit {
       .sort((left, right) => left.displayOrder - right.displayOrder || left.name.localeCompare(right.name));
   });
 
-  async ngOnInit(): Promise<void> {
-    const slug = this.route.snapshot.paramMap.get('slug');
+  ngOnInit(): void {
+    this.routeSubscription = this.route.paramMap.subscribe(paramMap => {
+      void this.loadCategory(paramMap.get('slug'));
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.routeSubscription?.unsubscribe();
+  }
+
+  protected async search(page: number): Promise<void> {
+    const slug = this.currentSlug();
     if (!slug) {
       this.errorMessage.set('Category slug is missing.');
       this.isLoading.set(false);
@@ -136,20 +202,35 @@ export class CategoryPageComponent implements OnInit {
     this.errorMessage.set(null);
 
     try {
-      const categories = await this.publicCatalogService.getCategories();
-      this.categories.set(categories);
-      this.category.set(categories.find(category => category.slug === slug) ?? null);
+      const filters = this.filtersForm.getRawValue();
       const response = await this.publicCatalogService.searchProducts({
         categorySlug: slug,
+        query: filters.query,
+        inStock: this.toAvailability(filters.availability),
+        sort: filters.sort,
+        page,
         pageSize: 24
       });
       this.products.set(response.items);
+      this.totalCount.set(response.totalCount);
+      this.page.set(response.page);
+      this.pageSize.set(response.pageSize);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
       this.products.set([]);
+      this.totalCount.set(0);
     } finally {
       this.isLoading.set(false);
     }
+  }
+
+  protected async clearFilters(): Promise<void> {
+    this.filtersForm.reset({
+      query: '',
+      availability: '',
+      sort: 'newest'
+    });
+    await this.search(1);
   }
 
   protected categoryHeroCopy(): string {
@@ -196,5 +277,48 @@ export class CategoryPageComponent implements OnInit {
     }
 
     return names.join(' > ');
+  }
+
+  private async loadCategory(slug: string | null): Promise<void> {
+    if (!slug) {
+      this.currentSlug.set('');
+      this.errorMessage.set('Category slug is missing.');
+      this.isLoading.set(false);
+      return;
+    }
+
+    this.currentSlug.set(slug);
+    this.filtersForm.reset({
+      query: '',
+      availability: '',
+      sort: 'newest'
+    });
+    this.isLoading.set(true);
+    this.errorMessage.set(null);
+
+    try {
+      const categories = await this.publicCatalogService.getCategories();
+      this.categories.set(categories);
+      this.category.set(categories.find(category => category.slug === slug) ?? null);
+      await this.search(1);
+    } catch (error) {
+      this.errorMessage.set(getApiErrorMessage(error));
+      this.products.set([]);
+      this.totalCount.set(0);
+    } finally {
+      this.isLoading.set(false);
+    }
+  }
+
+  private toAvailability(value: string): boolean | null {
+    if (value === 'in_stock') {
+      return true;
+    }
+
+    if (value === 'out_of_stock') {
+      return false;
+    }
+
+    return null;
   }
 }

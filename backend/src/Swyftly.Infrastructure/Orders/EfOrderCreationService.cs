@@ -20,7 +20,8 @@ public sealed class EfOrderCreationService(
     SwyftlyDbContext dbContext,
     IInventoryReservationService inventoryReservationService,
     IAddressVerificationService addressVerificationService,
-    IStorefrontAnalyticsService storefrontAnalyticsService) : IOrderCreationService
+    IStorefrontAnalyticsService storefrontAnalyticsService,
+    IBuyerGrowthOutcomeAttributionService buyerGrowthOutcomeAttributionService) : IOrderCreationService
 {
     public async Task<Result<OrderResult>> CreateFromCartAsync(
         CreateOrderFromCartRequest request,
@@ -32,7 +33,13 @@ public sealed class EfOrderCreationService(
             return Result<OrderResult>.Failure(Error.Validation(validationFailures));
         }
 
-        var cart = await GetCartAsync(request, cancellationToken);
+        var existingPendingOrder = await GetExistingPendingOrderAsync(request, cancellationToken);
+        if (existingPendingOrder is not null)
+        {
+            return Result<OrderResult>.Success(Map(existingPendingOrder));
+        }
+
+        var cart = await GetActiveCartAsync(request, cancellationToken);
         if (cart is null)
         {
             return Result<OrderResult>.Failure(
@@ -74,47 +81,6 @@ public sealed class EfOrderCreationService(
         if (pickupPointResult.IsFailure)
         {
             return Result<OrderResult>.Failure(pickupPointResult.Error);
-        }
-
-        var existingOrder = await dbContext.Orders
-            .Include(order => order.Items)
-            .Include(order => order.StatusHistory)
-            .Include(order => order.Shipments)
-                .ThenInclude(shipment => shipment.Events)
-            .SingleOrDefaultAsync(
-                order => order.CartId == cart.Id
-                    && order.BuyerId == request.BuyerId
-                    && order.Status == OrderStatus.PendingPayment,
-                cancellationToken);
-        if (existingOrder is not null)
-        {
-            var changed = false;
-            if (existingOrder.DeliveryAddress is null)
-            {
-                existingOrder.SetDeliveryAddress(deliveryAddressResult.Value);
-                changed = true;
-            }
-
-            if (existingOrder.DeliveryMethodId is null)
-            {
-                existingOrder.SetDeliveryMethod(
-                    deliveryMethodResult.Value.DeliveryMethod,
-                    deliveryMethodResult.Value.ShippingAmount);
-                changed = true;
-            }
-
-            if (existingOrder.PickupPoint is null && pickupPointResult.Value is not null)
-            {
-                existingOrder.SetPickupPoint(pickupPointResult.Value);
-                changed = true;
-            }
-
-            if (changed)
-            {
-                await dbContext.SaveChangesAsync(cancellationToken);
-            }
-
-            return Result<OrderResult>.Success(Map(existingOrder));
         }
 
         var reservationResult = await inventoryReservationService.ReserveCartAsync(
@@ -161,12 +127,14 @@ public sealed class EfOrderCreationService(
         }
 
         dbContext.Orders.Add(order);
+        cart.MarkCheckedOut();
         await dbContext.SaveChangesAsync(cancellationToken);
         await storefrontAnalyticsService.RecordOrderCreatedAsync(order.Id, cancellationToken);
+        await buyerGrowthOutcomeAttributionService.RecordOrderCreatedAsync(order.Id, request.StartedAtUtc, cancellationToken);
         return Result<OrderResult>.Success(Map(order));
     }
 
-    private async Task<Cart?> GetCartAsync(
+    private async Task<Cart?> GetActiveCartAsync(
         CreateOrderFromCartRequest request,
         CancellationToken cancellationToken)
     {
@@ -177,6 +145,27 @@ public sealed class EfOrderCreationService(
         return request.CartId.HasValue
             ? await query.SingleOrDefaultAsync(cart => cart.Id == request.CartId.Value, cancellationToken)
             : await query.SingleOrDefaultAsync(cancellationToken);
+    }
+
+    private async Task<Order?> GetExistingPendingOrderAsync(
+        CreateOrderFromCartRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!request.CartId.HasValue)
+        {
+            return null;
+        }
+
+        return await dbContext.Orders
+            .Include(order => order.Items)
+            .Include(order => order.StatusHistory)
+            .Include(order => order.Shipments)
+                .ThenInclude(shipment => shipment.Events)
+            .SingleOrDefaultAsync(
+                order => order.CartId == request.CartId.Value
+                    && order.BuyerId == request.BuyerId
+                    && order.Status == OrderStatus.PendingPayment,
+                cancellationToken);
     }
 
     private static List<ValidationFailure> Validate(CreateOrderFromCartRequest request)

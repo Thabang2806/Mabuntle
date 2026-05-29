@@ -82,16 +82,22 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   </small>
                 </div>
 
-                @if (!notification.readAtUtc) {
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="savingNotificationId() === notification.notificationId"
-                    (click)="markRead(notification)"
-                  >
-                    {{ savingNotificationId() === notification.notificationId ? 'Saving...' : 'Mark read' }}
-                  </button>
-                }
+                <div class="buyer-action-row">
+                  @if (relatedRoute(notification)) {
+                    <a mat-stroked-button [routerLink]="relatedRoute(notification)">Open</a>
+                  }
+
+                  @if (!notification.readAtUtc) {
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="savingNotificationId() === notification.notificationId"
+                      (click)="markRead(notification)"
+                    >
+                      {{ savingNotificationId() === notification.notificationId ? 'Saving...' : 'Mark read' }}
+                    </button>
+                  }
+                </div>
               </article>
             }
           </div>
@@ -182,6 +188,31 @@ export class BuyerNotificationsPageComponent implements OnInit {
     } finally {
       this.isSaving.set(false);
     }
+  }
+
+  protected relatedRoute(notification: BuyerNotificationResponse): string[] | null {
+    if (!notification.relatedEntityType || !notification.relatedEntityId) {
+      return null;
+    }
+
+    const entityType = notification.relatedEntityType.trim().toLowerCase();
+    if (entityType === 'order') {
+      return ['/account/orders', notification.relatedEntityId];
+    }
+
+    if (entityType === 'returnrequest' || entityType === 'return') {
+      return ['/account/returns', notification.relatedEntityId];
+    }
+
+    if (entityType === 'supportticket' || entityType === 'support') {
+      return ['/account/support', notification.relatedEntityId];
+    }
+
+    if (entityType === 'refund') {
+      return ['/account/refunds'];
+    }
+
+    return null;
   }
 
   private async loadNotifications(): Promise<void> {

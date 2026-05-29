@@ -1031,6 +1031,85 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                     b.ToTable("product_embeddings", "swyftly");
                 });
 
+            modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerAiDiscoveryHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BuyerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Colour")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ConfidenceBand")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Material")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.PrimitiveCollection<Guid[]>("ProductIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<int>("ResultCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceRoute")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("SourceTool")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BuyerId", "CreatedAtUtc");
+
+                    b.HasIndex("BuyerId", "SourceTool", "CreatedAtUtc");
+
+                    b.ToTable("buyer_ai_discovery_history", "swyftly");
+                });
+
+            modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerAiDiscoveryPreference", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BuyerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("HistoryEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("PersonalizationEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BuyerId")
+                        .IsUnique();
+
+                    b.ToTable("buyer_ai_discovery_preferences", "swyftly");
+                });
+
             modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerDeliveryAddress", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1125,6 +1204,135 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                     b.HasIndex("BuyerId", "IsDefault");
 
                     b.ToTable("buyer_delivery_addresses", "swyftly");
+                });
+
+            modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerGrowthEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BuyerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Colour")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ConfidenceBand")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("FeedbackReason")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Material")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("ResultCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceRoute")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("SourceTool")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BuyerId", "EventType", "OccurredAtUtc");
+
+                    b.HasIndex("EventType", "SourceTool", "OccurredAtUtc");
+
+                    b.HasIndex("ProductId", "EventType", "OccurredAtUtc");
+
+                    b.ToTable("buyer_growth_events", "swyftly");
+                });
+
+            modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerGrowthOutcome", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("AttributedFromUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("AttributionWindowMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("BuyerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CartId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ConfidenceBand")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OutcomeType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid?>("ProductId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SourceEventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceTool")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CartId", "OutcomeType");
+
+                    b.HasIndex("OrderId", "OutcomeType");
+
+                    b.HasIndex("SourceEventId", "OutcomeType")
+                        .IsUnique()
+                        .HasFilter("\"SourceEventId\" IS NOT NULL");
+
+                    b.HasIndex("BuyerId", "OutcomeType", "OccurredAtUtc");
+
+                    b.HasIndex("OutcomeType", "SourceTool", "OccurredAtUtc");
+
+                    b.HasIndex("ProductId", "OutcomeType", "OccurredAtUtc");
+
+                    b.HasIndex("BuyerId", "OutcomeType", "SourceTool", "ProductId", "CartId", "OrderId")
+                        .IsUnique();
+
+                    b.ToTable("buyer_growth_outcomes", "swyftly");
                 });
 
             modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerNotificationPreference", b =>
@@ -1222,7 +1430,6 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Swyftly.Domain.Carts.Cart", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("BuyerId")
@@ -1244,10 +1451,11 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SellerId");
+                    b.HasIndex("BuyerId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 'Active'");
 
-                    b.HasIndex("BuyerId", "Status")
-                        .IsUnique();
+                    b.HasIndex("SellerId");
 
                     b.ToTable("carts", "swyftly");
                 });
@@ -1255,7 +1463,6 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Swyftly.Domain.Carts.CartItem", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("CartId")
@@ -5682,6 +5889,24 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerAiDiscoveryHistory", b =>
+                {
+                    b.HasOne("Swyftly.Domain.Buyers.BuyerProfile", null)
+                        .WithMany()
+                        .HasForeignKey("BuyerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerAiDiscoveryPreference", b =>
+                {
+                    b.HasOne("Swyftly.Domain.Buyers.BuyerProfile", null)
+                        .WithMany()
+                        .HasForeignKey("BuyerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerDeliveryAddress", b =>
                 {
                     b.HasOne("Swyftly.Domain.Buyers.BuyerProfile", null)
@@ -5689,6 +5914,49 @@ namespace Swyftly.Infrastructure.Persistence.Migrations
                         .HasForeignKey("BuyerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerGrowthEvent", b =>
+                {
+                    b.HasOne("Swyftly.Domain.Buyers.BuyerProfile", null)
+                        .WithMany()
+                        .HasForeignKey("BuyerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Swyftly.Domain.Catalog.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerGrowthOutcome", b =>
+                {
+                    b.HasOne("Swyftly.Domain.Buyers.BuyerProfile", null)
+                        .WithMany()
+                        .HasForeignKey("BuyerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Swyftly.Domain.Carts.Cart", null)
+                        .WithMany()
+                        .HasForeignKey("CartId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Swyftly.Domain.Orders.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Swyftly.Domain.Catalog.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Swyftly.Domain.Buyers.BuyerGrowthEvent", null)
+                        .WithMany()
+                        .HasForeignKey("SourceEventId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("Swyftly.Domain.Buyers.BuyerNotificationPreference", b =>

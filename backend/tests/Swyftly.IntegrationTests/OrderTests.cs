@@ -20,6 +20,7 @@ using Swyftly.Application.Orders;
 using Swyftly.Domain.Catalog;
 using Swyftly.Domain.Delivery;
 using Swyftly.Domain.Orders;
+using Swyftly.Domain.Payments;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Carriers;
 using Swyftly.Infrastructure.Persistence;
@@ -71,6 +72,81 @@ public class OrderTests
         var sellerOrder = await ReadJsonAsync<OrderResult>(sellerOrderResponse);
         Assert.Equal(order.OrderId, sellerOrder.OrderId);
         Assert.Equal(sellerId, sellerOrder.SellerId);
+    }
+
+    [Fact]
+    public async Task BuyerOrderReadsIncludeSafeLatestPaymentSummary()
+    {
+        await using var factory = new OrderTestFactory();
+        using var buyerClient = factory.CreateClient();
+        using var sellerClient = factory.CreateClient();
+        var sellerAuth = await AuthorizeAsync(sellerClient, "seller-payment-summary@example.test", SwyftlyRoles.Seller);
+        var sellerId = await GetSellerProfileIdAsync(factory, sellerAuth.UserId);
+        var variantId = await CreatePublishedProductAsync(factory, sellerId, "Payment Summary Dress", 499m);
+        var deliveryMethodId = await GetDeliveryMethodIdAsync(factory, sellerId);
+        var buyerAuth = await AuthorizeAsync(buyerClient, "buyer-payment-summary@example.test", SwyftlyRoles.Buyer);
+        using var addCartResponse = await buyerClient.PostAsJsonAsync("/api/cart/items", new AddCartItemRequest(variantId, 1));
+        addCartResponse.EnsureSuccessStatusCode();
+        using var orderResponse = await buyerClient.PostAsJsonAsync(
+            "/api/orders/from-cart",
+            new CreateOrderFromCartApiRequest(null, null, DeliveryAddress: TestDeliveryAddress(), DeliveryMethodId: deliveryMethodId));
+        orderResponse.EnsureSuccessStatusCode();
+        var createdOrder = await ReadJsonAsync<OrderResult>(orderResponse);
+        var buyerId = await GetBuyerProfileIdAsync(factory, buyerAuth.UserId);
+        var paymentTime = DateTimeOffset.UtcNow;
+        await AddPaymentAsync(
+            factory,
+            createdOrder.OrderId,
+            buyerId,
+            "Fake",
+            "fake_safe_reference",
+            new Uri("https://checkout.example.test/session"),
+            createdOrder.TotalAmount,
+            paymentTime);
+
+        using var buyerOrderResponse = await buyerClient.GetAsync($"/api/orders/{createdOrder.OrderId}");
+
+        buyerOrderResponse.EnsureSuccessStatusCode();
+        var buyerOrder = await ReadJsonAsync<OrderResult>(buyerOrderResponse);
+        Assert.NotNull(buyerOrder.PaymentSummary);
+        Assert.Equal("Fake", buyerOrder.PaymentSummary!.ProviderName);
+        Assert.Equal("fake_safe_reference", buyerOrder.PaymentSummary.ProviderReference);
+        Assert.Equal("Pending", buyerOrder.PaymentSummary.Status);
+        Assert.True(buyerOrder.PaymentSummary.CheckoutUrlAvailable);
+        Assert.Equal(createdOrder.TotalAmount, buyerOrder.PaymentSummary.Amount);
+        Assert.Equal("ZAR", buyerOrder.PaymentSummary.Currency);
+
+        using var sellerOrderResponse = await sellerClient.GetAsync($"/api/seller/orders/{createdOrder.OrderId}");
+        sellerOrderResponse.EnsureSuccessStatusCode();
+        var sellerOrder = await ReadJsonAsync<OrderResult>(sellerOrderResponse);
+        Assert.Null(sellerOrder.PaymentSummary);
+    }
+
+    [Fact]
+    public async Task BuyerCanStartNewCartAfterCreatingOrder()
+    {
+        await using var factory = new OrderTestFactory();
+        using var buyerClient = factory.CreateClient();
+        var sellerId = await CreateSellerAsync(factory);
+        var firstVariantId = await CreatePublishedProductAsync(factory, sellerId, "Cotton Dress", 499m);
+        var secondVariantId = await CreatePublishedProductAsync(factory, sellerId, "Silk Blouse", 699m);
+        var deliveryMethodId = await GetDeliveryMethodIdAsync(factory, sellerId);
+        await AuthorizeAsync(buyerClient, "buyer-new-cart-after-order@example.test", SwyftlyRoles.Buyer);
+        using var addCartResponse = await buyerClient.PostAsJsonAsync("/api/cart/items", new AddCartItemRequest(firstVariantId, 1));
+        addCartResponse.EnsureSuccessStatusCode();
+        var firstCart = await ReadJsonAsync<CartResponse>(addCartResponse);
+        using var orderResponse = await buyerClient.PostAsJsonAsync(
+            "/api/orders/from-cart",
+            new CreateOrderFromCartApiRequest(firstCart.CartId, null, DeliveryAddress: TestDeliveryAddress(), DeliveryMethodId: deliveryMethodId));
+        orderResponse.EnsureSuccessStatusCode();
+
+        using var addSecondCartResponse = await buyerClient.PostAsJsonAsync("/api/cart/items", new AddCartItemRequest(secondVariantId, 1));
+
+        addSecondCartResponse.EnsureSuccessStatusCode();
+        var secondCart = await ReadJsonAsync<CartResponse>(addSecondCartResponse);
+        Assert.NotEqual(firstCart.CartId, secondCart.CartId);
+        var secondItem = Assert.Single(secondCart.Items);
+        Assert.Equal(secondVariantId, secondItem.ProductVariantId);
     }
 
     [Fact]
@@ -582,6 +658,35 @@ public class OrderTests
             .Where(seller => seller.UserId == userId)
             .Select(seller => seller.Id)
             .SingleAsync();
+    }
+
+    private static async Task<Guid> GetBuyerProfileIdAsync(OrderTestFactory factory, Guid userId)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        return await dbContext.BuyerProfiles
+            .Where(buyer => buyer.UserId == userId)
+            .Select(buyer => buyer.Id)
+            .SingleAsync();
+    }
+
+    private static async Task AddPaymentAsync(
+        OrderTestFactory factory,
+        Guid orderId,
+        Guid buyerId,
+        string provider,
+        string providerReference,
+        Uri checkoutUrl,
+        decimal amount,
+        DateTimeOffset createdAtUtc)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        var payment = new Payment(orderId, buyerId, provider, amount, "ZAR", createdAtUtc);
+        payment.SetProviderReference(providerReference, createdAtUtc);
+        payment.SetCheckoutUrl(checkoutUrl, createdAtUtc);
+        dbContext.Payments.Add(payment);
+        await dbContext.SaveChangesAsync();
     }
 
     private static async Task<Guid> GetDeliveryMethodIdAsync(OrderTestFactory factory, Guid sellerId)

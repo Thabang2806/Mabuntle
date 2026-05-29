@@ -1,5 +1,5 @@
-import { CurrencyPipe } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { CurrencyPipe, isPlatformBrowser } from '@angular/common';
+import { Component, PLATFORM_ID, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -7,12 +7,27 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { BuyerAiProductCardResponse, BuyerAiShoppingAssistantResponse } from '../buyer/buyer-ai-assistant.models';
 import { BuyerAiAssistantService } from '../buyer/buyer-ai-assistant.service';
+import { BuyerGrowthConfidenceBand, BuyerGrowthFeedbackReason } from '../buyer/buyer-growth-telemetry.models';
+import { BuyerGrowthTelemetryService } from '../buyer/buyer-growth-telemetry.service';
 import { LuxuryBuyerStylesComponent } from '../buyer/luxury-buyer-styles.component';
 import { getApiErrorMessage } from '../auth/api-error';
 import { EmptyStateComponent } from '../shared/ui/empty-state.component';
 import { ProductVisualFallbackComponent, ProductVisualTone } from '../shared/ui/product-visual-fallback.component';
-import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
+import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge.component';
 import { UiAlertComponent } from '../shared/ui/ui-alert.component';
+
+interface RecentAssistantPrompt {
+  text: string;
+  savedAtUtc: string;
+}
+
+interface AssistantConfidenceSummary {
+  label: string;
+  band: BuyerGrowthConfidenceBand;
+  tone: StatusBadgeTone;
+  detail: string;
+  signals: string[];
+}
 
 @Component({
   selector: 'app-buyer-ai-assistant-page',
@@ -99,6 +114,23 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               }
             </mat-form-field>
 
+            @if (recentPrompts().length > 0) {
+              <div class="ai-recent-panel" aria-label="Recent assistant prompts">
+                <div>
+                  <strong>Recent prompts</strong>
+                  <button mat-button type="button" (click)="clearRecentPrompts()">Clear</button>
+                </div>
+                <div class="ai-chip-row">
+                  @for (recent of recentPrompts(); track recent.text) {
+                    <button mat-stroked-button type="button" (click)="useRecentPrompt(recent.text)">
+                      {{ recent.text }}
+                    </button>
+                  }
+                </div>
+                <small>Saved in this browser only. Results are not stored.</small>
+              </div>
+            }
+
             <div class="ai-example-row" aria-label="Example shopping requests">
               @for (example of examplePrompts; track example) {
                 <button mat-stroked-button type="button" (click)="useExamplePrompt(example)">
@@ -139,10 +171,27 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               <app-ui-alert>{{ response()!.safetyNote }}</app-ui-alert>
             }
 
+            @if (matchConfidence(); as confidence) {
+              <div class="ai-confidence-card">
+                <div class="ai-results-header">
+                  <div>
+                    <strong>Match confidence</strong>
+                    <p>{{ confidence.detail }}</p>
+                  </div>
+                  <app-status-badge [label]="confidence.label" [tone]="confidence.tone" />
+                </div>
+                <div class="ai-chip-row">
+                  @for (signal of confidence.signals; track signal) {
+                    <span>{{ signal }}</span>
+                  }
+                </div>
+              </div>
+            }
+
             @if (products().length > 0) {
               <div class="ai-result-grid hf-ai-result-grid">
                 @for (product of products(); track product.productId) {
-                  <a class="ai-product-result-card hf-ai-product-card" [routerLink]="['/product', product.slug]">
+                  <a class="ai-product-result-card hf-ai-product-card" [routerLink]="['/product', product.slug]" (click)="trackProductOpen(product)">
                     <div class="ai-product-result-media hf-ai-product-media">
                       @if (product.imageUrl) {
                         <img [src]="product.imageUrl" [alt]="product.title">
@@ -163,6 +212,15 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                           <li>{{ reason }}</li>
                         }
                       </ul>
+                      @if (product.personalizationApplied && product.personalizationReasons.length > 0) {
+                        <div class="ai-personalization-reasons" aria-label="Why this was recommended">
+                          <app-status-badge label="Personalized" tone="accent" />
+                          @for (reason of product.personalizationReasons; track reason) {
+                            <span>{{ reason }}</span>
+                          }
+                        </div>
+                      }
+                      <span class="ai-card-action">View product</span>
                     </div>
                   </a>
                 }
@@ -176,6 +234,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   <app-status-badge label="Backend matched" />
                   <app-status-badge label="No stock reservation" tone="accent" />
                 </div>
+                <a mat-stroked-button routerLink="/shop" [queryParams]="assistantShopQueryParams()" (click)="trackShopHandoff()">Refine in shop</a>
               </div>
             } @else {
               <app-empty-state
@@ -184,8 +243,26 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 message="Try a broader category, colour, size, style, or budget."
               >
                 <button mat-stroked-button type="button" (click)="useExamplePrompt(examplePrompts[0])">Use an example</button>
+                <a mat-stroked-button routerLink="/shop" [queryParams]="assistantShopQueryParams()" (click)="trackShopHandoff()">Search shop</a>
               </app-empty-state>
             }
+
+            <div class="ai-feedback-card" aria-label="Assistant usefulness feedback">
+              <div>
+                <strong>Was this useful?</strong>
+                <span>Feedback is saved as a reason code only, not your prompt.</span>
+              </div>
+              <div class="ai-chip-row">
+                @for (reason of feedbackReasons; track reason.value) {
+                  <button mat-stroked-button type="button" (click)="submitFeedback(reason.value)">
+                    {{ reason.label }}
+                  </button>
+                }
+              </div>
+              @if (feedbackStatus()) {
+                <small>{{ feedbackStatus() }}</small>
+              }
+            </div>
           } @else {
             <app-empty-state
               eyebrow="Ready when you are"
@@ -201,13 +278,28 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   `
 })
 export class BuyerAiAssistantPageComponent {
+  private static readonly recentPromptsStorageKey = 'swyftly.buyer.assistant.recentPrompts';
+  private static readonly maxRecentPromptCount = 6;
+
   private readonly formBuilder = inject(NonNullableFormBuilder);
   private readonly assistantService = inject(BuyerAiAssistantService);
+  private readonly telemetryService = inject(BuyerGrowthTelemetryService);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   protected readonly response = signal<BuyerAiShoppingAssistantResponse | null>(null);
   protected readonly isLoading = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly submittedPrompt = signal<string | null>(null);
+  protected readonly recentPrompts = signal<RecentAssistantPrompt[]>([]);
+  protected readonly feedbackStatus = signal<string | null>(null);
+  protected readonly feedbackReasons: Array<{ value: BuyerGrowthFeedbackReason; label: string }> = [
+    { value: 'GoodMatches', label: 'Good matches' },
+    { value: 'TooBroad', label: 'Too broad' },
+    { value: 'WrongStyle', label: 'Wrong style' },
+    { value: 'WrongCategory', label: 'Wrong category' },
+    { value: 'Unavailable', label: 'Unavailable' },
+    { value: 'LowConfidence', label: 'Low confidence' }
+  ];
   protected readonly examplePrompts = [
     'Wedding outfit under R1,500, neutral colours',
     'Minimal gold earrings for everyday wear',
@@ -218,6 +310,10 @@ export class BuyerAiAssistantPageComponent {
     message: ['', Validators.required]
   });
 
+  constructor() {
+    this.recentPrompts.set(this.readRecentPrompts());
+  }
+
   protected products(): BuyerAiProductCardResponse[] {
     return this.response()?.products ?? [];
   }
@@ -226,6 +322,17 @@ export class BuyerAiAssistantPageComponent {
     this.form.controls.message.setValue(prompt);
     this.form.controls.message.markAsDirty();
     this.form.controls.message.markAsTouched();
+  }
+
+  protected useRecentPrompt(prompt: string): void {
+    this.useExamplePrompt(prompt);
+  }
+
+  protected clearRecentPrompts(): void {
+    this.recentPrompts.set([]);
+    if (this.isBrowser) {
+      localStorage.removeItem(BuyerAiAssistantPageComponent.recentPromptsStorageKey);
+    }
   }
 
   protected intentItems(): Array<{ label: string; value: string }> {
@@ -252,25 +359,157 @@ export class BuyerAiAssistantPageComponent {
       .map(([label, value]) => ({ label, value }));
   }
 
+  protected matchConfidence(): AssistantConfidenceSummary | null {
+    const response = this.response();
+    if (!response) {
+      return null;
+    }
+
+    const extractedFieldCount = this.intentItems()
+      .filter(item => item.label !== 'Search text')
+      .length;
+    const productCount = response.products.length;
+    const hasClarification = Boolean(response.intent.clarificationPrompt);
+    const hasSafetyNote = Boolean(response.safetyNote);
+    const score = [
+      !response.intent.isVague,
+      extractedFieldCount >= 3,
+      productCount > 0,
+      productCount >= 3,
+      !hasClarification,
+      !hasSafetyNote
+    ].filter(Boolean).length;
+
+    if (score >= 5) {
+      return {
+        label: 'High confidence',
+        band: 'High',
+        tone: 'success',
+        detail: 'The request had clear signals and the backend returned product matches.',
+        signals: [`${extractedFieldCount} intent details`, `${productCount} products`, 'Clear prompt']
+      };
+    }
+
+    if (score >= 3) {
+      return {
+        label: 'Medium confidence',
+        band: 'Medium',
+        tone: 'warning',
+        detail: 'The match is useful, but adding size, colour, budget, or occasion may improve the results.',
+        signals: [`${extractedFieldCount} intent details`, `${productCount} products`, hasClarification ? 'Needs detail' : 'Backend matched']
+      };
+    }
+
+    return {
+      label: 'Low confidence',
+      band: 'Low',
+      tone: 'danger',
+      detail: 'The assistant needs a clearer shopping request before the matches are reliable.',
+      signals: [`${extractedFieldCount} intent details`, `${productCount} products`, hasClarification ? 'Clarification suggested' : 'Try more detail']
+    };
+  }
+
+  protected assistantShopQueryParams(): Record<string, string | null> {
+    const intent = this.response()?.intent;
+    const query = intent?.searchText || this.submittedPrompt() || this.form.controls.message.value;
+
+    return {
+      query: query?.trim() || null,
+      colour: intent?.colour ?? null,
+      material: intent?.material ?? null,
+      sort: 'relevance'
+    };
+  }
+
   protected async search(): Promise<void> {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
     }
 
-    const request = this.form.getRawValue();
+    const request = {
+      message: this.form.controls.message.value.trim()
+    };
+    if (!request.message) {
+      this.form.controls.message.setErrors({ required: true });
+      this.form.markAllAsTouched();
+      return;
+    }
+
     this.submittedPrompt.set(request.message);
     this.isLoading.set(true);
     this.errorMessage.set(null);
+    this.rememberPrompt(request.message);
 
     try {
       this.response.set(await this.assistantService.search(request));
+      this.feedbackStatus.set(null);
+      this.trackSearchSubmitted();
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
       this.response.set(null);
     } finally {
       this.isLoading.set(false);
     }
+  }
+
+  protected trackProductOpen(product: BuyerAiProductCardResponse): void {
+    this.telemetryService.recordEvent({
+      eventType: 'AssistantProductOpened',
+      sourceTool: 'Assistant',
+      productId: product.productId,
+      resultCount: this.products().length,
+      confidenceBand: this.matchConfidence()?.band ?? null,
+      ...this.telemetryContext()
+    });
+  }
+
+  protected trackShopHandoff(): void {
+    this.telemetryService.recordEvent({
+      eventType: 'AssistantShopHandoff',
+      sourceTool: 'Assistant',
+      resultCount: this.products().length,
+      confidenceBand: this.matchConfidence()?.band ?? null,
+      ...this.telemetryContext()
+    });
+  }
+
+  protected submitFeedback(reason: BuyerGrowthFeedbackReason): void {
+    this.telemetryService.recordEvent({
+      eventType: 'AssistantFeedbackSubmitted',
+      sourceTool: 'Assistant',
+      resultCount: this.products().length,
+      confidenceBand: this.matchConfidence()?.band ?? null,
+      feedbackReason: reason,
+      ...this.telemetryContext()
+    });
+    this.feedbackStatus.set('Thanks. Feedback was saved without storing your prompt.');
+  }
+
+  private trackSearchSubmitted(): void {
+    this.telemetryService.recordEvent({
+      eventType: 'AssistantSearchSubmitted',
+      sourceTool: 'Assistant',
+      resultCount: this.products().length,
+      confidenceBand: this.matchConfidence()?.band ?? null,
+      ...this.telemetryContext()
+    });
+  }
+
+  private telemetryContext(): {
+    category: string | null;
+    colour: string | null;
+    material: string | null;
+    sourceRoute: string;
+  } {
+    const intent = this.response()?.intent;
+
+    return {
+      category: intent?.category ?? null,
+      colour: intent?.colour ?? null,
+      material: intent?.material ?? null,
+      sourceRoute: '/assistant'
+    };
   }
 
   private formatBudget(min: number | null, max: number | null): string | null {
@@ -308,5 +547,51 @@ export class BuyerAiAssistantPageComponent {
     }
 
     return 'dress';
+  }
+
+  private rememberPrompt(prompt: string): void {
+    const normalizedPrompt = prompt.trim();
+    if (!normalizedPrompt) {
+      return;
+    }
+
+    const nextPrompts = [
+      { text: normalizedPrompt, savedAtUtc: new Date().toISOString() },
+      ...this.recentPrompts().filter(item => item.text.toLowerCase() !== normalizedPrompt.toLowerCase())
+    ].slice(0, BuyerAiAssistantPageComponent.maxRecentPromptCount);
+
+    this.recentPrompts.set(nextPrompts);
+    this.writeRecentPrompts(nextPrompts);
+  }
+
+  private readRecentPrompts(): RecentAssistantPrompt[] {
+    if (!this.isBrowser) {
+      return [];
+    }
+
+    try {
+      const value = localStorage.getItem(BuyerAiAssistantPageComponent.recentPromptsStorageKey);
+      const parsed = value ? JSON.parse(value) : [];
+      return Array.isArray(parsed)
+        ? parsed
+          .filter((item): item is RecentAssistantPrompt =>
+            typeof item?.text === 'string' && typeof item?.savedAtUtc === 'string')
+          .slice(0, BuyerAiAssistantPageComponent.maxRecentPromptCount)
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private writeRecentPrompts(prompts: RecentAssistantPrompt[]): void {
+    if (!this.isBrowser) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(BuyerAiAssistantPageComponent.recentPromptsStorageKey, JSON.stringify(prompts));
+    } catch {
+      // Browsers may block localStorage; recent prompts are optional convenience only.
+    }
   }
 }

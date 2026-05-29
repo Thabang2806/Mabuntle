@@ -23,6 +23,7 @@ public sealed class EfPaymentService(
     ILedgerService ledgerService,
     IAdTrackingService adTrackingService,
     IStorefrontAnalyticsService storefrontAnalyticsService,
+    IBuyerGrowthOutcomeAttributionService buyerGrowthOutcomeAttributionService,
     IOptions<PaymentProviderOptions> paymentOptions,
     TimeProvider timeProvider) : IPaymentService
 {
@@ -253,6 +254,7 @@ public sealed class EfPaymentService(
             if (shouldRecordOrderPaidFunnelEvent)
             {
                 await storefrontAnalyticsService.RecordOrderPaidAsync(order.Id, cancellationToken);
+                await buyerGrowthOutcomeAttributionService.RecordOrderPaidAsync(order.Id, now, cancellationToken);
             }
         }
         catch (DbUpdateException exception) when (IsDuplicatePaymentEventViolation(exception))

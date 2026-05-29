@@ -1431,7 +1431,10 @@
 .ai-chat-panel,
 .ai-recommendations-panel,
 .ai-intent-card,
-.ai-why-card {
+.ai-why-card,
+.ai-confidence-card,
+.ai-feedback-card,
+.ai-recent-panel {
   display: grid;
   gap: 1rem;
   padding: clamp(1.25rem, 3vw, 1.5rem);
@@ -1538,6 +1541,8 @@
 }
 
 .ai-example-row,
+.ai-chip-row,
+.visual-control-row,
 .ai-results-header {
   display: flex;
   flex-wrap: wrap;
@@ -1548,6 +1553,61 @@
 
 .ai-example-row {
   justify-content: start;
+}
+
+.ai-chip-row {
+  justify-content: start;
+}
+
+.ai-recent-panel,
+.ai-feedback-card {
+  padding: 0.875rem;
+  background: rgb(244 237 231 / 42%);
+  box-shadow: none;
+}
+
+.ai-recent-panel > div:first-child,
+.ai-feedback-card > div:first-child,
+.visual-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ai-recent-panel small,
+.ai-feedback-card small,
+.ai-feedback-card span,
+.ai-confidence-copy {
+  color: var(--swyftly-muted);
+}
+
+.ai-chip-row span {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid rgb(111 94 102 / 14%);
+  border-radius: 8px;
+  background: rgb(255 249 244 / 70%);
+  color: var(--swyftly-muted);
+  font-weight: 800;
+}
+
+.ai-personalization-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding-top: 0.25rem;
+}
+
+.ai-personalization-reasons span {
+  padding: 0.4rem 0.55rem;
+  border: 1px solid rgb(183 110 121 / 20%);
+  border-radius: 8px;
+  background: rgb(183 110 121 / 9%);
+  color: var(--swyftly-primary);
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .ai-discovery-guide {
@@ -1681,6 +1741,13 @@
   padding-left: 1.1rem;
   color: var(--swyftly-muted);
   font-size: 0.9rem;
+}
+
+.ai-card-action {
+  color: var(--swyftly-accent);
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .ai-why-card h3 {

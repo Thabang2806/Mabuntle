@@ -34,4 +34,6 @@ export interface BuyerVisualSearchProductCardResponse {
   price: number;
   currency: string;
   matchReasons: string[];
+  personalizationApplied: boolean;
+  personalizationReasons: string[];
 }

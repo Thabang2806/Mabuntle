@@ -51,6 +51,45 @@ describe('AdminMarketplaceReportService', () => {
     expect(url).toContain('fromUtc=2026-05-01T00:00:00.000Z');
     expect(url).toContain('toUtc=2026-05-19T00:00:00.000Z');
   });
+
+  it('loads buyer growth reports with date range and bucket params', async () => {
+    const promise = service.getBuyerGrowthReport({
+      fromUtc: '2026-05-01T00:00:00.000Z',
+      toUtc: '2026-05-19T00:00:00.000Z',
+      bucket: 'Week'
+    });
+
+    const request = httpTestingController.expectOne(req =>
+      req.url === `${environment.apiBaseUrl}/api/admin/reports/buyer-growth`
+      && req.params.get('fromUtc') === '2026-05-01T00:00:00.000Z'
+      && req.params.get('toUtc') === '2026-05-19T00:00:00.000Z'
+      && req.params.get('bucket') === 'Week');
+    expect(request.request.method).toBe('GET');
+    request.flush({
+      fromUtc: '2026-05-01T00:00:00.000Z',
+      toUtc: '2026-05-19T00:00:00.000Z',
+      generatedAtUtc: '2026-05-19T10:00:00.000Z',
+      bucket: 'Week',
+      summary: {
+        searchSubmittedCount: 1,
+        shopHandoffCount: 0,
+        productOpenedCount: 0,
+        feedbackSubmittedCount: 0,
+        assistantSearchCount: 1,
+        visualSearchCount: 0
+      },
+      confidenceBreakdown: [],
+      sourceToolBreakdown: [],
+      topCategories: [],
+      topColours: [],
+      topMaterials: [],
+      trend: []
+    });
+
+    const response = await promise;
+    expect(response.summary.searchSubmittedCount).toBe(1);
+    expect(response.bucket).toBe('Week');
+  });
 });
 
 function createReport() {

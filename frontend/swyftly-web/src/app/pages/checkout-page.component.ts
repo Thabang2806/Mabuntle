@@ -1,5 +1,5 @@
 import { CurrencyPipe } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -17,6 +17,7 @@ import { LuxuryPublicStylesComponent } from '../shared/ui/luxury-public-styles.c
 import { ProductVisualFallbackComponent, ProductVisualTone } from '../shared/ui/product-visual-fallback.component';
 import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
 import { UiAlertComponent } from '../shared/ui/ui-alert.component';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-checkout-page',
@@ -45,10 +46,10 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           <p>Confirm delivery details, reserve the cart, and continue to the hosted payment flow.</p>
         </div>
         <div class="hf-checkout-progress" aria-label="Checkout progress">
-          <span class="is-complete" aria-label="Address"></span>
-          <span class="is-complete" aria-label="Delivery"></span>
-          <span aria-label="Payment"></span>
-          <span aria-label="Review"></span>
+          <span [class.is-complete]="hasAddressReady()" aria-label="Address ready"></span>
+          <span [class.is-complete]="hasDeliveryQuote()" aria-label="Delivery quoted"></span>
+          <span [class.is-complete]="hasDeliverySelected()" aria-label="Delivery selected"></span>
+          <span [class.is-complete]="isSubmitting()" aria-label="Payment starting"></span>
         </div>
       </section>
 
@@ -310,10 +311,13 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   <app-status-badge label="Review" tone="success" />
                   <h2>Review and start checkout</h2>
                 </div>
-                <p>Review seller, items, and delivery details before creating the reserved order.</p>
-                <button mat-flat-button class="checkout-primary-action" type="submit" [disabled]="isSubmitting()">
+                <p>Review seller, items, and delivery details before creating the reserved order. Payment starts in a hosted checkout after the order is created.</p>
+                <button mat-flat-button class="checkout-primary-action" type="submit" [disabled]="!canStartCheckout() || isSubmitting()">
                   {{ isSubmitting() ? 'Starting checkout...' : 'Start checkout' }}
                 </button>
+                @if (!hasDeliverySelected()) {
+                  <p class="checkout-muted-note">Choose a current delivery quote before starting payment.</p>
+                }
               </section>
             </form>
 
@@ -347,7 +351,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               }
               <div class="summary-row">
                 <span>Delivery</span>
-                <strong>{{ (selectedShippingOption()?.shippingAmount ?? 0) | currency:'ZAR':'symbol-narrow' }}</strong>
+                <strong>{{ selectedShippingOption() ? (selectedShippingOption()!.shippingAmount | currency:'ZAR':'symbol-narrow') : 'Quote needed' }}</strong>
               </div>
               @if (selectedShippingOption(); as option) {
                 <div class="summary-row">
@@ -404,7 +408,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     </section>
   `
 })
-export class CheckoutPageComponent implements OnInit {
+export class CheckoutPageComponent implements OnInit, OnDestroy {
   private readonly cartService = inject(CartService);
   private readonly formBuilder = inject(NonNullableFormBuilder);
   private readonly paymentRedirectService = inject(BuyerPaymentRedirectService);
@@ -425,6 +429,7 @@ export class CheckoutPageComponent implements OnInit {
   protected readonly isLoadingShipping = signal(false);
   protected readonly isSubmitting = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
+  private manualAddressChangesSubscription: Subscription | null = null;
 
   protected readonly shippingForm = this.formBuilder.group({
     fullName: ['', Validators.required],
@@ -440,6 +445,13 @@ export class CheckoutPageComponent implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
+    this.manualAddressChangesSubscription = this.shippingForm.valueChanges.subscribe(() => {
+      if (this.useManualAddress() && this.hasDeliveryQuote()) {
+        this.resetShippingSelection();
+        this.errorMessage.set('Delivery options changed because the address was edited. Check delivery options again before checkout.');
+      }
+    });
+
     this.isLoading.set(true);
     this.errorMessage.set(null);
     try {
@@ -459,6 +471,10 @@ export class CheckoutPageComponent implements OnInit {
     } finally {
       this.isLoading.set(false);
     }
+  }
+
+  ngOnDestroy(): void {
+    this.manualAddressChangesSubscription?.unsubscribe();
   }
 
   protected async startCheckout(): Promise<void> {
@@ -507,10 +523,11 @@ export class CheckoutPageComponent implements OnInit {
 
       await this.router.navigate(['/checkout/success'], { queryParams: { orderId: order.orderId } });
     } catch (error) {
-      this.errorMessage.set(getApiErrorMessage(error));
+      const paymentError = sanitizePaymentError(getApiErrorMessage(error));
+      this.errorMessage.set(paymentError);
       await this.router.navigate(
         ['/checkout/failed'],
-        orderId ? { queryParams: { orderId } } : undefined);
+        orderId ? { queryParams: { orderId, paymentError } } : { queryParams: { paymentError } });
     } finally {
       this.isSubmitting.set(false);
     }
@@ -588,6 +605,25 @@ export class CheckoutPageComponent implements OnInit {
     return (this.cart()?.subtotal ?? 0) + (this.selectedShippingOption()?.shippingAmount ?? 0);
   }
 
+  protected hasAddressReady(): boolean {
+    return this.useManualAddress()
+      ? this.shippingForm.valid
+      : !!this.selectedDeliveryAddressId();
+  }
+
+  protected hasDeliveryQuote(): boolean {
+    return this.shippingOptions().length > 0;
+  }
+
+  protected hasDeliverySelected(): boolean {
+    const selectedOption = this.selectedShippingOption();
+    return !!selectedOption && (!selectedOption.requiresPickupPoint || !!this.selectedPickupPointId());
+  }
+
+  protected canStartCheckout(): boolean {
+    return !!this.cart()?.cartId && this.hasAddressReady() && this.hasDeliverySelected();
+  }
+
   protected deliveryEstimate(option: CartShippingOptionResponse): string {
     return option.estimatedMinDays === option.estimatedMaxDays
       ? `${option.estimatedMinDays} day${option.estimatedMinDays === 1 ? '' : 's'}`
@@ -657,4 +693,9 @@ export class CheckoutPageComponent implements OnInit {
 function emptyToNull(value: string): string | null {
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function sanitizePaymentError(message: string): string {
+  const normalized = message.replace(/\s+/g, ' ').trim();
+  return normalized.length > 180 ? `${normalized.slice(0, 177)}...` : normalized;
 }

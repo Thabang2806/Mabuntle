@@ -76,6 +76,28 @@ describe('BuyerWishlistPageComponent', () => {
     });
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('No saved products yet');
   });
+
+  it('shows variant availability and blocks quantities above available stock', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('4 available for the selected variant.');
+
+    const quantityInput = compiled.querySelector('input[type="number"]') as HTMLInputElement;
+    quantityInput.value = '5';
+    quantityInput.dispatchEvent(new Event('input'));
+
+    const moveButton = Array.from(compiled.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Move to cart')) as HTMLButtonElement;
+    moveButton.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(wishlistState.moveToCart).not.toHaveBeenCalled();
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Only 4 available for the selected variant.');
+  });
 });
 
 function createWishlistItem() {

@@ -1,14 +1,16 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { PublicCatalogService } from '../shop/public-catalog.service';
 import { ShopPageComponent } from './shop-page.component';
 
 describe('ShopPageComponent', () => {
   let fixture: ComponentFixture<ShopPageComponent>;
   let publicCatalogService: jasmine.SpyObj<PublicCatalogService>;
+  let queryParams: Record<string, string>;
 
   beforeEach(async () => {
+    queryParams = {};
     publicCatalogService = jasmine.createSpyObj<PublicCatalogService>('PublicCatalogService', ['getCategories', 'searchProducts']);
     publicCatalogService.getCategories.and.resolveTo([
       { categoryId: 'parent-id', parentCategoryId: null, name: 'Women', slug: 'women', displayOrder: 10 },
@@ -27,6 +29,16 @@ describe('ShopPageComponent', () => {
       providers: [
         provideNoopAnimations(),
         provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              get queryParamMap() {
+                return convertToParamMap(queryParams);
+              }
+            }
+          }
+        },
         { provide: PublicCatalogService, useValue: publicCatalogService }
       ]
     }).compileComponents();
@@ -70,6 +82,45 @@ describe('ShopPageComponent', () => {
     }));
   });
 
+  it('hydrates supported discovery query params into the initial product search', async () => {
+    queryParams = {
+      query: 'linen',
+      colour: 'Rose',
+      material: 'Linen',
+      categorySlug: 'women-dresses',
+      sort: 'relevance'
+    };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(publicCatalogService.searchProducts).toHaveBeenCalledWith(jasmine.objectContaining({
+      query: 'linen',
+      categorySlug: 'women-dresses',
+      colour: 'Rose',
+      material: 'Linen',
+      sort: 'relevance',
+      page: 1,
+      pageSize: 24
+    }));
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Search: linen');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Colour: Rose');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Material: Linen');
+  });
+
+  it('falls back to newest when an unsupported shop sort query param is supplied', async () => {
+    queryParams = { query: 'linen', sort: 'unsupported' };
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(publicCatalogService.searchProducts).toHaveBeenCalledWith(jasmine.objectContaining({
+      query: 'linen',
+      sort: 'newest'
+    }));
+  });
+
   it('sends category and availability filters to product search', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
@@ -87,6 +138,29 @@ describe('ShopPageComponent', () => {
     expect(publicCatalogService.searchProducts).toHaveBeenCalledWith(jasmine.objectContaining({
       categorySlug: 'women-dresses',
       inStock: true,
+      page: 1
+    }));
+  });
+
+  it('renders active filter chips and clears an individual filter', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const component = fixture.componentInstance as unknown as {
+      filtersForm: { patchValue: (value: object) => void };
+      search: (page: number) => Promise<void>;
+      removeFilter: (key: 'query') => Promise<void>;
+    };
+    component.filtersForm.patchValue({ query: 'dress' });
+    await component.search(1);
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Search: dress');
+
+    await component.removeFilter('query');
+
+    expect(publicCatalogService.searchProducts).toHaveBeenCalledWith(jasmine.objectContaining({
+      query: '',
       page: 1
     }));
   });

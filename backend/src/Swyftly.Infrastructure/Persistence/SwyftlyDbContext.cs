@@ -37,6 +37,14 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
 
     public DbSet<BuyerWishlistItem> BuyerWishlistItems => Set<BuyerWishlistItem>();
 
+    public DbSet<BuyerGrowthEvent> BuyerGrowthEvents => Set<BuyerGrowthEvent>();
+
+    public DbSet<BuyerGrowthOutcome> BuyerGrowthOutcomes => Set<BuyerGrowthOutcome>();
+
+    public DbSet<BuyerAiDiscoveryPreference> BuyerAiDiscoveryPreferences => Set<BuyerAiDiscoveryPreference>();
+
+    public DbSet<BuyerAiDiscoveryHistory> BuyerAiDiscoveryHistory => Set<BuyerAiDiscoveryHistory>();
+
     public DbSet<SellerProfile> SellerProfiles => Set<SellerProfile>();
 
     public DbSet<SellerNotificationPreference> SellerNotificationPreferences => Set<SellerNotificationPreference>();
@@ -230,6 +238,116 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
             builder.HasOne<BuyerProfile>()
                 .WithMany()
                 .HasForeignKey(preference => preference.BuyerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BuyerGrowthEvent>(builder =>
+        {
+            builder.ToTable("buyer_growth_events");
+            builder.HasKey(growthEvent => growthEvent.Id);
+            builder.Property(growthEvent => growthEvent.EventType).HasConversion<string>().HasMaxLength(50).IsRequired();
+            builder.Property(growthEvent => growthEvent.SourceTool).HasConversion<string>().HasMaxLength(40).IsRequired();
+            builder.Property(growthEvent => growthEvent.ConfidenceBand).HasConversion<string>().HasMaxLength(20);
+            builder.Property(growthEvent => growthEvent.FeedbackReason).HasConversion<string>().HasMaxLength(40);
+            builder.Property(growthEvent => growthEvent.Category).HasMaxLength(BuyerGrowthEvent.ContextFieldMaxLength);
+            builder.Property(growthEvent => growthEvent.Colour).HasMaxLength(BuyerGrowthEvent.ContextFieldMaxLength);
+            builder.Property(growthEvent => growthEvent.Material).HasMaxLength(BuyerGrowthEvent.ContextFieldMaxLength);
+            builder.Property(growthEvent => growthEvent.SourceRoute).HasMaxLength(BuyerGrowthEvent.SourceRouteMaxLength);
+            builder.Property(growthEvent => growthEvent.OccurredAtUtc).IsRequired();
+            builder.HasIndex(growthEvent => new { growthEvent.BuyerId, growthEvent.EventType, growthEvent.OccurredAtUtc });
+            builder.HasIndex(growthEvent => new { growthEvent.EventType, growthEvent.SourceTool, growthEvent.OccurredAtUtc });
+            builder.HasIndex(growthEvent => new { growthEvent.ProductId, growthEvent.EventType, growthEvent.OccurredAtUtc });
+            builder.HasOne<BuyerProfile>()
+                .WithMany()
+                .HasForeignKey(growthEvent => growthEvent.BuyerId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne<Product>()
+                .WithMany()
+                .HasForeignKey(growthEvent => growthEvent.ProductId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<BuyerGrowthOutcome>(builder =>
+        {
+            builder.ToTable("buyer_growth_outcomes");
+            builder.HasKey(outcome => outcome.Id);
+            builder.Property(outcome => outcome.OutcomeType).HasConversion<string>().HasMaxLength(50).IsRequired();
+            builder.Property(outcome => outcome.SourceTool).HasConversion<string>().HasMaxLength(40).IsRequired();
+            builder.Property(outcome => outcome.ConfidenceBand).HasConversion<string>().HasMaxLength(20);
+            builder.Property(outcome => outcome.OccurredAtUtc).IsRequired();
+            builder.Property(outcome => outcome.AttributedFromUtc).IsRequired();
+            builder.Property(outcome => outcome.AttributionWindowMinutes).IsRequired();
+            builder.HasIndex(outcome => new { outcome.BuyerId, outcome.OutcomeType, outcome.OccurredAtUtc });
+            builder.HasIndex(outcome => new { outcome.OutcomeType, outcome.SourceTool, outcome.OccurredAtUtc });
+            builder.HasIndex(outcome => new { outcome.ProductId, outcome.OutcomeType, outcome.OccurredAtUtc });
+            builder.HasIndex(outcome => new { outcome.CartId, outcome.OutcomeType });
+            builder.HasIndex(outcome => new { outcome.OrderId, outcome.OutcomeType });
+            builder.HasIndex(outcome => new { outcome.SourceEventId, outcome.OutcomeType })
+                .IsUnique()
+                .HasFilter("\"SourceEventId\" IS NOT NULL");
+            builder.HasIndex(outcome => new
+            {
+                outcome.BuyerId,
+                outcome.OutcomeType,
+                outcome.SourceTool,
+                outcome.ProductId,
+                outcome.CartId,
+                outcome.OrderId
+            }).IsUnique();
+            builder.HasOne<BuyerProfile>()
+                .WithMany()
+                .HasForeignKey(outcome => outcome.BuyerId)
+                .OnDelete(DeleteBehavior.Cascade);
+            builder.HasOne<BuyerGrowthEvent>()
+                .WithMany()
+                .HasForeignKey(outcome => outcome.SourceEventId)
+                .OnDelete(DeleteBehavior.SetNull);
+            builder.HasOne<Product>()
+                .WithMany()
+                .HasForeignKey(outcome => outcome.ProductId)
+                .OnDelete(DeleteBehavior.SetNull);
+            builder.HasOne<Cart>()
+                .WithMany()
+                .HasForeignKey(outcome => outcome.CartId)
+                .OnDelete(DeleteBehavior.SetNull);
+            builder.HasOne<Order>()
+                .WithMany()
+                .HasForeignKey(outcome => outcome.OrderId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<BuyerAiDiscoveryPreference>(builder =>
+        {
+            builder.ToTable("buyer_ai_discovery_preferences");
+            builder.HasKey(preference => preference.Id);
+            builder.HasIndex(preference => preference.BuyerId).IsUnique();
+            builder.Property(preference => preference.HistoryEnabled).IsRequired();
+            builder.Property(preference => preference.PersonalizationEnabled).IsRequired();
+            builder.Property(preference => preference.UpdatedAtUtc).IsRequired();
+            builder.HasOne<BuyerProfile>()
+                .WithMany()
+                .HasForeignKey(preference => preference.BuyerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BuyerAiDiscoveryHistory>(builder =>
+        {
+            builder.ToTable("buyer_ai_discovery_history");
+            builder.HasKey(history => history.Id);
+            builder.Property(history => history.SourceTool).HasConversion<string>().HasMaxLength(40).IsRequired();
+            builder.Property(history => history.Category).HasMaxLength(Swyftly.Domain.Buyers.BuyerAiDiscoveryHistory.ContextFieldMaxLength);
+            builder.Property(history => history.Colour).HasMaxLength(Swyftly.Domain.Buyers.BuyerAiDiscoveryHistory.ContextFieldMaxLength);
+            builder.Property(history => history.Material).HasMaxLength(Swyftly.Domain.Buyers.BuyerAiDiscoveryHistory.ContextFieldMaxLength);
+            builder.Property(history => history.ConfidenceBand).HasConversion<string>().HasMaxLength(20);
+            builder.Property(history => history.ResultCount).IsRequired();
+            builder.Property(history => history.ProductIds).HasColumnType("uuid[]");
+            builder.Property(history => history.SourceRoute).HasMaxLength(Swyftly.Domain.Buyers.BuyerAiDiscoveryHistory.SourceRouteMaxLength);
+            builder.Property(history => history.CreatedAtUtc).IsRequired();
+            builder.HasIndex(history => new { history.BuyerId, history.CreatedAtUtc });
+            builder.HasIndex(history => new { history.BuyerId, history.SourceTool, history.CreatedAtUtc });
+            builder.HasOne<BuyerProfile>()
+                .WithMany()
+                .HasForeignKey(history => history.BuyerId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -1291,7 +1409,10 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
         {
             builder.ToTable("carts");
             builder.HasKey(cart => cart.Id);
-            builder.HasIndex(cart => new { cart.BuyerId, cart.Status }).IsUnique();
+            builder.Property(cart => cart.Id).ValueGeneratedNever();
+            builder.HasIndex(cart => cart.BuyerId)
+                .IsUnique()
+                .HasFilter("\"Status\" = 'Active'");
             builder.HasIndex(cart => cart.SellerId);
             builder.Property(cart => cart.Status)
                 .HasConversion<string>()
@@ -1319,6 +1440,7 @@ public sealed class SwyftlyDbContext(DbContextOptions<SwyftlyDbContext> options)
         {
             builder.ToTable("cart_items");
             builder.HasKey(item => item.Id);
+            builder.Property(item => item.Id).ValueGeneratedNever();
             builder.HasIndex(item => item.CartId);
             builder.HasIndex(item => item.ProductVariantId);
             builder.HasIndex(item => new { item.CartId, item.ProductVariantId }).IsUnique();

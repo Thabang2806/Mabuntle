@@ -20,8 +20,23 @@ export interface BuyerOrderResult {
   deliveryEstimatedMaxDays?: number | null;
   pickupPoint?: BuyerOrderPickupPointResult | null;
   sellerPolicySnapshot?: SellerPolicySnapshotResponse | null;
+  paymentSummary?: BuyerOrderPaymentSummaryResult | null;
   statusHistory: BuyerOrderStatusHistoryResult[];
   shipments: BuyerShipmentResult[];
+}
+
+export interface BuyerOrderPaymentSummaryResult {
+  paymentId: string;
+  providerName: string;
+  providerReference: string | null;
+  status: string;
+  amount: number;
+  currency: string;
+  checkoutUrlAvailable: boolean;
+  paidAtUtc: string | null;
+  failedAtUtc: string | null;
+  cancelledAtUtc: string | null;
+  updatedAtUtc: string;
 }
 
 export interface BuyerOrderDeliveryAddressResult {

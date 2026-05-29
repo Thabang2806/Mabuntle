@@ -2,5 +2,6 @@ namespace Swyftly.Domain.Carts;
 
 public enum CartStatus
 {
-    Active = 0
+    Active = 0,
+    CheckedOut = 1
 }

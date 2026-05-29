@@ -47,6 +47,7 @@ describe('BuyerNotificationsPageComponent', () => {
     expect(compiled.textContent).toContain('Order shipped');
     expect(compiled.textContent).toContain('unread notification');
     expect(compiled.textContent).toContain('Notification settings');
+    expect(compiled.querySelector('a[href="/account/orders/order-id"]')?.textContent).toContain('Open');
 
     const readButton = Array.from(compiled.querySelectorAll('button'))
       .find(button => button.textContent?.includes('Mark read')) as HTMLButtonElement;
@@ -89,9 +90,40 @@ describe('BuyerNotificationsPageComponent', () => {
     expect(text).toContain('Return approved');
     expect(text.match(/Return approved/g)?.length).toBe(1);
   });
+
+  it('keeps unsupported related entities as read-only metadata', async () => {
+    engagementService.listNotifications.and.resolveTo([createNotification({
+      relatedEntityType: 'Payment',
+      relatedEntityId: 'payment-id'
+    })]);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Payment');
+    expect(compiled.querySelector('a[href*="/account/payments"]')).toBeNull();
+  });
+
+  it('links refund notifications to refund history', async () => {
+    engagementService.listNotifications.and.resolveTo([createNotification({
+      relatedEntityType: 'Refund',
+      relatedEntityId: 'refund-id'
+    })]);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const refundLink = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('a[href="/account/refunds"]'))
+      .find(link => link.textContent?.includes('Open'));
+
+    expect(refundLink).toBeTruthy();
+  });
 });
 
-function createNotification() {
+function createNotification(overrides: Partial<BuyerNotificationResponse> = {}): BuyerNotificationResponse {
   return {
     notificationId: 'notification-id',
     recipientUserId: 'buyer-user-id',
@@ -101,6 +133,7 @@ function createNotification() {
     relatedEntityType: 'Order',
     relatedEntityId: 'order-id',
     readAtUtc: null,
-    createdAtUtc: '2026-05-19T10:00:00Z'
+    createdAtUtc: '2026-05-19T10:00:00Z',
+    ...overrides
   };
 }

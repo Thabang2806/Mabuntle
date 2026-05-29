@@ -102,6 +102,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </span>
                 <span role="cell">
                   <app-status-badge [label]="order.status" [tone]="statusTone(order.status)" />
+                  <small>{{ paymentSummary(order) }}</small>
                   <small>{{ shipmentSummary(order) }}</small>
                 </span>
                 <span role="cell">
@@ -187,6 +188,15 @@ export class BuyerOrdersPageComponent implements OnInit {
       : latestShipment.providerShipmentReference
         ? `${carrierState} - ${latestShipment.providerShipmentReference}`
         : carrierState;
+  }
+
+  protected paymentSummary(order: BuyerOrderResult): string {
+    const payment = order.paymentSummary;
+    if (!payment) {
+      return order.status === 'PendingPayment' ? 'Payment not started yet' : 'No payment record';
+    }
+
+    return `Payment ${payment.status} - ${payment.providerName}`;
   }
 
   protected statusTone(status: string): StatusBadgeTone {

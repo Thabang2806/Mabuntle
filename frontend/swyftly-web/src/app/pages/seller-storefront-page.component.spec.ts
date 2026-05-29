@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { StorefrontAnalyticsService } from '../analytics/storefront-analytics.service';
 import { PublicCatalogService } from '../shop/public-catalog.service';
@@ -27,6 +28,7 @@ describe('SellerStorefrontPageComponent', () => {
     await TestBed.configureTestingModule({
       imports: [SellerStorefrontPageComponent],
       providers: [
+        provideNoopAnimations(),
         provideRouter([]),
         {
           provide: ActivatedRoute,
@@ -69,5 +71,43 @@ describe('SellerStorefrontPageComponent', () => {
     expect(compiled.querySelector('.storefront-trust-grid strong')?.textContent).toContain('1');
     expect(compiled.textContent).toContain('published product');
     expect(compiled.querySelector('.seller-storefront-logo')?.textContent?.trim()).toBe('S');
+  });
+
+  it('filters storefront products client-side by search and availability', async () => {
+    publicCatalogService.getSellerStorefront.and.resolveTo({
+      sellerId: 'seller-id',
+      storeName: 'Seller Store',
+      slug: 'seller-store',
+      description: 'Curated dresses.',
+      logoUrl: null,
+      bannerUrl: null,
+      products: [
+        createProduct(),
+        {
+          ...createProduct(),
+          productId: 'bag-id',
+          title: 'Leather Tote',
+          slug: 'leather-tote',
+          categoryPath: 'Bags',
+          inStock: false,
+          priceMin: 899,
+          tags: ['bag']
+        }
+      ],
+      sellerPolicy: createSellerPolicy()
+    });
+    fixture = TestBed.createComponent(SellerStorefrontPageComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const input = (fixture.nativeElement as HTMLElement).querySelector('input[formControlName="query"]') as HTMLInputElement;
+    input.value = 'tote';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Leather Tote');
+    expect(compiled.textContent).not.toContain('Summer Dress');
   });
 });

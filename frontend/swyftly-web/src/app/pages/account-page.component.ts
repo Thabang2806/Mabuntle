@@ -8,6 +8,8 @@ import { BuyerDisputeResponse } from '../buyer/buyer-dispute.models';
 import { BuyerDisputeService } from '../buyer/buyer-dispute.service';
 import { BuyerOrderResult } from '../buyer/buyer-order.models';
 import { BuyerOrderService } from '../buyer/buyer-order.service';
+import { BuyerRefundResult } from '../buyer/buyer-refund.models';
+import { BuyerRefundService } from '../buyer/buyer-refund.service';
 import { BuyerReturnRequestResult } from '../buyer/buyer-return.models';
 import { BuyerReturnService } from '../buyer/buyer-return.service';
 import { BuyerSupportTicketResponse } from '../buyer/buyer-support.models';
@@ -74,6 +76,14 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           </app-dashboard-card>
 
           <app-dashboard-card
+            eyebrow="Finance"
+            heading="Refunds"
+            [description]="activeRefunds().length + ' refund' + (activeRefunds().length === 1 ? '' : 's') + ' in progress or needing attention.'"
+          >
+            <a mat-stroked-button routerLink="/account/refunds">View refunds</a>
+          </app-dashboard-card>
+
+          <app-dashboard-card
             eyebrow="Resolution"
             heading="Disputes"
             [description]="openDisputes().length + ' open dispute' + (openDisputes().length === 1 ? '' : 's') + ' on record.'"
@@ -113,6 +123,21 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             <a mat-stroked-button routerLink="/account/notifications">View notifications</a>
           </app-dashboard-card>
         </div>
+
+        @if (nextActions().length > 0) {
+          <section class="buyer-panel">
+            <h2>Next best actions</h2>
+            <div class="seller-result-steps">
+              @for (action of nextActions(); track action.route) {
+                <div>
+                  <strong>{{ action.title }}</strong>
+                  <span>{{ action.description }}</span>
+                  <a mat-stroked-button [routerLink]="action.route">{{ action.cta }}</a>
+                </div>
+              }
+            </div>
+          </section>
+        }
 
         @if (hasNoActivity() && !errorMessage()) {
           <app-empty-state
@@ -171,11 +196,13 @@ export class AccountPageComponent implements OnInit {
   private readonly engagementService = inject(BuyerEngagementService);
   private readonly disputeService = inject(BuyerDisputeService);
   private readonly orderService = inject(BuyerOrderService);
+  private readonly refundService = inject(BuyerRefundService);
   private readonly returnService = inject(BuyerReturnService);
   private readonly supportService = inject(BuyerSupportService);
 
   protected readonly orders = signal<BuyerOrderResult[]>([]);
   protected readonly returns = signal<BuyerReturnRequestResult[]>([]);
+  protected readonly refunds = signal<BuyerRefundResult[]>([]);
   protected readonly disputes = signal<BuyerDisputeResponse[]>([]);
   protected readonly tickets = signal<BuyerSupportTicketResponse[]>([]);
   protected readonly wishlist = signal<BuyerWishlistItemResponse[]>([]);
@@ -186,6 +213,8 @@ export class AccountPageComponent implements OnInit {
 
   protected readonly activeReturns = computed(() =>
     this.returns().filter(item => !['Refunded', 'Closed', 'Rejected'].includes(item.status)));
+  protected readonly activeRefunds = computed(() =>
+    this.refunds().filter(item => ['Requested', 'Approved', 'Processing', 'Failed'].includes(item.status)));
   protected readonly openDisputes = computed(() =>
     this.disputes().filter(item => !['Resolved', 'Closed'].includes(item.status)));
   protected readonly openTickets = computed(() =>
@@ -194,15 +223,72 @@ export class AccountPageComponent implements OnInit {
     this.notifications().filter(item => !item.readAtUtc));
   protected readonly recentOrders = computed(() => this.orders().slice(0, 3));
   protected readonly recentTickets = computed(() => this.tickets().slice(0, 3));
+  protected readonly nextActions = computed(() => {
+    const actions: { title: string; description: string; cta: string; route: string | string[] }[] = [];
+    const pendingPaymentOrder = this.orders().find(order =>
+      order.status === 'PendingPayment' || order.paymentSummary?.status === 'Pending');
+    const deliveredOrder = this.orders().find(order => order.status === 'Delivered');
+    const activeRefund = this.activeRefunds()[0];
+    const openTicket = this.openTickets()[0];
+    const unreadNotification = this.unreadNotifications()[0];
+
+    if (pendingPaymentOrder) {
+      actions.push({
+        title: 'Payment still pending',
+        description: 'Refresh the order payment status or retry payment from the order page.',
+        cta: 'Review payment',
+        route: ['/account/orders', pendingPaymentOrder.orderId]
+      });
+    }
+
+    if (deliveredOrder) {
+      actions.push({
+        title: 'Delivered order ready for after-sales',
+        description: 'Open the delivered order to request a return or leave a moderated product review.',
+        cta: 'Open order',
+        route: ['/account/orders', deliveredOrder.orderId]
+      });
+    }
+
+    if (activeRefund) {
+      actions.push({
+        title: activeRefund.status === 'Failed' ? 'Refund needs support' : 'Refund in progress',
+        description: activeRefund.statusMessage,
+        cta: 'Track refund',
+        route: '/account/refunds'
+      });
+    }
+
+    if (openTicket) {
+      actions.push({
+        title: 'Support ticket open',
+        description: 'Check whether support has asked for more detail or replied to your request.',
+        cta: 'View ticket',
+        route: ['/account/support', openTicket.supportTicketId]
+      });
+    }
+
+    if (unreadNotification) {
+      actions.push({
+        title: 'Unread account updates',
+        description: 'Read the latest marketplace update and mark it handled when you are done.',
+        cta: 'View notifications',
+        route: '/account/notifications'
+      });
+    }
+
+    return actions.slice(0, 4);
+  });
 
   async ngOnInit(): Promise<void> {
     this.isLoading.set(true);
     this.errorMessage.set(null);
 
     try {
-      const [orders, returns, disputes, tickets, wishlist, reviews, notifications] = await Promise.all([
+      const [orders, returns, refunds, disputes, tickets, wishlist, reviews, notifications] = await Promise.all([
         this.orderService.listOrders(),
         this.returnService.listReturns(),
+        this.refundService.listRefunds(),
         this.disputeService.listDisputes(),
         this.supportService.listTickets(),
         this.engagementService.listWishlist(),
@@ -211,6 +297,7 @@ export class AccountPageComponent implements OnInit {
       ]);
       this.orders.set(orders);
       this.returns.set(returns);
+      this.refunds.set(refunds);
       this.disputes.set(disputes);
       this.tickets.set(tickets);
       this.wishlist.set(wishlist);
@@ -226,6 +313,7 @@ export class AccountPageComponent implements OnInit {
   protected hasNoActivity(): boolean {
     return this.orders().length === 0 &&
       this.returns().length === 0 &&
+      this.refunds().length === 0 &&
       this.disputes().length === 0 &&
       this.tickets().length === 0 &&
       this.wishlist().length === 0 &&

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Swyftly.Application.Analytics;
 using Swyftly.Application.Delivery;
 using Swyftly.Application.Identity;
 using Swyftly.Domain.Buyers;
@@ -87,6 +88,8 @@ public static class CartEndpoints
         AddCartItemRequest request,
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
+        IBuyerGrowthOutcomeAttributionService outcomeAttributionService,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var buyer = await GetCurrentBuyerAsync(principal, dbContext, cancellationToken);
@@ -143,6 +146,13 @@ public static class CartEndpoints
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await outcomeAttributionService.RecordProductAddedToCartAsync(
+            buyer.Id,
+            product.Id,
+            cart.Id,
+            timeProvider.GetUtcNow(),
+            cancellationToken);
+
         return HttpResults.Ok(await CreateCartResponseAsync(cart, dbContext, cancellationToken));
     }
 
@@ -151,6 +161,8 @@ public static class CartEndpoints
         ClaimsPrincipal principal,
         SwyftlyDbContext dbContext,
         IAddressVerificationService addressVerificationService,
+        IBuyerGrowthOutcomeAttributionService outcomeAttributionService,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var buyer = await GetCurrentBuyerAsync(principal, dbContext, cancellationToken);
@@ -251,6 +263,12 @@ public static class CartEndpoints
         {
             return Validation("deliveryAddress", "No active delivery method serves the selected delivery address.");
         }
+
+        await outcomeAttributionService.RecordCheckoutStartedAsync(
+            buyer.Id,
+            cart.Id,
+            timeProvider.GetUtcNow(),
+            cancellationToken);
 
         return HttpResults.Ok(new CartShippingOptionsResponse(
             cart.Id,

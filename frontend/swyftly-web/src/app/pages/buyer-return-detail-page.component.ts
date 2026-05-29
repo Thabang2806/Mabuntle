@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -6,6 +6,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
+import { BuyerRefundResult } from '../buyer/buyer-refund.models';
+import { BuyerRefundService } from '../buyer/buyer-refund.service';
 import { BuyerReturnRequestResult } from '../buyer/buyer-return.models';
 import { BuyerReturnService } from '../buyer/buyer-return.service';
 import { BuyerWorkspaceNavComponent } from '../buyer/buyer-workspace-nav.component';
@@ -17,6 +19,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   selector: 'app-buyer-return-detail-page',
   imports: [
     BuyerWorkspaceNavComponent,
+    CurrencyPipe,
     DatePipe,
     MatButtonModule,
     MatFormFieldModule,
@@ -85,7 +88,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </form>
               } @else {
                 <app-ui-alert tone="info">Dispute escalation is available after a return is rejected by the seller.</app-ui-alert>
-                <a mat-stroked-button routerLink="/account/support">Contact support</a>
+                <a mat-stroked-button routerLink="/account/support" [queryParams]="supportQueryParams()">Contact support</a>
               }
             </section>
 
@@ -100,6 +103,25 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </dl>
               } @else {
                 <app-ui-alert tone="info">This return does not have checkout-time store-policy context.</app-ui-alert>
+              }
+            </section>
+
+            <section class="buyer-panel">
+              <h2>Refund outcome</h2>
+              @if (refunds().length === 0) {
+                <app-ui-alert tone="info">No refund request is linked to this return yet. Approved return outcomes still require finance processing before a refund is complete.</app-ui-alert>
+              } @else {
+                <div class="seller-timeline">
+                  @for (refund of refunds(); track refund.refundId) {
+                    <div>
+                      <app-status-badge [label]="refund.status" [tone]="refundStatusTone(refund.status)" />
+                      <span>{{ refund.amount | currency:refund.currency:'symbol-narrow' }}</span>
+                      <small>{{ refund.statusMessage }}</small>
+                      <small>Requested {{ refund.requestedAtUtc | date:'medium' }}</small>
+                      <a routerLink="/account/refunds">View refund history</a>
+                    </div>
+                  }
+                </div>
               }
             </section>
           </div>
@@ -146,10 +168,12 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 })
 export class BuyerReturnDetailPageComponent implements OnInit {
   private readonly formBuilder = inject(NonNullableFormBuilder);
+  private readonly refundService = inject(BuyerRefundService);
   private readonly returnService = inject(BuyerReturnService);
   private readonly route = inject(ActivatedRoute);
 
   protected readonly returnRequest = signal<BuyerReturnRequestResult | null>(null);
+  protected readonly refunds = signal<BuyerRefundResult[]>([]);
   protected readonly isLoading = signal(true);
   protected readonly isSaving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
@@ -204,6 +228,22 @@ export class BuyerReturnDetailPageComponent implements OnInit {
     return 'neutral';
   }
 
+  protected refundStatusTone(status: string): StatusBadgeTone {
+    if (['Requested', 'Approved', 'Processing'].includes(status)) {
+      return 'warning';
+    }
+
+    if (status === 'Refunded') {
+      return 'success';
+    }
+
+    if (['Failed', 'Rejected'].includes(status)) {
+      return 'danger';
+    }
+
+    return 'neutral';
+  }
+
   protected sellerPolicySnapshotEntries(): { label: string; value: string }[] {
     const snapshot = this.returnRequest()?.sellerPolicySnapshot;
     if (!snapshot) {
@@ -221,12 +261,30 @@ export class BuyerReturnDetailPageComponent implements OnInit {
     ].filter((entry): entry is { label: string; value: string } => entry !== null);
   }
 
+  protected supportQueryParams(): { orderId: string; sellerId: string } | null {
+    const returnRequest = this.returnRequest();
+
+    if (!returnRequest) {
+      return null;
+    }
+
+    return {
+      orderId: returnRequest.orderId,
+      sellerId: returnRequest.sellerId
+    };
+  }
+
   private async loadReturn(): Promise<void> {
     this.isLoading.set(true);
     this.errorMessage.set(null);
 
     try {
-      this.returnRequest.set(await this.returnService.getReturn(this.returnRequestId()));
+      const [returnRequest, refunds] = await Promise.all([
+        this.returnService.getReturn(this.returnRequestId()),
+        this.refundService.listReturnRefunds(this.returnRequestId())
+      ]);
+      this.returnRequest.set(returnRequest);
+      this.refunds.set(refunds);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
     } finally {

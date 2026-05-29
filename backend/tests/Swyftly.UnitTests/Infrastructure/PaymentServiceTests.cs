@@ -408,6 +408,7 @@ public class PaymentServiceTests
             ledger,
             adTracking,
             new NoOpStorefrontAnalyticsService(),
+            new NoOpBuyerGrowthOutcomeAttributionService(),
             Options.Create(paymentOptions),
             TimeProvider.System);
     }
@@ -442,6 +443,46 @@ public class PaymentServiceTests
             Task.CompletedTask;
 
         public Task RecordOrderPaidAsync(Guid orderId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class NoOpBuyerGrowthOutcomeAttributionService : IBuyerGrowthOutcomeAttributionService
+    {
+        public Task RecordProductOpenedAsync(
+            Guid buyerId,
+            Guid productId,
+            Guid sourceEventId,
+            BuyerGrowthSourceTool sourceTool,
+            BuyerGrowthConfidenceBand? confidenceBand,
+            DateTimeOffset occurredAtUtc,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task RecordProductAddedToCartAsync(
+            Guid buyerId,
+            Guid productId,
+            Guid cartId,
+            DateTimeOffset occurredAtUtc,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task RecordCheckoutStartedAsync(
+            Guid buyerId,
+            Guid cartId,
+            DateTimeOffset occurredAtUtc,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task RecordOrderCreatedAsync(
+            Guid orderId,
+            DateTimeOffset occurredAtUtc,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task RecordOrderPaidAsync(
+            Guid orderId,
+            DateTimeOffset occurredAtUtc,
+            CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
     }
 

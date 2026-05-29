@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Swyftly.Api.Results;
 using Swyftly.Api.Security;
@@ -30,9 +31,12 @@ public static class BuyerVisualSearchEndpoints
 
     private static async Task<IResult> SearchAsync(
         BuyerVisualSearchRequest request,
+        ClaimsPrincipal principal,
         IAiVisualSearchService visualSearchService,
         ICurrentUser currentUser,
+        IBuyerAiPersonalizationService personalizationService,
         SwyftlyDbContext dbContext,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var attributesResult = await visualSearchService.ExtractAttributesAsync(
@@ -59,8 +63,24 @@ public static class BuyerVisualSearchEndpoints
                 candidate.PrimaryImageUrl,
                 candidate.MinPrice,
                 "ZAR",
-                BuildMatchReasons(attributes, candidate)))
+                BuildMatchReasons(attributes, candidate),
+                PersonalizationApplied: false,
+                []))
             .ToArray();
+        products = await ApplyPersonalizationAsync(
+            products,
+            ParseUserId(currentUser.UserId),
+            personalizationService,
+            timeProvider.GetUtcNow(),
+            cancellationToken);
+
+        await BuyerAiDiscoveryHistoryWriter.SaveVisualSearchHistoryIfEnabledAsync(
+            principal,
+            attributes,
+            products,
+            dbContext,
+            timeProvider,
+            cancellationToken);
 
         return HttpResults.Ok(new BuyerVisualSearchResponse(
             attributes,
@@ -212,6 +232,55 @@ public static class BuyerVisualSearchEndpoints
     private static bool ContainsIfPresent(string searchable, string? value) =>
         value is null || searchable.Contains(value.ToLowerInvariant(), StringComparison.Ordinal);
 
+    private static Guid ParseUserId(string? userId) =>
+        Guid.TryParse(userId, out var parsed) ? parsed : Guid.Empty;
+
+    private static async Task<BuyerVisualSearchProductCardResponse[]> ApplyPersonalizationAsync(
+        BuyerVisualSearchProductCardResponse[] products,
+        Guid userId,
+        IBuyerAiPersonalizationService personalizationService,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (products.Length == 0)
+        {
+            return products;
+        }
+
+        var personalization = await personalizationService.PersonalizeAsync(
+            userId,
+            products.Select(product => product.ProductId).ToArray(),
+            now,
+            cancellationToken);
+        if (personalization.Count == 0)
+        {
+            return products;
+        }
+
+        var byProductId = personalization.ToDictionary(item => item.ProductId);
+        return products
+            .Select((product, index) =>
+            {
+                byProductId.TryGetValue(product.ProductId, out var result);
+                return new
+                {
+                    Product = result is null
+                        ? product
+                        : product with
+                        {
+                            PersonalizationApplied = result.PersonalizationApplied,
+                            PersonalizationReasons = result.PersonalizationReasons
+                        },
+                    Score = result?.Score ?? 0,
+                    Index = index
+                };
+            })
+            .OrderByDescending(item => item.Score)
+            .ThenBy(item => item.Index)
+            .Select(item => item.Product)
+            .ToArray();
+    }
+
     private sealed record ProductCandidate(
         Product Product,
         string? CategoryName,
@@ -242,4 +311,6 @@ public sealed record BuyerVisualSearchProductCardResponse(
     string? ImageUrl,
     decimal Price,
     string Currency,
-    IReadOnlyCollection<string> MatchReasons);
+    IReadOnlyCollection<string> MatchReasons,
+    bool PersonalizationApplied,
+    IReadOnlyCollection<string> PersonalizationReasons);

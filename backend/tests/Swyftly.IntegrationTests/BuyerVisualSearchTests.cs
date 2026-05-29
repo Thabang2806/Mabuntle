@@ -11,7 +11,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Swyftly.Api.Ai;
 using Swyftly.Api.Authentication;
+using Swyftly.Api.Buyers;
 using Swyftly.Application.Identity;
+using Swyftly.Domain.Buyers;
 using Swyftly.Domain.Catalog;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Identity;
@@ -92,6 +94,84 @@ public sealed class BuyerVisualSearchTests
             new BuyerVisualSearchRequest(null, null, null, null));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task VisualSearch_SavesSafeHistoryOnlyWhenBuyerEnabledPreference()
+    {
+        using var factory = new BuyerVisualSearchTestFactory();
+        using var client = factory.CreateClient();
+        var productId = await SeedPublishedDressAsync(factory);
+        var buyerToken = await RegisterAndLoginAsync(client, SwyftlyRoles.Buyer);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", buyerToken);
+        using var updatePreferenceResponse = await client.PutAsJsonAsync(
+            "/api/buyer/ai-discovery/preferences",
+            new BuyerAiDiscoveryPreferenceRequest(true));
+        updatePreferenceResponse.EnsureSuccessStatusCode();
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/buyer/ai/visual-search",
+            new BuyerVisualSearchRequest("black formal maxi dress flatlay", null, "black-dress.jpg", "image/jpeg"));
+        response.EnsureSuccessStatusCode();
+
+        using var historyResponse = await client.GetAsync("/api/buyer/ai-discovery/history?tool=VisualSearch");
+        historyResponse.EnsureSuccessStatusCode();
+        var history = await historyResponse.Content.ReadFromJsonAsync<BuyerAiDiscoveryHistoryListResponse>();
+        Assert.NotNull(history);
+        var item = Assert.Single(history!.Items);
+        Assert.Equal("VisualSearch", item.SourceTool);
+        Assert.Equal("Dresses", item.Category);
+        Assert.Equal("Black", item.Colour);
+        Assert.Contains(productId, item.ProductIds);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        var storedHistory = Assert.Single(await dbContext.BuyerAiDiscoveryHistory.AsNoTracking().ToListAsync());
+        Assert.Equal(BuyerGrowthSourceTool.VisualSearch, storedHistory.SourceTool);
+        Assert.DoesNotContain("black-dress.jpg", string.Join(" ", storedHistory.Category, storedHistory.Colour, storedHistory.Material, storedHistory.SourceRoute));
+    }
+
+    [Fact]
+    public async Task VisualSearch_AddsPersonalizationReasonsOnlyAfterBuyerEnablesPreference()
+    {
+        using var factory = new BuyerVisualSearchTestFactory();
+        using var client = factory.CreateClient();
+        var productId = await SeedPublishedDressAsync(factory);
+        var buyerToken = await RegisterAndLoginAsync(client, SwyftlyRoles.Buyer);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+            var buyerId = await dbContext.BuyerProfiles.Select(buyer => buyer.Id).SingleAsync();
+            dbContext.BuyerWishlistItems.Add(new BuyerWishlistItem(buyerId, productId, DateTimeOffset.UtcNow));
+            await dbContext.SaveChangesAsync();
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", buyerToken);
+        using var disabledResponse = await client.PostAsJsonAsync(
+            "/api/buyer/ai/visual-search",
+            new BuyerVisualSearchRequest("black formal maxi dress flatlay", null, "black-dress.jpg", "image/jpeg"));
+        disabledResponse.EnsureSuccessStatusCode();
+        var disabledVisualSearch = await disabledResponse.Content.ReadFromJsonAsync<BuyerVisualSearchResponse>();
+        Assert.NotNull(disabledVisualSearch);
+        Assert.False(Assert.Single(disabledVisualSearch!.Products).PersonalizationApplied);
+
+        using var updatePreferenceResponse = await client.PutAsJsonAsync(
+            "/api/buyer/ai-discovery/preferences",
+            new BuyerAiDiscoveryPreferenceRequest(HistoryEnabled: false, PersonalizationEnabled: true));
+        updatePreferenceResponse.EnsureSuccessStatusCode();
+
+        using var enabledResponse = await client.PostAsJsonAsync(
+            "/api/buyer/ai/visual-search",
+            new BuyerVisualSearchRequest("black formal maxi dress flatlay", null, "black-dress.jpg", "image/jpeg"));
+        enabledResponse.EnsureSuccessStatusCode();
+        var enabledVisualSearch = await enabledResponse.Content.ReadFromJsonAsync<BuyerVisualSearchResponse>();
+        Assert.NotNull(enabledVisualSearch);
+        var product = Assert.Single(enabledVisualSearch!.Products);
+        Assert.Equal(productId, product.ProductId);
+        Assert.True(product.PersonalizationApplied);
+        Assert.Contains("Similar to saved items", product.PersonalizationReasons);
     }
 
     private static async Task<Guid> SeedPublishedDressAsync(BuyerVisualSearchTestFactory factory)

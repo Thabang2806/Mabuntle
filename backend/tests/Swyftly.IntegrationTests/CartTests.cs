@@ -53,6 +53,27 @@ public class CartTests
     }
 
     [Fact]
+    public async Task Buyer_CanAddMultipleItemsFromSameSellerToExistingCart()
+    {
+        await using var factory = new CartTestFactory();
+        using var client = factory.CreateClient();
+        await AuthorizeBuyerAsync(client, "multi-item-buyer@example.test");
+        var sellerId = await CreateSellerAsync(factory, "Seller One", "seller-one");
+        var firstVariantId = await CreatePublishedProductAsync(factory, sellerId, "Cotton Dress", 499m);
+        var secondVariantId = await CreatePublishedProductAsync(factory, sellerId, "Silk Blouse", 699m);
+        using var firstResponse = await client.PostAsJsonAsync("/api/cart/items", new AddCartItemRequest(firstVariantId, 1));
+        firstResponse.EnsureSuccessStatusCode();
+
+        using var secondResponse = await client.PostAsJsonAsync("/api/cart/items", new AddCartItemRequest(secondVariantId, 1));
+
+        secondResponse.EnsureSuccessStatusCode();
+        var cart = await ReadJsonAsync<CartResponse>(secondResponse);
+        Assert.Equal(2, cart.Items.Count);
+        Assert.Contains(cart.Items, item => item.ProductVariantId == firstVariantId);
+        Assert.Contains(cart.Items, item => item.ProductVariantId == secondVariantId);
+    }
+
+    [Fact]
     public async Task Buyer_CanMoveCartItemToWishlist()
     {
         await using var factory = new CartTestFactory();

@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -13,6 +13,8 @@ import { EmptyStateComponent } from '../shared/ui/empty-state.component';
 import { LuxuryPublicStylesComponent } from '../shared/ui/luxury-public-styles.component';
 import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
 import { UiAlertComponent } from '../shared/ui/ui-alert.component';
+
+type ShopFilterKey = 'query' | 'categorySlug' | 'availability' | 'minPrice' | 'maxPrice' | 'size' | 'colour' | 'material' | 'sort';
 
 @Component({
   selector: 'app-shop-page',
@@ -69,9 +71,21 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         >
           <div class="shop-filter-heading">
             <strong>Refine results</strong>
-            @if (activeFilters().length > 0) {
-              <span>{{ activeFilters().length }} active</span>
+            @if (activeFilterChips().length > 0) {
+              <span>{{ activeFilterChips().length }} active</span>
             }
+          </div>
+
+          <div class="shop-filter-facets" aria-label="Quick refinements">
+            <span>Quick refinements</span>
+            <div>
+              <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="applyAvailability('in_stock')">In stock</button>
+              @for (category of quickCategories().slice(0, 3); track category.categoryId) {
+                <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="applyCategory(category.slug)">
+                  {{ category.name }}
+                </button>
+              }
+            </div>
           </div>
 
           <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
@@ -152,11 +166,15 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               <app-ui-alert tone="error">{{ errorMessage() }}</app-ui-alert>
             }
 
-            @if (activeFilters().length > 0) {
+            @if (activeFilterChips().length > 0) {
               <div class="active-filter-row" aria-label="Active filters">
-                @for (filter of activeFilters(); track filter) {
-                  <app-status-badge [label]="filter" />
+                @for (filter of activeFilterChips(); track filter.key) {
+                  <button type="button" class="active-filter-chip" (click)="removeFilter(filter.key)">
+                    {{ filter.label }}
+                    <span aria-hidden="true">x</span>
+                  </button>
                 }
+                <button mat-button type="button" (click)="clearFilters()">Clear all</button>
               </div>
             }
 
@@ -194,6 +212,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 export class ShopPageComponent implements OnInit {
   private readonly formBuilder = inject(NonNullableFormBuilder);
   private readonly publicCatalogService = inject(PublicCatalogService);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly categories = signal<PublicCategoryResponse[]>([]);
   protected readonly products = signal<ProductSearchItemResponse[]>([]);
@@ -217,6 +236,8 @@ export class ShopPageComponent implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
+    this.hydrateFiltersFromQueryParams();
+
     await Promise.all([
       this.loadCategories(),
       this.search(1)
@@ -277,6 +298,11 @@ export class ShopPageComponent implements OnInit {
     await this.search(1);
   }
 
+  protected async applyAvailability(availability: 'in_stock' | 'out_of_stock' | ''): Promise<void> {
+    this.filtersForm.patchValue({ availability });
+    await this.search(1);
+  }
+
   protected quickCategories(): PublicCategoryResponse[] {
     return [...this.categories()]
       .sort((left, right) => left.displayOrder - right.displayOrder || left.name.localeCompare(right.name))
@@ -288,43 +314,49 @@ export class ShopPageComponent implements OnInit {
     return path || category.name;
   }
 
-  protected activeFilters(): string[] {
+  protected activeFilterChips(): { key: ShopFilterKey; label: string }[] {
     const filters = this.filtersForm.getRawValue();
-    const active: string[] = [];
+    const active: { key: ShopFilterKey; label: string }[] = [];
     if (filters.query) {
-      active.push(`Search: ${filters.query}`);
+      active.push({ key: 'query', label: `Search: ${filters.query}` });
     }
 
     if (filters.categorySlug) {
       const category = this.categories().find(item => item.slug === filters.categorySlug);
-      active.push(`Category: ${category ? this.categoryLabel(category) : filters.categorySlug}`);
+      active.push({ key: 'categorySlug', label: `Category: ${category ? this.categoryLabel(category) : filters.categorySlug}` });
     }
 
     if (filters.availability) {
-      active.push(filters.availability === 'in_stock' ? 'In stock' : 'Out of stock');
+      active.push({ key: 'availability', label: filters.availability === 'in_stock' ? 'In stock' : 'Out of stock' });
     }
 
     if (filters.minPrice) {
-      active.push(`Min: R${filters.minPrice}`);
+      active.push({ key: 'minPrice', label: `Min: R${filters.minPrice}` });
     }
 
     if (filters.maxPrice) {
-      active.push(`Max: R${filters.maxPrice}`);
+      active.push({ key: 'maxPrice', label: `Max: R${filters.maxPrice}` });
     }
 
     if (filters.size) {
-      active.push(`Size: ${filters.size}`);
+      active.push({ key: 'size', label: `Size: ${filters.size}` });
     }
 
     if (filters.colour) {
-      active.push(`Colour: ${filters.colour}`);
+      active.push({ key: 'colour', label: `Colour: ${filters.colour}` });
     }
 
     if (filters.material) {
-      active.push(`Material: ${filters.material}`);
+      active.push({ key: 'material', label: `Material: ${filters.material}` });
     }
 
     return active;
+  }
+
+  protected async removeFilter(key: ShopFilterKey): Promise<void> {
+    const resetValue = key === 'sort' ? 'newest' : '';
+    this.filtersForm.controls[key].setValue(resetValue);
+    await this.search(1);
   }
 
   protected sortLabel(): string {
@@ -406,5 +438,19 @@ export class ShopPageComponent implements OnInit {
     }
 
     return null;
+  }
+
+  private hydrateFiltersFromQueryParams(): void {
+    const queryParamMap = this.route.snapshot.queryParamMap;
+    const supportedSorts = new Set(['newest', 'price_asc', 'price_desc', 'relevance']);
+    const sort = queryParamMap.get('sort')?.trim() ?? '';
+
+    this.filtersForm.patchValue({
+      query: queryParamMap.get('query')?.trim() ?? '',
+      categorySlug: queryParamMap.get('categorySlug')?.trim() ?? '',
+      colour: queryParamMap.get('colour')?.trim() ?? '',
+      material: queryParamMap.get('material')?.trim() ?? '',
+      sort: supportedSorts.has(sort) ? sort : 'newest'
+    });
   }
 }

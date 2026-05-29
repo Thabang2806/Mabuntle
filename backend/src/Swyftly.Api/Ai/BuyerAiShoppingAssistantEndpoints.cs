@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Swyftly.Api.Results;
 using Swyftly.Api.Security;
+using Swyftly.Application.Abstractions;
 using Swyftly.Application.Ai;
 using Swyftly.Application.Identity;
 using Swyftly.Domain.Catalog;
@@ -29,8 +31,12 @@ public static class BuyerAiShoppingAssistantEndpoints
 
     private static async Task<IResult> SearchAsync(
         BuyerAiShoppingAssistantRequest request,
+        ClaimsPrincipal principal,
         IAiShoppingIntentService intentService,
+        ICurrentUser currentUser,
+        IBuyerAiPersonalizationService personalizationService,
         SwyftlyDbContext dbContext,
+        TimeProvider timeProvider,
         CancellationToken cancellationToken)
     {
         var intentResult = await intentService.ExtractIntentAsync(
@@ -52,8 +58,24 @@ public static class BuyerAiShoppingAssistantEndpoints
                 candidate.PrimaryImageUrl,
                 candidate.MinPrice,
                 "ZAR",
-                BuildMatchReasons(intent, candidate.Product, candidate.CategoryName, candidate.VariantColours, candidate.VariantSizes)))
+                BuildMatchReasons(intent, candidate.Product, candidate.CategoryName, candidate.VariantColours, candidate.VariantSizes),
+                PersonalizationApplied: false,
+                []))
             .ToArray();
+        cards = await ApplyPersonalizationAsync(
+            cards,
+            ParseUserId(currentUser.UserId),
+            personalizationService,
+            timeProvider.GetUtcNow(),
+            cancellationToken);
+
+        await BuyerAiDiscoveryHistoryWriter.SaveAssistantHistoryIfEnabledAsync(
+            principal,
+            intent,
+            cards,
+            dbContext,
+            timeProvider,
+            cancellationToken);
 
         return HttpResults.Ok(new BuyerAiShoppingAssistantResponse(
             intent,
@@ -172,6 +194,9 @@ public static class BuyerAiShoppingAssistantEndpoints
     private static bool ContainsIfPresent(string searchable, string? value) =>
         value is null || searchable.Contains(value.ToLowerInvariant(), StringComparison.Ordinal);
 
+    private static Guid ParseUserId(string? userId) =>
+        Guid.TryParse(userId, out var parsed) ? parsed : Guid.Empty;
+
     private static IReadOnlyCollection<string> BuildMatchReasons(
         ShoppingIntent intent,
         Product product,
@@ -208,6 +233,52 @@ public static class BuyerAiShoppingAssistantEndpoints
         return reasons;
     }
 
+    private static async Task<BuyerAiProductCardResponse[]> ApplyPersonalizationAsync(
+        BuyerAiProductCardResponse[] cards,
+        Guid userId,
+        IBuyerAiPersonalizationService personalizationService,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (cards.Length == 0)
+        {
+            return cards;
+        }
+
+        var personalization = await personalizationService.PersonalizeAsync(
+            userId,
+            cards.Select(card => card.ProductId).ToArray(),
+            now,
+            cancellationToken);
+        if (personalization.Count == 0)
+        {
+            return cards;
+        }
+
+        var byProductId = personalization.ToDictionary(item => item.ProductId);
+        return cards
+            .Select((card, index) =>
+            {
+                byProductId.TryGetValue(card.ProductId, out var result);
+                return new
+                {
+                    Card = result is null
+                        ? card
+                        : card with
+                        {
+                            PersonalizationApplied = result.PersonalizationApplied,
+                            PersonalizationReasons = result.PersonalizationReasons
+                        },
+                    Score = result?.Score ?? 0,
+                    Index = index
+                };
+            })
+            .OrderByDescending(item => item.Score)
+            .ThenBy(item => item.Index)
+            .Select(item => item.Card)
+            .ToArray();
+    }
+
     private sealed record ProductCandidate(
         Product Product,
         string? CategoryName,
@@ -234,4 +305,6 @@ public sealed record BuyerAiProductCardResponse(
     string? ImageUrl,
     decimal Price,
     string Currency,
-    IReadOnlyCollection<string> MatchReasons);
+    IReadOnlyCollection<string> MatchReasons,
+    bool PersonalizationApplied,
+    IReadOnlyCollection<string> PersonalizationReasons);

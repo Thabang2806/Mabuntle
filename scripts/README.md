@@ -73,4 +73,56 @@ Seeded accounts:
 
 `-SeedSellerFlowDemo` also creates one product in `PendingReview` and one ad campaign in `PendingReview` for the verified seller so `/admin/products` and `/admin/ads` can be tested immediately. See `docs/seller-flow-test-runbook.md` for the manual checklist and `docs/seller-flow-qa-results.md` for the latest QA evidence.
 
+## Buyer post-purchase demo helper
+
+After seeding sample products, use `create-buyer-post-purchase-demo.ps1` to create a delivered buyer order through the real local APIs:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\create-buyer-post-purchase-demo.ps1 -Password "UseYourOwnDevPassword1!"
+```
+
+The helper logs in as `buyer@swyftly.local`, adds `rose-linen-midi-dress` to cart, quotes shipping, creates an order, initiates a `Fake` payment, posts a signed fake paid webhook, logs in as `seller@swyftly.local`, and marks the order delivered through seller fulfilment endpoints.
+
+Useful options:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\create-buyer-post-purchase-demo.ps1 `
+  -Password "UseYourOwnDevPassword1!" `
+  -ApiBaseUrl "https://localhost:7268" `
+  -FrontendBaseUrl "http://localhost:4200" `
+  -ProductSlug "rose-linen-midi-dress" `
+  -SkipCertificateCheck
+```
+
+Prerequisites:
+
+- API must be running with `PaymentProvider:ProviderName=Fake`.
+- `PaymentProvider:WebhookSigningSecret` must match the script secret. The default matches `appsettings.Development.json`.
+- Sample products must already be seeded with `-SeedSampleProducts`.
+- The script is API-only and fails non-zero when auth, checkout, webhook, or fulfilment fails.
+
 Do not use these accounts in production.
+
+## Buyer AI attribution demo helper
+
+After seeding sample products, use `create-buyer-ai-attribution-demo.ps1` to validate the buyer AI discovery attribution path through the real local APIs:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\create-buyer-ai-attribution-demo.ps1 -Password "UseYourOwnDevPassword1!" -SkipCertificateCheck
+```
+
+The helper logs in as `buyer@swyftly.local`, calls the existing assistant and visual-search endpoints, records sanitized growth telemetry through `/api/buyer/growth-events`, adds the attributed product to cart, quotes shipping, creates an order, initiates a `Fake` payment, posts a signed fake paid webhook, then reads the aggregate admin buyer-growth report as `admin@swyftly.local`.
+
+Useful options:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\create-buyer-ai-attribution-demo.ps1 `
+  -Password "UseYourOwnDevPassword1!" `
+  -ApiBaseUrl "https://localhost:7268" `
+  -FrontendBaseUrl "http://localhost:4200" `
+  -ProductSlug "rose-linen-midi-dress" `
+  -AssistantOnly `
+  -SkipCertificateCheck
+```
+
+The script is API-only, uses existing contracts, does not write attribution rows directly, and fails non-zero when auth, AI, telemetry, cart, checkout, webhook, or report reads fail. Because outcome attribution uses a 7-day buyer/tool window, run negative-control checks with a clean database or a buyer without recent AI telemetry.

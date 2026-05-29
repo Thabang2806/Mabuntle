@@ -53,6 +53,8 @@ describe('CheckoutSuccessPageComponent', () => {
     expect(compiled.textContent).toContain('PendingPayment');
     expect(compiled.textContent).toContain('Order reference');
     expect(compiled.textContent).toContain('Total');
+    expect(compiled.textContent).toContain('Payment status');
+    expect(compiled.textContent).toContain('Fake');
     expect(compiled.textContent).toContain('Retry payment');
 
     const retryButton = Array.from(compiled.querySelectorAll('button'))
@@ -92,6 +94,19 @@ export function createOrder(overrides: Partial<BuyerOrderResult> = {}): BuyerOrd
     totalAmount: 500,
     statusHistory: [],
     shipments: [],
+    paymentSummary: {
+      paymentId: 'payment-id',
+      providerName: 'Fake',
+      providerReference: 'fake-reference',
+      status: 'Pending',
+      amount: 500,
+      currency: 'ZAR',
+      checkoutUrlAvailable: true,
+      paidAtUtc: null,
+      failedAtUtc: null,
+      cancelledAtUtc: null,
+      updatedAtUtc: '2026-05-27T20:00:00Z'
+    },
     ...overrides
   };
 }

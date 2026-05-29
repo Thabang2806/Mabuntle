@@ -3,14 +3,18 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 import { BuyerAiAssistantService } from '../buyer/buyer-ai-assistant.service';
+import { BuyerGrowthTelemetryService } from '../buyer/buyer-growth-telemetry.service';
 import { BuyerAiAssistantPageComponent } from './buyer-ai-assistant-page.component';
 
 describe('BuyerAiAssistantPageComponent', () => {
   let fixture: ComponentFixture<BuyerAiAssistantPageComponent>;
   let assistantService: jasmine.SpyObj<BuyerAiAssistantService>;
+  let telemetryService: jasmine.SpyObj<BuyerGrowthTelemetryService>;
 
   beforeEach(async () => {
+    localStorage.removeItem('swyftly.buyer.assistant.recentPrompts');
     assistantService = jasmine.createSpyObj<BuyerAiAssistantService>('BuyerAiAssistantService', ['search']);
+    telemetryService = jasmine.createSpyObj<BuyerGrowthTelemetryService>('BuyerGrowthTelemetryService', ['recordEvent']);
     assistantService.search.and.resolveTo({
       intent: {
         category: 'Dresses',
@@ -37,7 +41,9 @@ describe('BuyerAiAssistantPageComponent', () => {
         imageUrl: null,
         price: 999,
         currency: 'ZAR',
-        matchReasons: ['Available in Black.', 'Available in size M.']
+        matchReasons: ['Available in Black.', 'Available in size M.'],
+        personalizationApplied: true,
+        personalizationReasons: ['Similar to saved items']
       }],
       summary: 'These matches come only from published Swyftly products returned by the backend search.',
       safetyNote: null
@@ -48,7 +54,8 @@ describe('BuyerAiAssistantPageComponent', () => {
       providers: [
         provideNoopAnimations(),
         provideRouter([]),
-        { provide: BuyerAiAssistantService, useValue: assistantService }
+        { provide: BuyerAiAssistantService, useValue: assistantService },
+        { provide: BuyerGrowthTelemetryService, useValue: telemetryService }
       ]
     }).compileComponents();
 
@@ -75,6 +82,90 @@ describe('BuyerAiAssistantPageComponent', () => {
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Dresses');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Up to R1,500');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('Available in Black.');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Personalized');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Similar to saved items');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('High confidence');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('View product');
+    expect(telemetryService.recordEvent).toHaveBeenCalledWith(jasmine.objectContaining({
+      eventType: 'AssistantSearchSubmitted',
+      sourceTool: 'Assistant',
+      resultCount: 1,
+      confidenceBand: 'High',
+      category: 'Dresses',
+      colour: 'Black',
+      sourceRoute: '/assistant'
+    }));
+  });
+
+  it('records product, shop handoff, and structured feedback telemetry without changing navigation links', async () => {
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const input = compiled.querySelector('textarea') as HTMLTextAreaElement;
+    input.value = 'black dress';
+    input.dispatchEvent(new Event('input'));
+
+    const form = compiled.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const productLink = compiled.querySelector('a[href="/product/black-wedding-dress"]') as HTMLAnchorElement;
+    productLink.click();
+    const shopLink = Array.from(compiled.querySelectorAll('a'))
+      .find(anchor => anchor.textContent?.includes('Refine in shop')) as HTMLAnchorElement;
+    shopLink.click();
+    const feedbackButton = Array.from(compiled.querySelectorAll('.ai-feedback-card button'))
+      .find(button => button.textContent?.includes('Too broad')) as HTMLButtonElement;
+    feedbackButton.click();
+    fixture.detectChanges();
+
+    expect(telemetryService.recordEvent).toHaveBeenCalledWith(jasmine.objectContaining({
+      eventType: 'AssistantProductOpened',
+      productId: 'product-id'
+    }));
+    expect(telemetryService.recordEvent).toHaveBeenCalledWith(jasmine.objectContaining({
+      eventType: 'AssistantShopHandoff'
+    }));
+    expect(telemetryService.recordEvent).toHaveBeenCalledWith(jasmine.objectContaining({
+      eventType: 'AssistantFeedbackSubmitted',
+      feedbackReason: 'TooBroad'
+    }));
+    expect(compiled.textContent).toContain('Feedback was saved without storing your prompt.');
+  });
+
+  it('stores, reuses, and clears recent prompts locally without storing results', async () => {
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+    const input = compiled.querySelector('textarea') as HTMLTextAreaElement;
+    input.value = 'black dress';
+    input.dispatchEvent(new Event('input'));
+
+    const form = compiled.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const stored = JSON.parse(localStorage.getItem('swyftly.buyer.assistant.recentPrompts') ?? '[]');
+    expect(stored[0].text).toBe('black dress');
+    expect(stored[0].savedAtUtc).toEqual(jasmine.any(String));
+    expect(stored[0].products).toBeUndefined();
+
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    const recentButton = Array.from(compiled.querySelectorAll('.ai-recent-panel button'))
+      .find(button => button.textContent?.includes('black dress')) as HTMLButtonElement;
+    recentButton.click();
+    fixture.detectChanges();
+
+    expect(input.value).toBe('black dress');
+
+    const clearButton = Array.from(compiled.querySelectorAll('.ai-recent-panel button'))
+      .find(button => button.textContent?.includes('Clear')) as HTMLButtonElement;
+    clearButton.click();
+    fixture.detectChanges();
+
+    expect(localStorage.getItem('swyftly.buyer.assistant.recentPrompts')).toBeNull();
+    expect(compiled.querySelector('.ai-recent-panel')).toBeNull();
   });
 
   it('populates the form from an example prompt without submitting', () => {
@@ -127,6 +218,7 @@ describe('BuyerAiAssistantPageComponent', () => {
     fixture.detectChanges();
 
     expect(compiled.textContent).toContain('Needs more detail');
+    expect(compiled.textContent).toContain('Low confidence');
     expect(compiled.textContent).toContain('Can you add a category or budget?');
     expect(compiled.textContent).toContain('No product cards to show');
   });

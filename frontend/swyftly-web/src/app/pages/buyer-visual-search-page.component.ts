@@ -1,19 +1,33 @@
-import { CurrencyPipe } from '@angular/common';
-import { Component, signal, inject } from '@angular/core';
+import { CurrencyPipe, isPlatformBrowser } from '@angular/common';
+import { Component, PLATFORM_ID, signal, inject } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
+import { BuyerGrowthConfidenceBand, BuyerGrowthFeedbackReason } from '../buyer/buyer-growth-telemetry.models';
+import { BuyerGrowthTelemetryService } from '../buyer/buyer-growth-telemetry.service';
 import { BuyerVisualSearchProductCardResponse, BuyerVisualSearchResponse } from '../buyer/buyer-visual-search.models';
 import { BuyerVisualSearchService } from '../buyer/buyer-visual-search.service';
 import { LuxuryBuyerStylesComponent } from '../buyer/luxury-buyer-styles.component';
 import { EmptyStateComponent } from '../shared/ui/empty-state.component';
 import { PageHeaderComponent } from '../shared/ui/page-header.component';
 import { ProductVisualFallbackComponent, ProductVisualTone } from '../shared/ui/product-visual-fallback.component';
-import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
+import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge.component';
 import { UiAlertComponent } from '../shared/ui/ui-alert.component';
+
+interface RecentVisualReference {
+  text: string;
+  savedAtUtc: string;
+}
+
+interface VisualConfidenceBand {
+  label: string;
+  band: BuyerGrowthConfidenceBand;
+  tone: StatusBadgeTone;
+  detail: string;
+}
 
 @Component({
   selector: 'app-buyer-visual-search-page',
@@ -52,7 +66,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
           <label class="visual-upload-control">
             <span>Image upload</span>
-            <input type="file" accept="image/png,image/jpeg,image/webp" (change)="onFileSelected($event)">
+            <input #imageInput type="file" accept="image/png,image/jpeg,image/webp" (change)="onFileSelected($event)">
             <small>PNG, JPEG, or WebP up to 5 MB.</small>
           </label>
 
@@ -67,6 +81,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 <strong>{{ selectedFileName() }}</strong>
                 <span>{{ isReadingImage() ? 'Preparing image...' : 'Ready to search' }}</span>
               </div>
+              <button mat-button type="button" (click)="clearSelectedFile(imageInput)">Remove</button>
             </div>
           }
 
@@ -75,9 +90,31 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             <input matInput formControlName="imageReference" placeholder="black formal maxi dress flatlay">
           </mat-form-field>
 
-          <button mat-flat-button type="submit" [disabled]="isLoading() || isReadingImage()">
-            {{ isLoading() ? 'Searching...' : 'Search visually' }}
-          </button>
+          @if (recentReferences().length > 0) {
+            <div class="ai-recent-panel" aria-label="Recent visual references">
+              <div>
+                <strong>Recent references</strong>
+                <button mat-button type="button" (click)="clearRecentReferences()">Clear</button>
+              </div>
+              <div class="ai-chip-row">
+                @for (recent of recentReferences(); track recent.text) {
+                  <button mat-stroked-button type="button" (click)="useRecentReference(recent.text)">
+                    {{ recent.text }}
+                  </button>
+                }
+              </div>
+              <small>Only text references are stored in this browser. Uploaded images are not saved.</small>
+            </div>
+          }
+
+          <div class="visual-control-row">
+            <button mat-flat-button type="submit" [disabled]="isLoading() || isReadingImage()">
+              {{ isLoading() ? 'Searching...' : 'Search visually' }}
+            </button>
+            <button mat-stroked-button type="button" (click)="resetSearch(imageInput)" [disabled]="isLoading()">
+              Reset search
+            </button>
+          </div>
         </form>
 
         <aside class="ai-discovery-guide" aria-label="Visual search guidance">
@@ -100,7 +137,10 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
       @if (response()) {
         <section class="ai-result-panel" aria-label="Visual search result summary">
           <div class="ai-result-copy">
-            <app-status-badge [label]="confidenceLabel()" tone="success" />
+            @if (confidenceBand(); as confidence) {
+              <app-status-badge [label]="confidence.label" [tone]="confidence.tone" />
+              <p class="ai-confidence-copy">{{ confidence.detail }}</p>
+            }
             <h2>Visual attributes</h2>
             <p>{{ response()!.summary }}</p>
             <app-ui-alert>{{ response()!.imageRetentionNote }}</app-ui-alert>
@@ -129,13 +169,13 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               <h2>Product matches</h2>
               <p>{{ products().length }} {{ products().length === 1 ? 'match' : 'matches' }} returned by backend search.</p>
             </div>
-            <a mat-stroked-button routerLink="/shop">Search manually</a>
+            <a mat-stroked-button routerLink="/shop" [queryParams]="visualShopQueryParams()" (click)="trackShopHandoff()">Search manually</a>
           </div>
 
           @if (products().length > 0) {
             <div class="ai-result-grid">
               @for (product of products(); track product.productId) {
-                <a class="ai-product-result-card hf-ai-product-card" [routerLink]="['/product', product.slug]">
+                <a class="ai-product-result-card hf-ai-product-card" [routerLink]="['/product', product.slug]" (click)="trackProductOpen(product)">
                   <div class="ai-product-result-media hf-ai-product-media">
                     @if (product.imageUrl) {
                       <img [src]="product.imageUrl" [alt]="product.title">
@@ -152,13 +192,22 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                     <h3>{{ product.title }}</h3>
                     <strong>{{ product.price | currency:product.currency:'symbol':'1.2-2' }}</strong>
                     <ul>
-                      @for (reason of product.matchReasons; track reason) {
-                        <li>{{ reason }}</li>
+                    @for (reason of product.matchReasons; track reason) {
+                      <li>{{ reason }}</li>
+                    }
+                  </ul>
+                  @if (product.personalizationApplied && product.personalizationReasons.length > 0) {
+                    <div class="ai-personalization-reasons" aria-label="Why this was recommended">
+                      <app-status-badge label="Personalized" tone="accent" />
+                      @for (reason of product.personalizationReasons; track reason) {
+                        <span>{{ reason }}</span>
                       }
-                    </ul>
-                  </div>
-                </a>
-              }
+                    </div>
+                  }
+                  <span class="ai-card-action">View product</span>
+                </div>
+              </a>
+            }
             </div>
           } @else {
             <app-empty-state
@@ -166,8 +215,25 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               heading="No product cards to show"
               message="Try a clearer item photo, a more specific reference, or a broader manual search."
             >
-              <a mat-stroked-button routerLink="/shop">Open shop</a>
+              <a mat-stroked-button routerLink="/shop" [queryParams]="visualShopQueryParams()" (click)="trackShopHandoff()">Open shop</a>
             </app-empty-state>
+          }
+        </section>
+
+        <section class="ai-feedback-card" aria-label="Visual search usefulness feedback">
+          <div>
+            <strong>Was this useful?</strong>
+            <span>Feedback is stored as a reason code only. Uploaded images are not stored.</span>
+          </div>
+          <div class="ai-chip-row">
+            @for (reason of feedbackReasons; track reason.value) {
+              <button mat-stroked-button type="button" (click)="submitFeedback(reason.value)">
+                {{ reason.label }}
+              </button>
+            }
+          </div>
+          @if (feedbackStatus()) {
+            <small>{{ feedbackStatus() }}</small>
           }
         </section>
       }
@@ -177,9 +243,13 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 export class BuyerVisualSearchPageComponent {
   private static readonly supportedImageTypes = new Set(['image/png', 'image/jpeg', 'image/webp']);
   private static readonly maxImageSizeBytes = 5 * 1024 * 1024;
+  private static readonly recentReferencesStorageKey = 'swyftly.buyer.visualSearch.recentReferences';
+  private static readonly maxRecentReferenceCount = 6;
 
   private readonly formBuilder = inject(NonNullableFormBuilder);
   private readonly visualSearchService = inject(BuyerVisualSearchService);
+  private readonly telemetryService = inject(BuyerGrowthTelemetryService);
+  private readonly isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
 
   protected readonly response = signal<BuyerVisualSearchResponse | null>(null);
   protected readonly isLoading = signal(false);
@@ -187,6 +257,16 @@ export class BuyerVisualSearchPageComponent {
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly selectedFileName = signal<string | null>(null);
   protected readonly imagePreviewDataUrl = signal<string | null>(null);
+  protected readonly recentReferences = signal<RecentVisualReference[]>([]);
+  protected readonly feedbackStatus = signal<string | null>(null);
+  protected readonly feedbackReasons: Array<{ value: BuyerGrowthFeedbackReason; label: string }> = [
+    { value: 'GoodMatches', label: 'Good matches' },
+    { value: 'TooBroad', label: 'Too broad' },
+    { value: 'WrongStyle', label: 'Wrong style' },
+    { value: 'WrongCategory', label: 'Wrong category' },
+    { value: 'Unavailable', label: 'Unavailable' },
+    { value: 'LowConfidence', label: 'Low confidence' }
+  ];
 
   protected readonly form = this.formBuilder.group({
     imageReference: ['']
@@ -194,6 +274,10 @@ export class BuyerVisualSearchPageComponent {
 
   private imageDataBase64: string | null = null;
   private contentType: string | null = null;
+
+  constructor() {
+    this.recentReferences.set(this.readRecentReferences());
+  }
 
   protected products(): BuyerVisualSearchProductCardResponse[] {
     return this.response()?.products ?? [];
@@ -217,9 +301,61 @@ export class BuyerVisualSearchPageComponent {
       .map(([label, value]) => ({ label, value }));
   }
 
-  protected confidenceLabel(): string {
-    const confidence = this.response()?.attributes.confidence ?? 0;
-    return `Confidence ${Math.round(confidence * 100)}%`;
+  protected confidenceBand(): VisualConfidenceBand | null {
+    const attributes = this.response()?.attributes;
+    if (!attributes) {
+      return null;
+    }
+
+    const percent = Math.round(attributes.confidence * 100);
+    if (attributes.confidence >= 0.75) {
+      return {
+        label: `High visual match (${percent}%)`,
+        band: 'High',
+        tone: 'success',
+        detail: 'The extracted visual signals are strong, but product photos still cannot verify brand, fit, condition, or exact material.'
+      };
+    }
+
+    if (attributes.confidence >= 0.45) {
+      return {
+        label: `Medium visual match (${percent}%)`,
+        band: 'Medium',
+        tone: 'warning',
+        detail: 'Use these matches as a starting point. Add a text reference or browse manually if colour, material, or shape matters.'
+      };
+    }
+
+    return {
+      label: `Low visual match (${percent}%)`,
+      band: 'Low',
+      tone: 'danger',
+      detail: 'The image or reference was hard to interpret. A clearer product photo or broader manual search will be more reliable.'
+    };
+  }
+
+  protected useRecentReference(reference: string): void {
+    this.form.controls.imageReference.setValue(reference);
+    this.form.controls.imageReference.markAsDirty();
+    this.form.controls.imageReference.markAsTouched();
+  }
+
+  protected clearRecentReferences(): void {
+    this.recentReferences.set([]);
+    if (this.isBrowser) {
+      localStorage.removeItem(BuyerVisualSearchPageComponent.recentReferencesStorageKey);
+    }
+  }
+
+  protected visualShopQueryParams(): Record<string, string | null> {
+    const attributes = this.response()?.attributes;
+
+    return {
+      query: attributes?.searchText || this.form.controls.imageReference.value.trim() || null,
+      colour: attributes?.colour ?? null,
+      material: attributes?.materialGuess ?? null,
+      sort: 'relevance'
+    };
   }
 
   protected productTone(product: BuyerVisualSearchProductCardResponse): ProductVisualTone {
@@ -304,6 +440,9 @@ export class BuyerVisualSearchPageComponent {
 
     this.isLoading.set(true);
     this.errorMessage.set(null);
+    if (rawReference) {
+      this.rememberReference(rawReference);
+    }
 
     try {
       this.response.set(await this.visualSearchService.search({
@@ -312,6 +451,8 @@ export class BuyerVisualSearchPageComponent {
         fileName: this.selectedFileName(),
         contentType: this.contentType
       }));
+      this.feedbackStatus.set(null);
+      this.trackSearchSubmitted();
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
       this.response.set(null);
@@ -320,11 +461,127 @@ export class BuyerVisualSearchPageComponent {
     }
   }
 
-  private clearSelectedFile(): void {
+  protected clearSelectedFile(input?: HTMLInputElement): void {
     this.imageDataBase64 = null;
     this.contentType = null;
     this.selectedFileName.set(null);
     this.imagePreviewDataUrl.set(null);
     this.isReadingImage.set(false);
+    if (input) {
+      input.value = '';
+    }
+  }
+
+  protected resetSearch(input?: HTMLInputElement): void {
+    this.clearSelectedFile(input);
+    this.form.reset({ imageReference: '' });
+    this.response.set(null);
+    this.errorMessage.set(null);
+    this.feedbackStatus.set(null);
+  }
+
+  protected trackProductOpen(product: BuyerVisualSearchProductCardResponse): void {
+    this.telemetryService.recordEvent({
+      eventType: 'VisualProductOpened',
+      sourceTool: 'VisualSearch',
+      productId: product.productId,
+      resultCount: this.products().length,
+      confidenceBand: this.confidenceBand()?.band ?? null,
+      ...this.telemetryContext()
+    });
+  }
+
+  protected trackShopHandoff(): void {
+    this.telemetryService.recordEvent({
+      eventType: 'VisualShopHandoff',
+      sourceTool: 'VisualSearch',
+      resultCount: this.products().length,
+      confidenceBand: this.confidenceBand()?.band ?? null,
+      ...this.telemetryContext()
+    });
+  }
+
+  protected submitFeedback(reason: BuyerGrowthFeedbackReason): void {
+    this.telemetryService.recordEvent({
+      eventType: 'VisualFeedbackSubmitted',
+      sourceTool: 'VisualSearch',
+      resultCount: this.products().length,
+      confidenceBand: this.confidenceBand()?.band ?? null,
+      feedbackReason: reason,
+      ...this.telemetryContext()
+    });
+    this.feedbackStatus.set('Thanks. Feedback was saved without storing image data.');
+  }
+
+  private trackSearchSubmitted(): void {
+    this.telemetryService.recordEvent({
+      eventType: 'VisualSearchSubmitted',
+      sourceTool: 'VisualSearch',
+      resultCount: this.products().length,
+      confidenceBand: this.confidenceBand()?.band ?? null,
+      ...this.telemetryContext()
+    });
+  }
+
+  private telemetryContext(): {
+    category: string | null;
+    colour: string | null;
+    material: string | null;
+    sourceRoute: string;
+  } {
+    const attributes = this.response()?.attributes;
+
+    return {
+      category: attributes?.category ?? null,
+      colour: attributes?.colour ?? null,
+      material: attributes?.materialGuess ?? null,
+      sourceRoute: '/visual-search'
+    };
+  }
+
+  private rememberReference(reference: string): void {
+    const normalizedReference = reference.trim();
+    if (!normalizedReference) {
+      return;
+    }
+
+    const nextReferences = [
+      { text: normalizedReference, savedAtUtc: new Date().toISOString() },
+      ...this.recentReferences().filter(item => item.text.toLowerCase() !== normalizedReference.toLowerCase())
+    ].slice(0, BuyerVisualSearchPageComponent.maxRecentReferenceCount);
+
+    this.recentReferences.set(nextReferences);
+    this.writeRecentReferences(nextReferences);
+  }
+
+  private readRecentReferences(): RecentVisualReference[] {
+    if (!this.isBrowser) {
+      return [];
+    }
+
+    try {
+      const value = localStorage.getItem(BuyerVisualSearchPageComponent.recentReferencesStorageKey);
+      const parsed = value ? JSON.parse(value) : [];
+      return Array.isArray(parsed)
+        ? parsed
+          .filter((item): item is RecentVisualReference =>
+            typeof item?.text === 'string' && typeof item?.savedAtUtc === 'string')
+          .slice(0, BuyerVisualSearchPageComponent.maxRecentReferenceCount)
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private writeRecentReferences(references: RecentVisualReference[]): void {
+    if (!this.isBrowser) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(BuyerVisualSearchPageComponent.recentReferencesStorageKey, JSON.stringify(references));
+    } catch {
+      // Recent visual references are optional and must not block visual search.
+    }
   }
 }

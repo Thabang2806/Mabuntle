@@ -53,6 +53,14 @@ import { ProductSearchItemResponse } from './public-catalog.models';
           <span>{{ product().publishedAtUtc ? 'Recently listed' : 'Marketplace item' }}</span>
         </div>
 
+        @if (product().tags.length > 0) {
+          <div class="product-card-tags" aria-label="Product tags">
+            @for (tag of product().tags.slice(0, 3); track tag) {
+              <span>{{ tag }}</span>
+            }
+          </div>
+        }
+
         <div class="product-card-actions">
           <a mat-stroked-button [routerLink]="['/product', product().slug]">View details</a>
           @if (wishlistAction() !== 'hidden') {

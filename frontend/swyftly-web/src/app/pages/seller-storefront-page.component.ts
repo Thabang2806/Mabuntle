@@ -1,6 +1,10 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { StorefrontAnalyticsService } from '../analytics/storefront-analytics.service';
 import { getApiErrorMessage } from '../auth/api-error';
 import { ProductCardComponent } from '../shop/product-card.component';
@@ -13,7 +17,19 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
 @Component({
   selector: 'app-seller-storefront-page',
-  imports: [EmptyStateComponent, LuxuryPublicStylesComponent, MatButtonModule, ProductCardComponent, RouterLink, StatusBadgeComponent, UiAlertComponent],
+  imports: [
+    EmptyStateComponent,
+    LuxuryPublicStylesComponent,
+    MatButtonModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    ProductCardComponent,
+    ReactiveFormsModule,
+    RouterLink,
+    StatusBadgeComponent,
+    UiAlertComponent
+  ],
   template: `
     <app-luxury-public-styles />
     <section class="page shop-surface">
@@ -46,6 +62,10 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           <article>
             <strong>{{ storefront()?.products?.length ?? 0 }}</strong>
             <span>published product{{ (storefront()?.products?.length ?? 0) === 1 ? '' : 's' }}</span>
+          </article>
+          <article>
+            <strong>{{ inStockProductCount() }}</strong>
+            <span>currently in-stock listing{{ inStockProductCount() === 1 ? '' : 's' }}</span>
           </article>
           <article>
             <strong>Verified</strong>
@@ -90,16 +110,53 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           <div class="storefront-products-header">
             <div>
               <h2>Products from {{ storefront()?.storeName }}</h2>
-              <p>Each listing shows price, stock, and product detail before checkout.</p>
+              <p>{{ filteredProducts().length }} shown from this storefront. Each listing shows price, stock, and product detail before checkout.</p>
             </div>
             <a mat-stroked-button routerLink="/shop">Browse marketplace</a>
           </div>
 
-          <div class="product-grid">
-            @for (product of storefront()?.products; track product.productId) {
+          <form [formGroup]="storefrontFiltersForm" class="storefront-filter-bar" aria-label="Storefront product filters" novalidate>
+            <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
+              <mat-label>Search this store</mat-label>
+              <input matInput formControlName="query">
+            </mat-form-field>
+
+            <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
+              <mat-label>Availability</mat-label>
+              <mat-select formControlName="availability">
+                <mat-option value="">All products</mat-option>
+                <mat-option value="in_stock">In stock</mat-option>
+                <mat-option value="out_of_stock">Out of stock</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
+              <mat-label>Sort</mat-label>
+              <mat-select formControlName="sort">
+                <mat-option value="newest">Newest</mat-option>
+                <mat-option value="price_asc">Price low to high</mat-option>
+                <mat-option value="price_desc">Price high to low</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <button mat-stroked-button type="button" (click)="clearStorefrontFilters()">Clear</button>
+          </form>
+
+          @if (filteredProducts().length === 0) {
+            <app-empty-state
+              eyebrow="No matches"
+              heading="No products match these store filters"
+              message="Clear the storefront search or browse the wider marketplace."
+            >
+              <button mat-flat-button type="button" (click)="clearStorefrontFilters()">Clear store filters</button>
+            </app-empty-state>
+          } @else {
+            <div class="product-grid">
+            @for (product of filteredProducts(); track product.productId) {
               <app-product-card [product]="product"></app-product-card>
             }
-          </div>
+            </div>
+          }
         }
       } @else {
         <app-ui-alert tone="error">{{ errorMessage() ?? 'Seller storefront was not found.' }}</app-ui-alert>
@@ -109,6 +166,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 })
 export class SellerStorefrontPageComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
+  private readonly formBuilder = inject(NonNullableFormBuilder);
   private readonly publicCatalogService = inject(PublicCatalogService);
   private readonly router = inject(Router);
   private readonly storefrontAnalytics = inject(StorefrontAnalyticsService);
@@ -116,6 +174,47 @@ export class SellerStorefrontPageComponent implements OnInit {
   protected readonly storefront = signal<PublicSellerStorefrontResponse | null>(null);
   protected readonly isLoading = signal(true);
   protected readonly errorMessage = signal<string | null>(null);
+  protected readonly storefrontFiltersForm = this.formBuilder.group({
+    query: [''],
+    availability: [''],
+    sort: ['newest']
+  });
+  protected inStockProductCount(): number {
+    return this.storefront()?.products.filter(product => product.inStock).length ?? 0;
+  }
+
+  protected filteredProducts() {
+    const products = [...(this.storefront()?.products ?? [])];
+    const filters = this.storefrontFiltersForm.getRawValue();
+    const query = filters.query.trim().toLowerCase();
+    const filtered = products.filter(product => {
+      const searchable = [
+        product.title,
+        product.shortDescription,
+        product.categoryPath,
+        product.merchandisingLabel,
+        ...product.tags
+      ].filter(Boolean).join(' ').toLowerCase();
+      const queryMatches = !query || searchable.includes(query);
+      const availabilityMatches =
+        !filters.availability ||
+        (filters.availability === 'in_stock' && product.inStock) ||
+        (filters.availability === 'out_of_stock' && !product.inStock);
+      return queryMatches && availabilityMatches;
+    });
+
+    return filtered.sort((left, right) => {
+      if (filters.sort === 'price_asc') {
+        return left.priceMin - right.priceMin;
+      }
+
+      if (filters.sort === 'price_desc') {
+        return right.priceMin - left.priceMin;
+      }
+
+      return (right.publishedAtUtc ?? '').localeCompare(left.publishedAtUtc ?? '');
+    });
+  }
 
   async ngOnInit(): Promise<void> {
     const storeSlug = this.route.snapshot.paramMap.get('storeSlug');
@@ -141,6 +240,14 @@ export class SellerStorefrontPageComponent implements OnInit {
 
   protected storefrontInitial(): string {
     return this.storefront()?.storeName?.trim().charAt(0).toUpperCase() || 'S';
+  }
+
+  protected clearStorefrontFilters(): void {
+    this.storefrontFiltersForm.reset({
+      query: '',
+      availability: '',
+      sort: 'newest'
+    });
   }
 
   protected sellerPolicyEntries(): { label: string; value: string }[] {

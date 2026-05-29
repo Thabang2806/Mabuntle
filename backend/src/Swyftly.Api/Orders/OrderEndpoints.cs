@@ -9,6 +9,7 @@ using Swyftly.Application.Notifications;
 using Swyftly.Application.Orders;
 using Swyftly.Domain.Buyers;
 using Swyftly.Domain.Orders;
+using Swyftly.Domain.Payments;
 using Swyftly.Domain.Sellers;
 using Swyftly.Infrastructure.Persistence;
 using HttpResults = Microsoft.AspNetCore.Http.Results;
@@ -209,7 +210,15 @@ public static class OrderEndpoints
             .OrderByDescending(order => order.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
-        return HttpResults.Ok(orders.Select(Map).ToArray());
+        var paymentSummaries = await LoadBuyerPaymentSummariesAsync(
+            dbContext,
+            buyer.Id,
+            orders.Select(order => order.Id).ToArray(),
+            cancellationToken);
+
+        return HttpResults.Ok(orders.Select(order => Map(
+            order,
+            paymentSummaries.GetValueOrDefault(order.Id))).ToArray());
     }
 
     private static async Task<IResult> GetBuyerOrderAsync(
@@ -229,9 +238,18 @@ public static class OrderEndpoints
                 order => order.Id == orderId && order.BuyerId == buyer.Id,
                 cancellationToken);
 
-        return order is null
-            ? OrderNotFound()
-            : HttpResults.Ok(Map(order));
+        if (order is null)
+        {
+            return OrderNotFound();
+        }
+
+        var paymentSummary = await LoadBuyerPaymentSummaryAsync(
+            dbContext,
+            buyer.Id,
+            order.Id,
+            cancellationToken);
+
+        return HttpResults.Ok(Map(order, paymentSummary));
     }
 
     private static async Task<IResult> GetSellerOrdersAsync(
@@ -250,7 +268,7 @@ public static class OrderEndpoints
             .OrderByDescending(order => order.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
-        return HttpResults.Ok(orders.Select(Map).ToArray());
+        return HttpResults.Ok(orders.Select(order => Map(order)).ToArray());
     }
 
     private static async Task<IResult> GetSellerOrderAsync(
@@ -629,7 +647,62 @@ public static class OrderEndpoints
             : null;
     }
 
-    private static OrderResult Map(Order order) =>
+    private static async Task<IReadOnlyDictionary<Guid, OrderPaymentSummaryResult>> LoadBuyerPaymentSummariesAsync(
+        SwyftlyDbContext dbContext,
+        Guid buyerId,
+        IReadOnlyCollection<Guid> orderIds,
+        CancellationToken cancellationToken)
+    {
+        if (orderIds.Count == 0)
+        {
+            return new Dictionary<Guid, OrderPaymentSummaryResult>();
+        }
+
+        var payments = await dbContext.Payments
+            .AsNoTracking()
+            .Where(payment => payment.BuyerId == buyerId && orderIds.Contains(payment.OrderId))
+            .OrderByDescending(payment => payment.CreatedAtUtc)
+            .ThenByDescending(payment => payment.UpdatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        return payments
+            .GroupBy(payment => payment.OrderId)
+            .ToDictionary(
+                group => group.Key,
+                group => MapPaymentSummary(group.First()));
+    }
+
+    private static async Task<OrderPaymentSummaryResult?> LoadBuyerPaymentSummaryAsync(
+        SwyftlyDbContext dbContext,
+        Guid buyerId,
+        Guid orderId,
+        CancellationToken cancellationToken)
+    {
+        var payment = await dbContext.Payments
+            .AsNoTracking()
+            .Where(candidate => candidate.BuyerId == buyerId && candidate.OrderId == orderId)
+            .OrderByDescending(candidate => candidate.CreatedAtUtc)
+            .ThenByDescending(candidate => candidate.UpdatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return payment is null ? null : MapPaymentSummary(payment);
+    }
+
+    private static OrderPaymentSummaryResult MapPaymentSummary(Payment payment) =>
+        new(
+            payment.Id,
+            payment.Provider,
+            payment.ProviderReference,
+            payment.Status.ToString(),
+            payment.Amount,
+            payment.Currency,
+            !string.IsNullOrWhiteSpace(payment.CheckoutUrl),
+            payment.PaidAtUtc,
+            payment.FailedAtUtc,
+            payment.Status == PaymentStatus.Cancelled ? payment.UpdatedAtUtc : null,
+            payment.UpdatedAtUtc);
+
+    private static OrderResult Map(Order order, OrderPaymentSummaryResult? paymentSummary = null) =>
         new(
             order.Id,
             order.BuyerId,
@@ -733,7 +806,8 @@ public static class OrderEndpoints
                     order.PickupPoint.Latitude,
                     order.PickupPoint.Longitude,
                     order.PickupPoint.OpeningHours),
-            SellerPolicyResponseMapper.MapSnapshot(order.SellerPolicySnapshot));
+            SellerPolicyResponseMapper.MapSnapshot(order.SellerPolicySnapshot),
+            paymentSummary);
 
     private static bool HasLatestShipmentEvent(OrderResult order, string eventType, DateTimeOffset occurredAtUtc) =>
         order.Shipments

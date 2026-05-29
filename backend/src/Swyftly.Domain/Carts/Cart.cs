@@ -92,6 +92,12 @@ public sealed class Cart : AuditableEntity
         SellerId = null;
     }
 
+    public void MarkCheckedOut()
+    {
+        ValidateActive();
+        Status = CartStatus.CheckedOut;
+    }
+
     private CartItem GetRequiredItem(Guid cartItemId) =>
         _items.SingleOrDefault(item => item.Id == cartItemId)
         ?? throw new InvalidOperationException("Cart item was not found.");

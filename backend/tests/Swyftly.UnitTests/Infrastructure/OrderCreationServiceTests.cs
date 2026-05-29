@@ -60,6 +60,7 @@ public class OrderCreationServiceTests
         var reservation = await dbContext.InventoryReservations.SingleAsync();
         Assert.Equal(InventoryReservationStatus.Active, reservation.Status);
         Assert.Equal(2, variant.ReservedQuantity);
+        Assert.Equal(CartStatus.CheckedOut, cart.Status);
     }
 
     [Fact]
@@ -90,6 +91,7 @@ public class OrderCreationServiceTests
         Assert.Equal(first.Value.OrderId, second.Value.OrderId);
         Assert.Equal(1, await dbContext.Orders.CountAsync());
         Assert.Equal(1, await dbContext.InventoryReservations.CountAsync());
+        Assert.Equal(CartStatus.CheckedOut, cart.Status);
     }
 
     [Fact]
@@ -120,7 +122,8 @@ public class OrderCreationServiceTests
             dbContext,
             new EfInventoryReservationService(dbContext),
             new LocalRulesAddressVerificationService(TimeProvider.System),
-            new NoOpStorefrontAnalyticsService());
+            new NoOpStorefrontAnalyticsService(),
+            new NoOpBuyerGrowthOutcomeAttributionService());
 
     private static OrderDeliveryAddressRequest TestDeliveryAddress(string recipientName = "Thabo Buyer") =>
         new(
@@ -146,6 +149,46 @@ public class OrderCreationServiceTests
             Task.CompletedTask;
 
         public Task RecordOrderPaidAsync(Guid orderId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class NoOpBuyerGrowthOutcomeAttributionService : IBuyerGrowthOutcomeAttributionService
+    {
+        public Task RecordProductOpenedAsync(
+            Guid buyerId,
+            Guid productId,
+            Guid sourceEventId,
+            BuyerGrowthSourceTool sourceTool,
+            BuyerGrowthConfidenceBand? confidenceBand,
+            DateTimeOffset occurredAtUtc,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task RecordProductAddedToCartAsync(
+            Guid buyerId,
+            Guid productId,
+            Guid cartId,
+            DateTimeOffset occurredAtUtc,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task RecordCheckoutStartedAsync(
+            Guid buyerId,
+            Guid cartId,
+            DateTimeOffset occurredAtUtc,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task RecordOrderCreatedAsync(
+            Guid orderId,
+            DateTimeOffset occurredAtUtc,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task RecordOrderPaidAsync(
+            Guid orderId,
+            DateTimeOffset occurredAtUtc,
+            CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
     }
 

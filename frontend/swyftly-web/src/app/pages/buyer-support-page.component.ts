@@ -1,7 +1,8 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -55,6 +56,9 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         <div class="buyer-detail-grid">
           <section class="buyer-panel">
             <h2>Create ticket</h2>
+            @if (ticketForm.controls.linkedOrderId.value) {
+              <app-ui-alert tone="info">This ticket is linked to order {{ shortLinkedId(ticketForm.controls.linkedOrderId.value) }} so support can investigate faster. You can still edit the linked order or seller before submitting.</app-ui-alert>
+            }
             <form [formGroup]="ticketForm" (ngSubmit)="createTicket()" class="buyer-form-grid" novalidate>
               <mat-form-field appearance="outline">
                 <mat-label>Category</mat-label>
@@ -152,8 +156,11 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 })
 export class BuyerSupportPageComponent implements OnInit {
   private readonly formBuilder = inject(NonNullableFormBuilder);
+  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly supportService = inject(BuyerSupportService);
+  private readonly destroyRef = inject(DestroyRef);
+  private queryPrefilledContext = false;
 
   protected readonly categories: readonly BuyerSupportTicketCategory[] = [
     'OrderIssue',
@@ -180,6 +187,10 @@ export class BuyerSupportPageComponent implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
+    this.route.queryParamMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(query => this.applyLinkedContextFromQuery(query));
+
     await this.loadTickets();
   }
 
@@ -234,6 +245,10 @@ export class BuyerSupportPageComponent implements OnInit {
     return 'neutral';
   }
 
+  protected shortLinkedId(value: string): string {
+    return shortId(value.trim());
+  }
+
   private async loadTickets(): Promise<void> {
     this.isLoading.set(true);
     this.errorMessage.set(null);
@@ -246,9 +261,39 @@ export class BuyerSupportPageComponent implements OnInit {
       this.isLoading.set(false);
     }
   }
+
+  private applyLinkedContextFromQuery(query: ParamMap): void {
+    const orderId = query.get('orderId')?.trim() ?? '';
+    const sellerId = query.get('sellerId')?.trim() ?? '';
+
+    if (!orderId && !sellerId) {
+      if (this.queryPrefilledContext) {
+        this.ticketForm.patchValue({
+          subject: '',
+          linkedOrderId: '',
+          linkedSellerId: ''
+        });
+        this.queryPrefilledContext = false;
+      }
+
+      return;
+    }
+
+    this.queryPrefilledContext = true;
+    this.ticketForm.patchValue({
+      category: 'OrderIssue',
+      subject: orderId ? `Question about order ${shortId(orderId)}` : 'Question about my order',
+      linkedOrderId: orderId,
+      linkedSellerId: sellerId
+    });
+  }
 }
 
 function emptyToNull(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
+}
+
+function shortId(value: string): string {
+  return value.length > 8 ? value.slice(0, 8) : value;
 }

@@ -36,7 +36,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
       <app-page-header
         eyebrow="Buyer account"
         heading="Disputes"
-        description="Review dispute messages and add buyer evidence when a case is open."
+        description="Review dispute messages and evidence. Buyer-favoured outcomes may create refund requests that still require finance processing."
       />
 
       @if (isLoading()) {
@@ -54,7 +54,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           <app-empty-state
             eyebrow="Disputes"
             heading="No disputes"
-            message="Disputes opened from returns or eligible orders will appear here."
+            message="Standalone dispute cases will appear here when one is opened. Return escalations stay on the related return until support creates a formal dispute case, and any refund outcome appears under Refunds after finance starts processing it."
           />
         } @else {
           <div class="admin-finance-layout buyer-case-layout">

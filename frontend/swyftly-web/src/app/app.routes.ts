@@ -308,6 +308,12 @@ export const routes: Routes = [
     canActivate: [requireRoleGuard(['Buyer'])]
   },
   {
+    path: 'account/refunds',
+    loadComponent: () => import('./pages/buyer-refunds-page.component').then(component => component.BuyerRefundsPageComponent),
+    title: 'Account refunds | Swyftly',
+    canActivate: [requireRoleGuard(['Buyer'])]
+  },
+  {
     path: 'account/wishlist',
     loadComponent: () => import('./pages/buyer-wishlist-page.component').then(component => component.BuyerWishlistPageComponent),
     title: 'Wishlist | Swyftly',
@@ -323,6 +329,12 @@ export const routes: Routes = [
     path: 'account/notifications',
     loadComponent: () => import('./pages/buyer-notifications-page.component').then(component => component.BuyerNotificationsPageComponent),
     title: 'Notifications | Swyftly',
+    canActivate: [requireRoleGuard(['Buyer'])]
+  },
+  {
+    path: 'account/ai-history',
+    loadComponent: () => import('./pages/buyer-ai-history-page.component').then(component => component.BuyerAiHistoryPageComponent),
+    title: 'AI history | Swyftly',
     canActivate: [requireRoleGuard(['Buyer'])]
   },
   {

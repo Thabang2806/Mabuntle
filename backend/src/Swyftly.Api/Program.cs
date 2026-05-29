@@ -344,6 +344,8 @@ app.MapSellerDashboardEndpoints();
 app.MapPublicProductEndpoints();
 app.MapBuyerSettingsEndpoints();
 app.MapBuyerEngagementEndpoints();
+app.MapBuyerGrowthEventEndpoints();
+app.MapBuyerAiDiscoveryEndpoints();
 app.MapCartEndpoints();
 app.MapOrderEndpoints();
 app.MapPaymentEndpoints();

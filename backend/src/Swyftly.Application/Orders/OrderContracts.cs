@@ -56,7 +56,21 @@ public sealed record OrderResult(
     int? DeliveryEstimatedMinDays = null,
     int? DeliveryEstimatedMaxDays = null,
     OrderPickupPointResult? PickupPoint = null,
-    SellerPolicySnapshotResponse? SellerPolicySnapshot = null);
+    SellerPolicySnapshotResponse? SellerPolicySnapshot = null,
+    OrderPaymentSummaryResult? PaymentSummary = null);
+
+public sealed record OrderPaymentSummaryResult(
+    Guid PaymentId,
+    string ProviderName,
+    string? ProviderReference,
+    string Status,
+    decimal Amount,
+    string Currency,
+    bool CheckoutUrlAvailable,
+    DateTimeOffset? PaidAtUtc,
+    DateTimeOffset? FailedAtUtc,
+    DateTimeOffset? CancelledAtUtc,
+    DateTimeOffset UpdatedAtUtc);
 
 public sealed record OrderDeliveryAddressResult(
     string RecipientName,

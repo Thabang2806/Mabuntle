@@ -1,11 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { BuyerAiDiscoveryService } from '../buyer/buyer-ai-discovery.service';
 import { BuyerSettingsService } from '../buyer/buyer-settings.service';
 import { BuyerSettingsPageComponent } from './buyer-settings-page.component';
 
 describe('BuyerSettingsPageComponent', () => {
   let fixture: ComponentFixture<BuyerSettingsPageComponent>;
   let settingsService: jasmine.SpyObj<BuyerSettingsService>;
+  let aiDiscoveryService: jasmine.SpyObj<BuyerAiDiscoveryService>;
 
   beforeEach(async () => {
     settingsService = jasmine.createSpyObj<BuyerSettingsService>('BuyerSettingsService', [
@@ -19,6 +21,11 @@ describe('BuyerSettingsPageComponent', () => {
       'deleteDeliveryAddress',
       'makeDefaultDeliveryAddress'
     ]);
+    aiDiscoveryService = jasmine.createSpyObj<BuyerAiDiscoveryService>('BuyerAiDiscoveryService', [
+      'getPreferences',
+      'updatePreferences',
+      'clearHistory'
+    ]);
     settingsService.getProfile.and.resolveTo(createProfile());
     settingsService.updateProfile.and.resolveTo({ ...createProfile(), displayName: 'Thabo', phoneNumber: '+27110000000' });
     settingsService.getNotificationPreferences.and.resolveTo(createPreferences());
@@ -31,12 +38,16 @@ describe('BuyerSettingsPageComponent', () => {
       preferences: createPreferences().preferences.map(preference =>
         preference.category === 'Reviews' ? { ...preference, isEnabled: false, emailEnabled: false } : preference)
     });
+    aiDiscoveryService.getPreferences.and.resolveTo({ historyEnabled: false, personalizationEnabled: false, updatedAtUtc: null });
+    aiDiscoveryService.updatePreferences.and.resolveTo({ historyEnabled: true, personalizationEnabled: true, updatedAtUtc: '2026-05-29T12:00:00Z' });
+    aiDiscoveryService.clearHistory.and.resolveTo();
 
     await TestBed.configureTestingModule({
       imports: [BuyerSettingsPageComponent],
       providers: [
         provideRouter([]),
-        { provide: BuyerSettingsService, useValue: settingsService }
+        { provide: BuyerSettingsService, useValue: settingsService },
+        { provide: BuyerAiDiscoveryService, useValue: aiDiscoveryService }
       ]
     }).compileComponents();
 
@@ -53,7 +64,13 @@ describe('BuyerSettingsPageComponent', () => {
     expect(compiled.textContent).toContain('Order updates');
     expect(compiled.textContent).toContain('Review moderation');
     expect(compiled.textContent).toContain('Saved delivery addresses');
+    expect(compiled.textContent).toContain('AI discovery history');
+    expect(compiled.textContent).toContain('Personalized AI discovery');
+    expect(compiled.textContent).toContain('Prompts, uploaded images, image previews, base64 content, provider payloads, and full AI responses are not stored.');
     expect(compiled.textContent).toContain('Home');
+    expect(compiled.textContent).toContain('Account channel note');
+    expect(compiled.textContent).not.toContain('LocalRules');
+    expect(compiled.textContent).not.toContain('Not included yet');
   });
 
   it('saves profile settings', async () => {
@@ -94,6 +111,29 @@ describe('BuyerSettingsPageComponent', () => {
         { category: 'Support', isEnabled: true, emailEnabled: true }
       ]
     });
+  });
+
+  it('saves and clears AI discovery history controls', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const component = fixture.componentInstance as unknown as {
+      aiHistoryForm: {
+        controls: {
+          historyEnabled: { setValue(value: boolean): void };
+          personalizationEnabled: { setValue(value: boolean): void };
+        }
+      };
+      saveAiHistoryPreference(): Promise<void>;
+      clearAiHistory(): Promise<void>;
+    };
+
+    component.aiHistoryForm.controls.historyEnabled.setValue(true);
+    component.aiHistoryForm.controls.personalizationEnabled.setValue(true);
+    await component.saveAiHistoryPreference();
+    await component.clearAiHistory();
+
+    expect(aiDiscoveryService.updatePreferences).toHaveBeenCalledWith({ historyEnabled: true, personalizationEnabled: true });
+    expect(aiDiscoveryService.clearHistory).toHaveBeenCalled();
   });
 
   it('creates a delivery address', async () => {

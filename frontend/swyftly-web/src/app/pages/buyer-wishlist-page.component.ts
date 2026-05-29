@@ -93,10 +93,16 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                           matInput
                           type="number"
                           min="1"
+                          [max]="selectedVariant(item)?.availableQuantity ?? null"
                           [ngModel]="quantityFor(item.product.productId)"
                           (ngModelChange)="setQuantity(item.product.productId, $event)"
                         >
                       </mat-form-field>
+                      @if (selectedVariant(item)) {
+                        <span class="product-card-feedback">
+                          {{ selectedVariant(item)!.availableQuantity }} available for the selected variant.
+                        </span>
+                      }
                       <button
                         mat-flat-button
                         type="button"
@@ -107,7 +113,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                       </button>
                     </div>
                   } @else {
-                    <span class="product-card-feedback">No available variants right now.</span>
+                    <span class="product-card-feedback">No in-stock variants are available right now. Keep it saved or remove it from your wishlist.</span>
                   }
                   <button
                     mat-stroked-button
@@ -190,7 +196,7 @@ export class BuyerWishlistPageComponent implements OnInit {
   protected setQuantity(productId: string, rawValue: string | number): void {
     const quantity = Number(rawValue);
     if (Number.isFinite(quantity)) {
-      this.quantities.set(productId, quantity);
+      this.quantities.set(productId, Math.trunc(quantity));
     }
   }
 
@@ -198,8 +204,15 @@ export class BuyerWishlistPageComponent implements OnInit {
     const productId = item.product.productId;
     const productVariantId = this.selectedVariantId(item);
     const quantity = this.quantityFor(productId);
-    if (!productVariantId || quantity <= 0 || this.movingProductId()) {
-      this.errorMessage.set('Choose an available variant and quantity.');
+    const variant = this.selectedVariant(item);
+
+    if (!productVariantId || !variant || quantity <= 0 || this.movingProductId()) {
+      this.errorMessage.set('Choose an in-stock variant and enter a quantity of at least 1.');
+      return;
+    }
+
+    if (quantity > variant.availableQuantity) {
+      this.errorMessage.set(`Only ${variant.availableQuantity} available for the selected variant.`);
       return;
     }
 
@@ -218,6 +231,11 @@ export class BuyerWishlistPageComponent implements OnInit {
     } finally {
       this.movingProductId.set(null);
     }
+  }
+
+  protected selectedVariant(item: BuyerWishlistItemResponse) {
+    const selectedId = this.selectedVariantId(item);
+    return item.availableVariants.find(variant => variant.productVariantId === selectedId && variant.inStock) ?? null;
   }
 
   private async loadWishlist(): Promise<void> {

@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { BuyerEngagementService } from '../buyer/buyer-engagement.service';
 import { BuyerDisputeService } from '../buyer/buyer-dispute.service';
 import { BuyerOrderService } from '../buyer/buyer-order.service';
+import { BuyerRefundService } from '../buyer/buyer-refund.service';
 import { BuyerReturnService } from '../buyer/buyer-return.service';
 import { BuyerSupportService } from '../buyer/buyer-support.service';
 import { AccountPageComponent } from './account-page.component';
@@ -12,6 +13,7 @@ import { createSellerPolicySnapshot } from './shop-page.component.spec';
 describe('AccountPageComponent', () => {
   let fixture: ComponentFixture<AccountPageComponent>;
   let orderService: jasmine.SpyObj<BuyerOrderService>;
+  let refundService: jasmine.SpyObj<BuyerRefundService>;
   let returnService: jasmine.SpyObj<BuyerReturnService>;
   let disputeService: jasmine.SpyObj<BuyerDisputeService>;
   let supportService: jasmine.SpyObj<BuyerSupportService>;
@@ -19,11 +21,13 @@ describe('AccountPageComponent', () => {
 
   beforeEach(async () => {
     orderService = jasmine.createSpyObj<BuyerOrderService>('BuyerOrderService', ['listOrders']);
+    refundService = jasmine.createSpyObj<BuyerRefundService>('BuyerRefundService', ['listRefunds']);
     returnService = jasmine.createSpyObj<BuyerReturnService>('BuyerReturnService', ['listReturns']);
     disputeService = jasmine.createSpyObj<BuyerDisputeService>('BuyerDisputeService', ['listDisputes']);
     supportService = jasmine.createSpyObj<BuyerSupportService>('BuyerSupportService', ['listTickets']);
     engagementService = jasmine.createSpyObj<BuyerEngagementService>('BuyerEngagementService', ['listWishlist', 'listBuyerReviews', 'listNotifications']);
     orderService.listOrders.and.resolveTo([createOrder()]);
+    refundService.listRefunds.and.resolveTo([createRefund()]);
     returnService.listReturns.and.resolveTo([createReturn()]);
     disputeService.listDisputes.and.resolveTo([createDispute()]);
     supportService.listTickets.and.resolveTo([createTicket()]);
@@ -37,6 +41,7 @@ describe('AccountPageComponent', () => {
         provideNoopAnimations(),
         provideRouter([]),
         { provide: BuyerOrderService, useValue: orderService },
+        { provide: BuyerRefundService, useValue: refundService },
         { provide: BuyerReturnService, useValue: returnService },
         { provide: BuyerDisputeService, useValue: disputeService },
         { provide: BuyerSupportService, useValue: supportService },
@@ -55,6 +60,7 @@ describe('AccountPageComponent', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Account dashboard');
     expect(text).toContain('1 order');
+    expect(text).toContain('1 refund');
     expect(text).toContain('1 active return');
     expect(text).toContain('1 open dispute');
     expect(text).toContain('1 open support ticket');
@@ -62,6 +68,11 @@ describe('AccountPageComponent', () => {
     expect(text).toContain('1 product review');
     expect(text).toContain('1 unread notification');
     expect(text).toContain('Summer Dress');
+    expect(text).toContain('Next best actions');
+    expect(text).toContain('Delivered order ready for after-sales');
+    expect(text).toContain('Refund in progress');
+    expect(text).toContain('Support ticket open');
+    expect(text).toContain('Unread account updates');
   });
 });
 
@@ -111,6 +122,22 @@ function createReturn() {
     items: [],
     messages: [],
     sellerPolicySnapshot: createSellerPolicySnapshot()
+  };
+}
+
+function createRefund() {
+  return {
+    refundId: 'refund-id',
+    orderId: 'order-id',
+    returnRequestId: 'return-id',
+    amount: 250,
+    currency: 'ZAR',
+    status: 'Processing',
+    statusMessage: 'Your refund is being processed.',
+    requestedAtUtc: '2026-05-18T12:00:00Z',
+    approvedAtUtc: null,
+    refundedAtUtc: null,
+    timeline: []
   };
 }
 

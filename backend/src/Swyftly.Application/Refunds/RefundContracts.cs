@@ -67,3 +67,22 @@ public sealed record RefundEventResult(
     string EventType,
     string Message,
     DateTimeOffset CreatedAtUtc);
+
+public sealed record BuyerRefundResult(
+    Guid RefundId,
+    Guid OrderId,
+    Guid? ReturnRequestId,
+    decimal Amount,
+    string Currency,
+    string Status,
+    string StatusMessage,
+    DateTimeOffset RequestedAtUtc,
+    DateTimeOffset? ApprovedAtUtc,
+    DateTimeOffset? RefundedAtUtc,
+    IReadOnlyCollection<BuyerRefundTimelineEventResult> Timeline);
+
+public sealed record BuyerRefundTimelineEventResult(
+    string Status,
+    string EventType,
+    string Message,
+    DateTimeOffset CreatedAtUtc);

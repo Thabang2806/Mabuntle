@@ -36,4 +36,6 @@ export interface BuyerAiProductCardResponse {
   price: number;
   currency: string;
   matchReasons: string[];
+  personalizationApplied: boolean;
+  personalizationReasons: string[];
 }

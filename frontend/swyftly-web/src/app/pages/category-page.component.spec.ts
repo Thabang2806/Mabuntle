@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { BehaviorSubject } from 'rxjs';
 import { PublicCatalogService } from '../shop/public-catalog.service';
 import { CategoryPageComponent } from './category-page.component';
 import { createProduct } from './shop-page.component.spec';
@@ -7,6 +8,7 @@ import { createProduct } from './shop-page.component.spec';
 describe('CategoryPageComponent', () => {
   let fixture: ComponentFixture<CategoryPageComponent>;
   let publicCatalogService: jasmine.SpyObj<PublicCatalogService>;
+  let paramMapSubject: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
 
   beforeEach(async () => {
     publicCatalogService = jasmine.createSpyObj<PublicCatalogService>('PublicCatalogService', ['getCategories', 'searchProducts']);
@@ -22,6 +24,7 @@ describe('CategoryPageComponent', () => {
       totalCount: 1,
       sort: 'newest'
     });
+    paramMapSubject = new BehaviorSubject(convertToParamMap({ slug: 'women-dresses' }));
 
     await TestBed.configureTestingModule({
       imports: [CategoryPageComponent],
@@ -30,6 +33,7 @@ describe('CategoryPageComponent', () => {
         {
           provide: ActivatedRoute,
           useValue: {
+            paramMap: paramMapSubject.asObservable(),
             snapshot: {
               paramMap: convertToParamMap({ slug: 'women-dresses' })
             }
@@ -65,5 +69,40 @@ describe('CategoryPageComponent', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Explore within Dresses');
     expect(compiled.textContent).toContain('Maxi Dresses');
+  });
+
+  it('reloads when the category route parameter changes', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    paramMapSubject.next(convertToParamMap({ slug: 'maxi-dresses' }));
+    await fixture.whenStable();
+
+    expect(publicCatalogService.searchProducts).toHaveBeenCalledWith(jasmine.objectContaining({
+      categorySlug: 'maxi-dresses'
+    }));
+  });
+
+  it('sends category-scoped filters to product search', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const component = fixture.componentInstance as unknown as {
+      filtersForm: { patchValue: (value: object) => void };
+      search: (page: number) => Promise<void>;
+    };
+    component.filtersForm.patchValue({
+      query: 'linen',
+      availability: 'in_stock',
+      sort: 'price_asc'
+    });
+    await component.search(1);
+
+    expect(publicCatalogService.searchProducts).toHaveBeenCalledWith(jasmine.objectContaining({
+      categorySlug: 'women-dresses',
+      query: 'linen',
+      inStock: true,
+      sort: 'price_asc'
+    }));
   });
 });

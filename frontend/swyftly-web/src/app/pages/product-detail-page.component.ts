@@ -1,5 +1,5 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Meta, Title } from '@angular/platform-browser';
@@ -13,13 +13,15 @@ import { PublicProductReviewResponse, PublicProductReviewSummaryResponse } from 
 import { BuyerEngagementService } from '../buyer/buyer-engagement.service';
 import { BuyerWishlistStateService } from '../buyer/buyer-wishlist-state.service';
 import { CartService } from '../cart/cart.service';
-import { PublicProductDetailResponse, PublicProductImageResponse } from '../shop/public-catalog.models';
+import { ProductCardComponent } from '../shop/product-card.component';
+import { ProductSearchItemResponse, PublicProductDetailResponse, PublicProductImageResponse } from '../shop/public-catalog.models';
 import { PublicCatalogService } from '../shop/public-catalog.service';
 import { EmptyStateComponent } from '../shared/ui/empty-state.component';
 import { LuxuryPublicStylesComponent } from '../shared/ui/luxury-public-styles.component';
 import { ProductVisualFallbackComponent, ProductVisualTone } from '../shared/ui/product-visual-fallback.component';
 import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
 import { UiAlertComponent } from '../shared/ui/ui-alert.component';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-product-detail-page',
@@ -32,6 +34,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
+    ProductCardComponent,
     ProductVisualFallbackComponent,
     RouterLink,
     StatusBadgeComponent,
@@ -112,8 +115,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
             <div class="product-trust-grid">
               <div>
-                <strong>Seller visibility</strong>
-                <span>Open the seller storefront before buying to review the shop and its published products.</span>
+                <strong>Verified seller</strong>
+                <span>Open the seller storefront before buying to review the shop, policies, and published products.</span>
               </div>
               <div>
                 <strong>Shipping and returns</strong>
@@ -199,7 +202,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               </mat-form-field>
 
               <button mat-flat-button type="button" [disabled]="isAddingToCart() || !selectedVariantId()" (click)="addToCart()">
-                {{ isAddingToCart() ? 'Adding...' : 'Add to cart' }}
+                {{ addToCartButtonLabel() }}
               </button>
               <button mat-stroked-button type="button" [disabled]="isSavingWishlist()" (click)="toggleWishlist()">
                 {{ isSavingWishlist() ? 'Saving...' : isWishlisted() ? 'Remove from wishlist' : 'Save to wishlist' }}
@@ -301,6 +304,28 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </div>
               }
             </section>
+
+            <section class="similar-products-panel">
+              <div class="product-section-heading">
+                <span>
+                  <h2>More from this edit</h2>
+                  <p>Related published products from the same category. Open each listing to choose variants and review seller context.</p>
+                </span>
+                <a mat-stroked-button routerLink="/shop">Browse catalog</a>
+              </div>
+
+              @if (isLoadingSimilarProducts()) {
+                <div class="route-card">Loading related products...</div>
+              } @else if (similarProducts().length > 0) {
+                <div class="product-grid similar-products-grid">
+                  @for (product of similarProducts(); track product.productId) {
+                    <app-product-card [product]="product"></app-product-card>
+                  }
+                </div>
+              } @else {
+                <app-ui-alert tone="info">No related products are available in this category yet.</app-ui-alert>
+              }
+            </section>
           </div>
         </div>
       } @else {
@@ -315,7 +340,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     </section>
   `
 })
-export class ProductDetailPageComponent implements OnInit {
+export class ProductDetailPageComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly authService = inject(AuthService);
   private readonly engagementService = inject(BuyerEngagementService);
@@ -326,6 +351,7 @@ export class ProductDetailPageComponent implements OnInit {
   private readonly storefrontAnalytics = inject(StorefrontAnalyticsService);
   private readonly titleService = inject(Title);
   private readonly meta = inject(Meta);
+  private routeSubscription: Subscription | null = null;
 
   protected readonly productDetail = signal<PublicProductDetailResponse | null>(null);
   protected readonly isLoading = signal(true);
@@ -340,6 +366,8 @@ export class ProductDetailPageComponent implements OnInit {
   protected readonly reviewSummary = signal<PublicProductReviewSummaryResponse | null>(null);
   protected readonly reviews = signal<PublicProductReviewResponse[]>([]);
   protected readonly reviewsError = signal<string | null>(null);
+  protected readonly similarProducts = signal<ProductSearchItemResponse[]>([]);
+  protected readonly isLoadingSimilarProducts = signal(false);
   protected readonly selectedImageId = signal<string | null>(null);
   protected readonly selectedVariantId = signal('');
   protected quantity = 1;
@@ -403,8 +431,17 @@ export class ProductDetailPageComponent implements OnInit {
     this.meta.updateTag({ name: 'description', content: description.slice(0, 170) });
   }
 
-  async ngOnInit(): Promise<void> {
-    const slug = this.route.snapshot.paramMap.get('slug');
+  ngOnInit(): void {
+    this.routeSubscription = this.route.paramMap.subscribe(paramMap => {
+      void this.loadProduct(paramMap.get('slug'));
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.routeSubscription?.unsubscribe();
+  }
+
+  private async loadProduct(slug: string | null): Promise<void> {
     if (!slug) {
       this.errorMessage.set('Product slug is missing.');
       this.isLoading.set(false);
@@ -413,6 +450,15 @@ export class ProductDetailPageComponent implements OnInit {
 
     this.isLoading.set(true);
     this.errorMessage.set(null);
+    this.addToCartMessage.set(null);
+    this.addToCartError.set(null);
+    this.wishlistMessage.set(null);
+    this.wishlistError.set(null);
+    this.reviewSummary.set(null);
+    this.reviews.set([]);
+    this.similarProducts.set([]);
+    this.selectedImageId.set(null);
+    this.selectedVariantId.set('');
 
     try {
       const detail = await this.publicCatalogService.getProduct(slug);
@@ -423,6 +469,7 @@ export class ProductDetailPageComponent implements OnInit {
       this.selectedVariantId.set(detail.variants.find(variant => variant.inStock)?.variantId ?? '');
       await this.initializeWishlistState(detail.product.productId);
       await this.loadReviews(slug);
+      await this.loadSimilarProducts(detail);
       this.storefrontAnalytics.trackProductView(detail.product.productId, this.router.url);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
@@ -550,6 +597,22 @@ export class ProductDetailPageComponent implements OnInit {
     return total === 0 ? 0 : Math.round((count / total) * 100);
   }
 
+  protected addToCartButtonLabel(): string {
+    if (this.isAddingToCart()) {
+      return 'Adding...';
+    }
+
+    if (this.availableVariantCount() === 0) {
+      return 'Out of stock';
+    }
+
+    if (!this.selectedVariantId()) {
+      return 'Choose a variant';
+    }
+
+    return 'Add to cart';
+  }
+
   private async loadReviews(slug: string): Promise<void> {
     this.reviewsError.set(null);
 
@@ -564,6 +627,30 @@ export class ProductDetailPageComponent implements OnInit {
       this.reviewsError.set(getApiErrorMessage(error));
       this.reviewSummary.set(null);
       this.reviews.set([]);
+    }
+  }
+
+  private async loadSimilarProducts(detail: PublicProductDetailResponse): Promise<void> {
+    const categoryId = detail.product.categoryId;
+    if (!categoryId) {
+      this.similarProducts.set([]);
+      return;
+    }
+
+    this.isLoadingSimilarProducts.set(true);
+    try {
+      const response = await this.publicCatalogService.searchProducts({
+        categoryId,
+        pageSize: 5,
+        sort: 'newest'
+      });
+      this.similarProducts.set(response.items
+        .filter(product => product.productId !== detail.product.productId)
+        .slice(0, 4));
+    } catch {
+      this.similarProducts.set([]);
+    } finally {
+      this.isLoadingSimilarProducts.set(false);
     }
   }
 

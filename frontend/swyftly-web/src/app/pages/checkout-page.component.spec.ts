@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { HttpErrorResponse } from '@angular/common/http';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { Router, provideRouter } from '@angular/router';
 import { StorefrontAnalyticsService } from '../analytics/storefront-analytics.service';
@@ -170,7 +171,10 @@ describe('CheckoutPageComponent', () => {
   });
 
   it('navigates to failed with order id when payment initiation fails', async () => {
-    paymentService.initiatePayment.and.rejectWith({ error: { detail: 'Payment failed.' } });
+    paymentService.initiatePayment.and.rejectWith(new HttpErrorResponse({
+      status: 409,
+      error: { detail: 'Payment failed.' }
+    }));
 
     fixture.detectChanges();
     await fixture.whenStable();
@@ -190,8 +194,33 @@ describe('CheckoutPageComponent', () => {
     await fixture.whenStable();
 
     expect(router.navigate).toHaveBeenCalledWith(['/checkout/failed'], {
-      queryParams: { orderId: 'order-id' }
+      queryParams: { orderId: 'order-id', paymentError: 'Payment failed.' }
     });
+  });
+
+  it('clears quoted delivery when manual address changes after quoting', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    setInput(compiled, 'input[formControlName="fullName"]', 'Buyer One');
+    setInput(compiled, 'input[formControlName="phone"]', '+27110000000');
+    setInput(compiled, 'input[formControlName="addressLine1"]', '1 Market Street');
+    setInput(compiled, 'input[formControlName="city"]', 'Johannesburg');
+    setInput(compiled, 'input[formControlName="province"]', 'Gauteng');
+    setInput(compiled, 'input[formControlName="postalCode"]', '2000');
+    await chooseShippingOption(compiled, fixture);
+    expect(compiled.textContent).toContain('Standard courier');
+
+    setInput(compiled, 'input[formControlName="addressLine1"]', '2 Market Street');
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Check delivery options again');
+    const form = compiled.querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+    expect(cartService.createOrderFromCart).not.toHaveBeenCalled();
   });
 
   it('preselects the default saved delivery address', async () => {

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Reflection;
+using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -12,7 +13,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Swyftly.Api.Admin;
 using Swyftly.Api.Authentication;
+using Swyftly.Api.Buyers;
 using Swyftly.Application.Identity;
+using Swyftly.Domain.Buyers;
 using Swyftly.Domain.Catalog;
 using Swyftly.Domain.Common;
 using Swyftly.Domain.Disputes;
@@ -102,6 +105,117 @@ public sealed class AdminMarketplaceReportTests
         Assert.Contains("\"operations\",\"orderCount\",\"1\",\"\"", csv);
     }
 
+    [Fact]
+    public async Task Buyer_CanRecordGrowthEventWithoutRawPromptData()
+    {
+        using var factory = new AdminMarketplaceReportTestFactory();
+        using var client = factory.CreateClient();
+        var productId = await SeedBuyerGrowthProductAsync(factory);
+        var buyerToken = await RegisterAndLoginBuyerAsync(client);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", buyerToken);
+        using var response = await client.PostAsJsonAsync(
+            "/api/buyer/growth-events",
+            new BuyerGrowthEventRequest(
+                "AssistantProductOpened",
+                "Assistant",
+                productId,
+                3,
+                "High",
+                "Dresses",
+                "Black",
+                "Linen",
+                "/assistant",
+                null));
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        var growthEvent = Assert.Single(await dbContext.BuyerGrowthEvents.AsNoTracking().ToListAsync());
+        Assert.Equal(BuyerGrowthEventType.AssistantProductOpened, growthEvent.EventType);
+        Assert.Equal(BuyerGrowthSourceTool.Assistant, growthEvent.SourceTool);
+        Assert.Equal(productId, growthEvent.ProductId);
+        Assert.Equal("Dresses", growthEvent.Category);
+    }
+
+    [Fact]
+    public async Task Admin_CannotWriteBuyerGrowthEvent()
+    {
+        using var factory = new AdminMarketplaceReportTestFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await CreateAndLoginAdminAsync(factory, client);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        using var response = await client.PostAsJsonAsync(
+            "/api/buyer/growth-events",
+            new BuyerGrowthEventRequest(
+                "AssistantSearchSubmitted",
+                "Assistant",
+                null,
+                0,
+                null,
+                null,
+                null,
+                null,
+                "/assistant",
+                null));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BuyerGrowthEvent_RejectsInvalidValues()
+    {
+        using var factory = new AdminMarketplaceReportTestFactory();
+        using var client = factory.CreateClient();
+        var buyerToken = await RegisterAndLoginBuyerAsync(client);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", buyerToken);
+        using var response = await client.PostAsJsonAsync(
+            "/api/buyer/growth-events",
+            new BuyerGrowthEventRequest(
+                "UnknownEvent",
+                "Assistant",
+                null,
+                -1,
+                "Certain",
+                new string('x', 101),
+                null,
+                null,
+                "/assistant",
+                "FreeText"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_CanReadBuyerGrowthReportWithoutBuyerIdentity()
+    {
+        using var factory = new AdminMarketplaceReportTestFactory();
+        using var client = factory.CreateClient();
+        var seed = await SeedBuyerGrowthReportDataAsync(factory);
+        var adminToken = await CreateAndLoginAdminAsync(factory, client);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        using var response = await client.GetAsync(
+            $"/api/admin/reports/buyer-growth?fromUtc={Uri.EscapeDataString(seed.FromUtc.ToString("O"))}&toUtc={Uri.EscapeDataString(seed.ToUtc.ToString("O"))}&bucket=Day");
+
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain(seed.BuyerId.ToString(), json, StringComparison.OrdinalIgnoreCase);
+
+        var report = JsonSerializer.Deserialize<AdminBuyerGrowthReportResponse>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(report);
+        Assert.Equal(2, report!.Summary.SearchSubmittedCount);
+        Assert.Equal(1, report.Summary.ShopHandoffCount);
+        Assert.Equal(1, report.Summary.ProductOpenedCount);
+        Assert.Equal(1, report.Summary.FeedbackSubmittedCount);
+        Assert.Contains(report.TopCategories, category => category.Value == "Dresses" && category.Count == 5);
+        Assert.Contains(report.ConfidenceBreakdown, confidence => confidence.Name == "High");
+        Assert.NotEmpty(report.Trend);
+    }
+
     private static async Task<SeededReportData> SeedReportDataAsync(AdminMarketplaceReportTestFactory factory)
     {
         using var scope = factory.Services.CreateScope();
@@ -188,6 +302,114 @@ public sealed class AdminMarketplaceReportTests
         return new SeededReportData(fromUtc, toUtc, seller.Profile.Id, category.Id);
     }
 
+    private static async Task<Guid> SeedBuyerGrowthProductAsync(AdminMarketplaceReportTestFactory factory)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        var seller = CreateVerifiedSeller("Growth Seller", "growth-seller");
+        var product = new Product(seller.Profile.Id);
+        product.UpdateDraftDetails(
+            null,
+            null,
+            "Growth telemetry dress",
+            $"growth-telemetry-dress-{Guid.NewGuid():N}",
+            "Dress for telemetry tests.",
+            "Dress for telemetry tests.");
+
+        dbContext.AddRange(seller.Profile, seller.Storefront, seller.Address, seller.PayoutProfile, product);
+        await dbContext.SaveChangesAsync();
+        return product.Id;
+    }
+
+    private static async Task<SeededBuyerGrowthReportData> SeedBuyerGrowthReportDataAsync(AdminMarketplaceReportTestFactory factory)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<SwyftlyDbContext>();
+        var now = DateTimeOffset.UtcNow;
+        var buyer = new BuyerProfile(Guid.NewGuid());
+        var seller = CreateVerifiedSeller("Growth Report Seller", "growth-report-seller");
+        var product = new Product(seller.Profile.Id);
+        product.UpdateDraftDetails(
+            null,
+            null,
+            "Growth report dress",
+            $"growth-report-dress-{Guid.NewGuid():N}",
+            "Dress for growth report tests.",
+            "Dress for growth report tests.");
+
+        dbContext.AddRange(
+            buyer,
+            seller.Profile,
+            seller.Storefront,
+            seller.Address,
+            seller.PayoutProfile,
+            product,
+            new BuyerGrowthEvent(
+                buyer.Id,
+                BuyerGrowthEventType.AssistantSearchSubmitted,
+                BuyerGrowthSourceTool.Assistant,
+                now.AddHours(-4),
+                null,
+                2,
+                BuyerGrowthConfidenceBand.High,
+                "Dresses",
+                "Black",
+                "Linen",
+                "/assistant"),
+            new BuyerGrowthEvent(
+                buyer.Id,
+                BuyerGrowthEventType.VisualSearchSubmitted,
+                BuyerGrowthSourceTool.VisualSearch,
+                now.AddHours(-3),
+                null,
+                1,
+                BuyerGrowthConfidenceBand.Low,
+                "Dresses",
+                "Black",
+                null,
+                "/visual-search"),
+            new BuyerGrowthEvent(
+                buyer.Id,
+                BuyerGrowthEventType.AssistantProductOpened,
+                BuyerGrowthSourceTool.Assistant,
+                now.AddHours(-2),
+                product.Id,
+                2,
+                BuyerGrowthConfidenceBand.High,
+                "Dresses",
+                "Black",
+                "Linen",
+                "/assistant"),
+            new BuyerGrowthEvent(
+                buyer.Id,
+                BuyerGrowthEventType.AssistantShopHandoff,
+                BuyerGrowthSourceTool.Assistant,
+                now.AddHours(-1),
+                null,
+                2,
+                BuyerGrowthConfidenceBand.High,
+                "Dresses",
+                "Black",
+                "Linen",
+                "/assistant"),
+            new BuyerGrowthEvent(
+                buyer.Id,
+                BuyerGrowthEventType.AssistantFeedbackSubmitted,
+                BuyerGrowthSourceTool.Assistant,
+                now,
+                null,
+                2,
+                BuyerGrowthConfidenceBand.High,
+                "Dresses",
+                "Black",
+                "Linen",
+                "/assistant",
+                BuyerGrowthFeedbackReason.GoodMatches));
+
+        await dbContext.SaveChangesAsync();
+        return new SeededBuyerGrowthReportData(now.AddDays(-1), now.AddDays(1), buyer.Id);
+    }
+
     private static SeededSeller CreateVerifiedSeller(string displayName, string slugPrefix)
     {
         var seller = new SellerProfile(Guid.NewGuid());
@@ -263,6 +485,8 @@ public sealed class AdminMarketplaceReportTests
     }
 
     private sealed record SeededReportData(DateTimeOffset FromUtc, DateTimeOffset ToUtc, Guid SellerId, Guid CategoryId);
+
+    private sealed record SeededBuyerGrowthReportData(DateTimeOffset FromUtc, DateTimeOffset ToUtc, Guid BuyerId);
 
     private sealed record SeededSeller(
         SellerProfile Profile,

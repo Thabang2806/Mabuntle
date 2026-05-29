@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Swyftly.Application.Identity;
+using Swyftly.Domain.Buyers;
 using Swyftly.Domain.Disputes;
 using Swyftly.Domain.Ledger;
 using Swyftly.Domain.Orders;
@@ -33,6 +34,14 @@ public static class AdminMarketplaceReportEndpoints
             .WithName("ExportAdminMarketplaceReportCsv")
             .WithSummary("Exports the aggregate marketplace report as CSV.")
             .Produces(StatusCodes.Status200OK, contentType: "text/csv")
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
+
+        group.MapGet("/buyer-growth", GetBuyerGrowthReportAsync)
+            .WithName("GetAdminBuyerGrowthReport")
+            .WithSummary("Returns aggregate buyer AI discovery telemetry for admins.")
+            .Produces<AdminBuyerGrowthReportResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden);
@@ -75,6 +84,62 @@ public static class AdminMarketplaceReportEndpoints
         response.Headers.ContentDisposition = "attachment; filename=\"swyftly-marketplace-report.csv\"";
 
         return HttpResults.Text(BuildCsv(report), "text/csv", Encoding.UTF8);
+    }
+
+    private static async Task<IResult> GetBuyerGrowthReportAsync(
+        DateTimeOffset? fromUtc,
+        DateTimeOffset? toUtc,
+        string? bucket,
+        SwyftlyDbContext dbContext,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var range = ResolveRange(fromUtc, toUtc, timeProvider);
+        if (!range.IsValid || range.ToUtc.Subtract(range.FromUtc).TotalDays > 366)
+        {
+            return InvalidRangeProblem();
+        }
+
+        if (!TryResolveGrowthBucket(bucket, out var bucketKind))
+        {
+            return HttpResults.Problem(
+                title: "Reports.InvalidBucket",
+                detail: "bucket must be Day or Week.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var events = await dbContext.BuyerGrowthEvents
+            .AsNoTracking()
+            .Where(growthEvent => growthEvent.OccurredAtUtc >= range.FromUtc && growthEvent.OccurredAtUtc <= range.ToUtc)
+            .ToListAsync(cancellationToken);
+        var outcomes = await dbContext.BuyerGrowthOutcomes
+            .AsNoTracking()
+            .Where(outcome => outcome.OccurredAtUtc >= range.FromUtc && outcome.OccurredAtUtc <= range.ToUtc)
+            .ToListAsync(cancellationToken);
+
+        var report = new AdminBuyerGrowthReportResponse(
+            range.FromUtc,
+            range.ToUtc,
+            timeProvider.GetUtcNow(),
+            bucketKind.ToString(),
+            BuildBuyerGrowthSummary(events),
+            BuildBuyerGrowthOutcomeSummary(outcomes),
+            BuildBuyerGrowthBreakdown(
+                events,
+                growthEvent => growthEvent.ConfidenceBand?.ToString() ?? "Unknown",
+                (name, count) => new AdminBuyerGrowthBreakdownResponse(name, count)),
+            BuildBuyerGrowthBreakdown(
+                events,
+                growthEvent => growthEvent.SourceTool.ToString(),
+                (name, count) => new AdminBuyerGrowthBreakdownResponse(name, count)),
+            BuildBuyerGrowthOutcomeBreakdown(outcomes, outcome => outcome.SourceTool.ToString()),
+            BuildBuyerGrowthOutcomeBreakdown(outcomes, outcome => outcome.ConfidenceBand?.ToString() ?? "Unknown"),
+            BuildTopContext(events, growthEvent => growthEvent.Category),
+            BuildTopContext(events, growthEvent => growthEvent.Colour),
+            BuildTopContext(events, growthEvent => growthEvent.Material),
+            BuildBuyerGrowthTrend(range.FromUtc, range.ToUtc, bucketKind, events, outcomes));
+
+        return HttpResults.Ok(report);
     }
 
     private static async Task<AdminMarketplaceReportResponse> BuildReportAsync(
@@ -229,6 +294,156 @@ public static class AdminMarketplaceReportEndpoints
         return new ReportDateRange(resolvedFrom, resolvedTo, resolvedFrom <= resolvedTo);
     }
 
+    private static bool TryResolveGrowthBucket(string? bucket, out BuyerGrowthReportBucket bucketKind)
+    {
+        if (string.IsNullOrWhiteSpace(bucket))
+        {
+            bucketKind = BuyerGrowthReportBucket.Day;
+            return true;
+        }
+
+        return Enum.TryParse(bucket, ignoreCase: true, out bucketKind)
+            && Enum.IsDefined(bucketKind);
+    }
+
+    private static AdminBuyerGrowthSummaryResponse BuildBuyerGrowthSummary(IReadOnlyCollection<BuyerGrowthEvent> events) =>
+        new(
+            CountBuyerGrowthEvents(events, BuyerGrowthEventType.AssistantSearchSubmitted)
+                + CountBuyerGrowthEvents(events, BuyerGrowthEventType.VisualSearchSubmitted),
+            CountBuyerGrowthEvents(events, BuyerGrowthEventType.AssistantShopHandoff)
+                + CountBuyerGrowthEvents(events, BuyerGrowthEventType.VisualShopHandoff),
+            CountBuyerGrowthEvents(events, BuyerGrowthEventType.AssistantProductOpened)
+                + CountBuyerGrowthEvents(events, BuyerGrowthEventType.VisualProductOpened),
+            CountBuyerGrowthEvents(events, BuyerGrowthEventType.AssistantFeedbackSubmitted)
+                + CountBuyerGrowthEvents(events, BuyerGrowthEventType.VisualFeedbackSubmitted),
+            CountBuyerGrowthEvents(events, BuyerGrowthEventType.AssistantSearchSubmitted),
+            CountBuyerGrowthEvents(events, BuyerGrowthEventType.VisualSearchSubmitted));
+
+    private static AdminBuyerGrowthOutcomeSummaryResponse BuildBuyerGrowthOutcomeSummary(IReadOnlyCollection<BuyerGrowthOutcome> outcomes)
+    {
+        var productOpenedCount = CountBuyerGrowthOutcomes(outcomes, BuyerGrowthOutcomeType.ProductOpened);
+        var addToCartCount = CountBuyerGrowthOutcomes(outcomes, BuyerGrowthOutcomeType.ProductAddedToCart);
+        var checkoutStartedCount = CountDistinctCarts(outcomes, BuyerGrowthOutcomeType.CheckoutStarted);
+        var orderCreatedCount = CountDistinctOrders(outcomes, BuyerGrowthOutcomeType.OrderCreated);
+        var paidOrderCount = CountDistinctOrders(outcomes, BuyerGrowthOutcomeType.OrderPaid);
+
+        return new AdminBuyerGrowthOutcomeSummaryResponse(
+            productOpenedCount,
+            addToCartCount,
+            checkoutStartedCount,
+            orderCreatedCount,
+            paidOrderCount,
+            SafeRate(addToCartCount, productOpenedCount),
+            SafeRate(checkoutStartedCount, addToCartCount),
+            SafeRate(orderCreatedCount, checkoutStartedCount),
+            SafeRate(paidOrderCount, orderCreatedCount));
+    }
+
+    private static IReadOnlyCollection<TBreakdown> BuildBuyerGrowthBreakdown<TBreakdown>(
+        IReadOnlyCollection<BuyerGrowthEvent> events,
+        Func<BuyerGrowthEvent, string> keySelector,
+        Func<string, int, TBreakdown> factory) =>
+        events
+            .GroupBy(keySelector)
+            .Select(group => new { Name = group.Key, Count = group.Count() })
+            .OrderByDescending(item => item.Count)
+            .ThenBy(item => item.Name)
+            .Select(item => factory(item.Name, item.Count))
+            .ToArray();
+
+    private static IReadOnlyCollection<AdminBuyerGrowthContextResponse> BuildTopContext(
+        IReadOnlyCollection<BuyerGrowthEvent> events,
+        Func<BuyerGrowthEvent, string?> selector) =>
+        events
+            .Select(selector)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .GroupBy(value => value!, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new AdminBuyerGrowthContextResponse(group.Key, group.Count()))
+            .OrderByDescending(item => item.Count)
+            .ThenBy(item => item.Value)
+            .Take(10)
+            .ToArray();
+
+    private static IReadOnlyCollection<AdminBuyerGrowthOutcomeBreakdownResponse> BuildBuyerGrowthOutcomeBreakdown(
+        IReadOnlyCollection<BuyerGrowthOutcome> outcomes,
+        Func<BuyerGrowthOutcome, string> keySelector) =>
+        outcomes
+            .GroupBy(keySelector)
+            .Select(group => new AdminBuyerGrowthOutcomeBreakdownResponse(
+                group.Key,
+                CountBuyerGrowthOutcomes(group, BuyerGrowthOutcomeType.ProductOpened),
+                CountBuyerGrowthOutcomes(group, BuyerGrowthOutcomeType.ProductAddedToCart),
+                CountDistinctCarts(group, BuyerGrowthOutcomeType.CheckoutStarted),
+                CountDistinctOrders(group, BuyerGrowthOutcomeType.OrderCreated),
+                CountDistinctOrders(group, BuyerGrowthOutcomeType.OrderPaid)))
+            .OrderByDescending(item => item.ProductOpenedCount + item.AddToCartCount + item.CheckoutStartedCount + item.OrderCreatedCount + item.PaidOrderCount)
+            .ThenBy(item => item.Name)
+            .ToArray();
+
+    private static IReadOnlyCollection<AdminBuyerGrowthTrendBucketResponse> BuildBuyerGrowthTrend(
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        BuyerGrowthReportBucket bucketKind,
+        IReadOnlyCollection<BuyerGrowthEvent> events,
+        IReadOnlyCollection<BuyerGrowthOutcome> outcomes)
+    {
+        var buckets = new List<AdminBuyerGrowthTrendBucketResponse>();
+        var cursor = fromUtc;
+        var step = bucketKind == BuyerGrowthReportBucket.Week ? TimeSpan.FromDays(7) : TimeSpan.FromDays(1);
+
+        while (cursor <= toUtc)
+        {
+            var bucketEnd = cursor.Add(step);
+            var bucketEvents = events
+                .Where(growthEvent => growthEvent.OccurredAtUtc >= cursor && growthEvent.OccurredAtUtc < bucketEnd)
+                .ToArray();
+            var bucketOutcomes = outcomes
+                .Where(outcome => outcome.OccurredAtUtc >= cursor && outcome.OccurredAtUtc < bucketEnd)
+                .ToArray();
+            var summary = BuildBuyerGrowthSummary(bucketEvents);
+            buckets.Add(new AdminBuyerGrowthTrendBucketResponse(
+                cursor,
+                bucketEnd > toUtc ? toUtc : bucketEnd,
+                summary.SearchSubmittedCount,
+                summary.ShopHandoffCount,
+                summary.ProductOpenedCount,
+                summary.FeedbackSubmittedCount,
+                CountBuyerGrowthOutcomes(bucketOutcomes, BuyerGrowthOutcomeType.ProductOpened),
+                CountBuyerGrowthOutcomes(bucketOutcomes, BuyerGrowthOutcomeType.ProductAddedToCart),
+                CountDistinctCarts(bucketOutcomes, BuyerGrowthOutcomeType.CheckoutStarted),
+                CountDistinctOrders(bucketOutcomes, BuyerGrowthOutcomeType.OrderCreated),
+                CountDistinctOrders(bucketOutcomes, BuyerGrowthOutcomeType.OrderPaid)));
+            cursor = bucketEnd;
+        }
+
+        return buckets;
+    }
+
+    private static int CountBuyerGrowthEvents(IReadOnlyCollection<BuyerGrowthEvent> events, BuyerGrowthEventType eventType) =>
+        events.Count(growthEvent => growthEvent.EventType == eventType);
+
+    private static int CountBuyerGrowthOutcomes(IEnumerable<BuyerGrowthOutcome> outcomes, BuyerGrowthOutcomeType outcomeType) =>
+        outcomes.Count(outcome => outcome.OutcomeType == outcomeType);
+
+    private static int CountDistinctCarts(IEnumerable<BuyerGrowthOutcome> outcomes, BuyerGrowthOutcomeType outcomeType) =>
+        outcomes
+            .Where(outcome => outcome.OutcomeType == outcomeType)
+            .Select(outcome => outcome.CartId)
+            .Where(cartId => cartId.HasValue)
+            .Distinct()
+            .Count();
+
+    private static int CountDistinctOrders(IEnumerable<BuyerGrowthOutcome> outcomes, BuyerGrowthOutcomeType outcomeType) =>
+        outcomes
+            .Where(outcome => outcome.OutcomeType == outcomeType)
+            .Select(outcome => outcome.OrderId)
+            .Where(orderId => orderId.HasValue)
+            .Distinct()
+            .Count();
+
+    private static decimal SafeRate(int numerator, int denominator) =>
+        denominator <= 0 ? 0 : decimal.Round((decimal)numerator / denominator, 4);
+
     private static bool IsSalesOrderStatus(OrderStatus status) =>
         status is OrderStatus.Paid
             or OrderStatus.Processing
@@ -295,6 +510,12 @@ public static class AdminMarketplaceReportEndpoints
     }
 
     private sealed record ReportDateRange(DateTimeOffset FromUtc, DateTimeOffset ToUtc, bool IsValid);
+
+    private enum BuyerGrowthReportBucket
+    {
+        Day,
+        Week
+    }
 }
 
 public sealed record AdminMarketplaceReportResponse(
@@ -339,3 +560,63 @@ public sealed record AdminTopCategoryReportRowResponse(
     string? CategoryName,
     int QuantitySold,
     decimal Revenue);
+
+public sealed record AdminBuyerGrowthReportResponse(
+    DateTimeOffset FromUtc,
+    DateTimeOffset ToUtc,
+    DateTimeOffset GeneratedAtUtc,
+    string Bucket,
+    AdminBuyerGrowthSummaryResponse Summary,
+    AdminBuyerGrowthOutcomeSummaryResponse OutcomeSummary,
+    IReadOnlyCollection<AdminBuyerGrowthBreakdownResponse> ConfidenceBreakdown,
+    IReadOnlyCollection<AdminBuyerGrowthBreakdownResponse> SourceToolBreakdown,
+    IReadOnlyCollection<AdminBuyerGrowthOutcomeBreakdownResponse> OutcomeSourceToolBreakdown,
+    IReadOnlyCollection<AdminBuyerGrowthOutcomeBreakdownResponse> OutcomeConfidenceBreakdown,
+    IReadOnlyCollection<AdminBuyerGrowthContextResponse> TopCategories,
+    IReadOnlyCollection<AdminBuyerGrowthContextResponse> TopColours,
+    IReadOnlyCollection<AdminBuyerGrowthContextResponse> TopMaterials,
+    IReadOnlyCollection<AdminBuyerGrowthTrendBucketResponse> Trend);
+
+public sealed record AdminBuyerGrowthSummaryResponse(
+    int SearchSubmittedCount,
+    int ShopHandoffCount,
+    int ProductOpenedCount,
+    int FeedbackSubmittedCount,
+    int AssistantSearchCount,
+    int VisualSearchCount);
+
+public sealed record AdminBuyerGrowthOutcomeSummaryResponse(
+    int ProductOpenedCount,
+    int AddToCartCount,
+    int CheckoutStartedCount,
+    int OrderCreatedCount,
+    int PaidOrderCount,
+    decimal ProductOpenToCartRate,
+    decimal CartToCheckoutRate,
+    decimal CheckoutToOrderRate,
+    decimal OrderToPaidRate);
+
+public sealed record AdminBuyerGrowthBreakdownResponse(string Name, int Count);
+
+public sealed record AdminBuyerGrowthOutcomeBreakdownResponse(
+    string Name,
+    int ProductOpenedCount,
+    int AddToCartCount,
+    int CheckoutStartedCount,
+    int OrderCreatedCount,
+    int PaidOrderCount);
+
+public sealed record AdminBuyerGrowthContextResponse(string Value, int Count);
+
+public sealed record AdminBuyerGrowthTrendBucketResponse(
+    DateTimeOffset PeriodStartUtc,
+    DateTimeOffset PeriodEndUtc,
+    int SearchSubmittedCount,
+    int ShopHandoffCount,
+    int ProductOpenedCount,
+    int FeedbackSubmittedCount,
+    int AttributedProductOpenCount,
+    int AddToCartCount,
+    int CheckoutStartedCount,
+    int OrderCreatedCount,
+    int PaidOrderCount);

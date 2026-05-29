@@ -275,6 +275,7 @@ public static class DependencyInjection
         services.AddSingleton<IAiShoppingIntentProvider, FakeAiShoppingIntentProvider>();
         services.AddScoped<IAiVisualSearchService, AiVisualSearchService>();
         services.AddSingleton<IAiVisionProvider, FakeAiVisionProvider>();
+        services.AddScoped<IBuyerAiPersonalizationService, EfBuyerAiPersonalizationService>();
         services.AddScoped<IProductEmbeddingGenerator, ProductEmbeddingGenerator>();
         services.AddSingleton<IAiEmbeddingService, FakeAiEmbeddingService>();
         services.AddScoped<IInventoryReservationService, EfInventoryReservationService>();
@@ -309,6 +310,7 @@ public static class DependencyInjection
         services.AddScoped<IAdCampaignEligibilityService, AdCampaignEligibilityService>();
         services.AddScoped<IAdTrackingService, EfAdTrackingService>();
         services.AddScoped<IStorefrontAnalyticsService, EfStorefrontAnalyticsService>();
+        services.AddScoped<IBuyerGrowthOutcomeAttributionService, EfBuyerGrowthOutcomeAttributionService>();
         services.AddScoped<ISellerScheduledReportService, EfSellerScheduledReportService>();
         services.Configure<PaymentProviderOptions>(options =>
         {

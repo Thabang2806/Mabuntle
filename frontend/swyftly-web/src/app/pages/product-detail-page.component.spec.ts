@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { BehaviorSubject } from 'rxjs';
 import { StorefrontAnalyticsService } from '../analytics/storefront-analytics.service';
 import { AuthService } from '../auth/auth.service';
 import { BuyerEngagementService } from '../buyer/buyer-engagement.service';
@@ -17,6 +18,7 @@ describe('ProductDetailPageComponent', () => {
   let cartService: jasmine.SpyObj<CartService>;
   let publicCatalogService: jasmine.SpyObj<PublicCatalogService>;
   let storefrontAnalytics: jasmine.SpyObj<StorefrontAnalyticsService>;
+  let paramMapSubject: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
 
   beforeEach(async () => {
     authService = jasmine.createSpyObj<AuthService>('AuthService', ['initialize', 'hasAnyRole']);
@@ -69,7 +71,7 @@ describe('ProductDetailPageComponent', () => {
       totalQuantity: 1,
       subtotal: 499
     });
-    publicCatalogService = jasmine.createSpyObj<PublicCatalogService>('PublicCatalogService', ['getProduct']);
+    publicCatalogService = jasmine.createSpyObj<PublicCatalogService>('PublicCatalogService', ['getProduct', 'searchProducts']);
     storefrontAnalytics = jasmine.createSpyObj<StorefrontAnalyticsService>('StorefrontAnalyticsService', [
       'trackProductView',
       'trackProductAddedToCart'
@@ -101,6 +103,21 @@ describe('ProductDetailPageComponent', () => {
       }],
       sellerPolicy: createSellerPolicy()
     });
+    publicCatalogService.searchProducts.and.resolveTo({
+      items: [
+        {
+          ...createProduct(),
+          productId: 'related-product-id',
+          title: 'Related Dress',
+          slug: 'related-dress'
+        }
+      ],
+      page: 1,
+      pageSize: 5,
+      totalCount: 1,
+      sort: 'newest'
+    });
+    paramMapSubject = new BehaviorSubject(convertToParamMap({ slug: 'summer-dress' }));
 
     await TestBed.configureTestingModule({
       imports: [ProductDetailPageComponent],
@@ -109,6 +126,7 @@ describe('ProductDetailPageComponent', () => {
         {
           provide: ActivatedRoute,
           useValue: {
+            paramMap: paramMapSubject.asObservable(),
             snapshot: {
               paramMap: convertToParamMap({ slug: 'summer-dress' })
             }
@@ -132,6 +150,10 @@ describe('ProductDetailPageComponent', () => {
     fixture.detectChanges();
 
     expect(publicCatalogService.getProduct).toHaveBeenCalledWith('summer-dress');
+    expect(publicCatalogService.searchProducts).toHaveBeenCalledWith(jasmine.objectContaining({
+      categoryId: 'category-id',
+      pageSize: 5
+    }));
     expect(wishlistState.load).toHaveBeenCalled();
     expect(wishlistState.isSaved).toHaveBeenCalledWith('product-id');
     expect(engagementService.getProductReviewSummary).toHaveBeenCalledWith('summer-dress');
@@ -148,6 +170,8 @@ describe('ProductDetailPageComponent', () => {
     expect(compiled.querySelector('.product-purchase-panel')).not.toBeNull();
     expect(compiled.querySelector('.variant-option.active')?.textContent).toContain('M');
     expect(compiled.textContent).toContain('Complete the look');
+    expect(compiled.textContent).toContain('More from this edit');
+    expect(compiled.textContent).toContain('Related Dress');
   });
 
   it('adds the selected variant to cart', async () => {
@@ -225,5 +249,40 @@ describe('ProductDetailPageComponent', () => {
     expect(compiled.querySelector('.product-gallery-placeholder')).not.toBeNull();
     expect(compiled.querySelector('.product-gallery-placeholder .hf-product-visual')).not.toBeNull();
     expect(compiled.textContent).toContain('Summer Dress');
+  });
+
+  it('reloads product detail when the slug route parameter changes', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    publicCatalogService.getProduct.and.resolveTo({
+      product: {
+        ...createProduct(),
+        productId: 'second-product-id',
+        title: 'Second Dress',
+        slug: 'second-dress'
+      },
+      fullDescription: 'Second product description.',
+      attributes: {},
+      images: [],
+      variants: [{
+        variantId: 'second-variant-id',
+        size: 'S',
+        colour: 'Rose',
+        price: 399,
+        compareAtPrice: null,
+        inStock: true
+      }],
+      sellerPolicy: createSellerPolicy()
+    });
+
+    paramMapSubject.next(convertToParamMap({ slug: 'second-dress' }));
+    await fixture.whenStable();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(publicCatalogService.getProduct).toHaveBeenCalledWith('second-dress');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Second Dress');
   });
 });

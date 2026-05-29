@@ -11,6 +11,8 @@ import { BuyerEngagementService } from '../buyer/buyer-engagement.service';
 import { BuyerOrderResult } from '../buyer/buyer-order.models';
 import { BuyerOrderService } from '../buyer/buyer-order.service';
 import { BuyerPaymentRedirectService, BuyerPaymentService } from '../buyer/buyer-payment.service';
+import { BuyerRefundResult } from '../buyer/buyer-refund.models';
+import { BuyerRefundService } from '../buyer/buyer-refund.service';
 import { BuyerReturnService } from '../buyer/buyer-return.service';
 import { BuyerWorkspaceNavComponent } from '../buyer/buyer-workspace-nav.component';
 import { PageHeaderComponent } from '../shared/ui/page-header.component';
@@ -47,6 +49,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         <div pageHeaderActions>
           @if (order()) {
             <app-status-badge [label]="order()!.status" [tone]="statusTone(order()!.status)" />
+            <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="refreshOrder()">Refresh payment status</button>
+            <a mat-stroked-button routerLink="/account/support" [queryParams]="supportQueryParams()">Contact support</a>
             @if (canRetryPayment()) {
               <button mat-flat-button type="button" [disabled]="isSaving()" (click)="retryPayment()">Retry payment</button>
             } @else if (order()!.status === 'Cancelled') {
@@ -84,6 +88,56 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 <div><dt>Discount</dt><dd>{{ order()!.discountAmount | currency:'ZAR':'symbol-narrow' }}</dd></div>
                 <div><dt>Total</dt><dd>{{ order()!.totalAmount | currency:'ZAR':'symbol-narrow' }}</dd></div>
               </dl>
+            </section>
+
+            <section class="buyer-panel">
+              <h2>Payment status</h2>
+              @if (order()!.paymentSummary; as payment) {
+                <dl class="seller-facts">
+                  <div><dt>Status</dt><dd>{{ payment.status }}</dd></div>
+                  <div><dt>Provider</dt><dd>{{ payment.providerName }}</dd></div>
+                  @if (payment.providerReference) {
+                    <div><dt>Reference</dt><dd>{{ payment.providerReference }}</dd></div>
+                  }
+                  <div><dt>Amount</dt><dd>{{ payment.amount | currency:payment.currency:'symbol-narrow' }}</dd></div>
+                  <div><dt>Checkout link</dt><dd>{{ payment.checkoutUrlAvailable ? 'Available through retry while pending' : 'Unavailable' }}</dd></div>
+                  @if (payment.paidAtUtc) {
+                    <div><dt>Paid</dt><dd>{{ payment.paidAtUtc | date:'medium' }}</dd></div>
+                  }
+                  @if (payment.failedAtUtc) {
+                    <div><dt>Failed</dt><dd>{{ payment.failedAtUtc | date:'medium' }}</dd></div>
+                  }
+                  @if (payment.cancelledAtUtc) {
+                    <div><dt>Cancelled</dt><dd>{{ payment.cancelledAtUtc | date:'medium' }}</dd></div>
+                  }
+                  <div><dt>Updated</dt><dd>{{ payment.updatedAtUtc | date:'medium' }}</dd></div>
+                </dl>
+                <p>{{ paymentStateCopy(order()!.status, payment.status) }}</p>
+              } @else {
+                <app-ui-alert tone="info">No payment attempt is linked to this order yet.</app-ui-alert>
+              }
+            </section>
+
+            <section class="buyer-panel">
+              <h2>Refunds</h2>
+              @if (refunds().length === 0) {
+                <app-ui-alert tone="info">No refund request is linked to this order yet.</app-ui-alert>
+              } @else {
+                <div class="seller-timeline">
+                  @for (refund of refunds(); track refund.refundId) {
+                    <div>
+                      <app-status-badge [label]="refund.status" [tone]="refundStatusTone(refund.status)" />
+                      <span>{{ refund.amount | currency:refund.currency:'symbol-narrow' }}</span>
+                      <small>{{ refund.statusMessage }}</small>
+                      <small>Requested {{ refund.requestedAtUtc | date:'medium' }}</small>
+                      @if (refund.returnRequestId) {
+                        <a [routerLink]="['/account/returns', refund.returnRequestId]">Open linked return</a>
+                      }
+                    </div>
+                  }
+                </div>
+                <a mat-stroked-button routerLink="/account/refunds">View all refunds</a>
+              }
             </section>
 
             <section class="buyer-panel">
@@ -152,7 +206,10 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
                   <mat-form-field appearance="outline">
                     <mat-label>Quantity</mat-label>
-                    <input matInput type="number" min="1" formControlName="quantity" />
+                    <input matInput type="number" min="1" [attr.max]="selectedReturnItem()?.quantity ?? null" formControlName="quantity" />
+                    @if (selectedReturnItem(); as selectedItem) {
+                      <mat-hint>Up to {{ selectedItem.quantity }} item{{ selectedItem.quantity === 1 ? '' : 's' }} can be requested from this order line.</mat-hint>
+                    }
                   </mat-form-field>
 
                   <mat-form-field appearance="outline">
@@ -185,10 +242,10 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 @if (canRetryPayment()) {
                   <app-ui-alert tone="warning">Payment is still pending. Retry payment before this order can move to fulfilment.</app-ui-alert>
                 } @else if (order()!.status === 'Cancelled') {
-                  <app-ui-alert tone="warning">This order was cancelled after payment failure. Start checkout again from your cart.</app-ui-alert>
+                  <app-ui-alert tone="warning">This order was cancelled after payment failure. Start checkout again from your cart, or add the items again if the cart is empty.</app-ui-alert>
                 }
                 <div class="buyer-action-row">
-                  <a mat-stroked-button routerLink="/account/support">Contact support</a>
+                  <a mat-stroked-button routerLink="/account/support" [queryParams]="supportQueryParams()">Contact support</a>
                   <a mat-stroked-button routerLink="/account/disputes">View disputes</a>
                 </div>
               }
@@ -198,7 +255,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           @if (canRequestReturn()) {
             <section class="buyer-panel">
               <h2>Leave a product review</h2>
-              <p>Reviews are tied to delivered order items and appear publicly after they are saved.</p>
+              <p>Reviews are tied to delivered order items and are submitted for moderation before they appear publicly.</p>
               <form [formGroup]="reviewForm" (ngSubmit)="createReview()" class="buyer-form-grid" novalidate>
                 <mat-form-field appearance="outline">
                   <mat-label>Item</mat-label>
@@ -291,7 +348,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                         <small>Synced {{ shipment.providerLastSyncedAtUtc | date:'short' }}</small>
                       }
                       @if (shipment.status === 'DeliveryFailed' || shipment.status === 'ReturnedToSender') {
-                        <a routerLink="/account/support">Contact support</a>
+                        <a routerLink="/account/support" [queryParams]="supportQueryParams()">Contact support</a>
                       }
                       @for (event of shipment.events; track event.shipmentEventId) {
                         <small>{{ event.eventType }} - {{ event.occurredAtUtc | date:'medium' }}{{ event.message ? ': ' + event.message : '' }}</small>
@@ -313,11 +370,13 @@ export class BuyerOrderDetailPageComponent implements OnInit {
   private readonly orderService = inject(BuyerOrderService);
   private readonly paymentRedirectService = inject(BuyerPaymentRedirectService);
   private readonly paymentService = inject(BuyerPaymentService);
+  private readonly refundService = inject(BuyerRefundService);
   private readonly returnService = inject(BuyerReturnService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
   protected readonly order = signal<BuyerOrderResult | null>(null);
+  protected readonly refunds = signal<BuyerRefundResult[]>([]);
   protected readonly isLoading = signal(true);
   protected readonly isSaving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
@@ -348,6 +407,10 @@ export class BuyerOrderDetailPageComponent implements OnInit {
 
   protected canRetryPayment(): boolean {
     return this.order()?.status === 'PendingPayment';
+  }
+
+  protected async refreshOrder(): Promise<void> {
+    await this.loadOrder(false);
   }
 
   protected async retryPayment(): Promise<void> {
@@ -452,6 +515,22 @@ export class BuyerOrderDetailPageComponent implements OnInit {
     return 'neutral';
   }
 
+  protected refundStatusTone(status: string): StatusBadgeTone {
+    if (['Requested', 'Approved', 'Processing'].includes(status)) {
+      return 'warning';
+    }
+
+    if (status === 'Refunded') {
+      return 'success';
+    }
+
+    if (['Failed', 'Rejected'].includes(status)) {
+      return 'danger';
+    }
+
+    return 'neutral';
+  }
+
   protected formatDeliveryAddress(address: NonNullable<BuyerOrderResult['deliveryAddress']>): string {
     return [
       address.addressLine1,
@@ -494,25 +573,52 @@ export class BuyerOrderDetailPageComponent implements OnInit {
     ].filter((entry): entry is { label: string; value: string } => entry !== null);
   }
 
-  private selectedReturnItem() {
+  protected paymentStateCopy(orderStatus: string, paymentStatus: string): string {
+    if (paymentStatus === 'Paid' || orderStatus === 'Paid') {
+      return 'Payment has been confirmed and the seller can continue fulfilment.';
+    }
+
+    if (paymentStatus === 'Failed') {
+      return 'Payment failed at the provider. Retry payment while the order remains pending, or review your cart if the order is cancelled.';
+    }
+
+    if (paymentStatus === 'Cancelled' || orderStatus === 'Cancelled') {
+      return 'This payment was cancelled. Start checkout again from your cart, or add the items again if the cart is empty.';
+    }
+
+    return 'Payment is pending. Paid status appears after Swyftly receives provider confirmation.';
+  }
+
+  protected supportQueryParams(): Record<string, string> {
+    const order = this.order();
+    return order ? { orderId: order.orderId, sellerId: order.sellerId } : {};
+  }
+
+  protected selectedReturnItem() {
     const order = this.order();
     const selectedId = this.returnForm.controls.orderItemId.value;
     return order?.items.find(item => item.orderItemId === selectedId) ?? order?.items[0] ?? null;
   }
 
-  private async loadOrder(): Promise<void> {
-    this.isLoading.set(true);
+  private async loadOrder(showLoading = true): Promise<void> {
+    if (showLoading) {
+      this.isLoading.set(true);
+    }
     this.errorMessage.set(null);
 
     try {
       const order = await this.orderService.getOrder(this.orderId());
+      const refunds = await this.refundService.listOrderRefunds(this.orderId());
       this.order.set(order);
+      this.refunds.set(refunds);
       this.returnForm.patchValue({ orderItemId: order.items[0]?.orderItemId ?? '' });
       this.reviewForm.patchValue({ orderItemId: order.items[0]?.orderItemId ?? '' });
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
     } finally {
-      this.isLoading.set(false);
+      if (showLoading) {
+        this.isLoading.set(false);
+      }
     }
   }
 

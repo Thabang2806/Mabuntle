@@ -1,5 +1,5 @@
-import { CurrencyPipe } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { CurrencyPipe, DatePipe } from '@angular/common';
+import { Component, NgZone, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { getApiErrorMessage } from '../auth/api-error';
@@ -12,7 +12,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
 @Component({
   selector: 'app-checkout-success-page',
-  imports: [CurrencyPipe, LuxuryPublicStylesComponent, MatButtonModule, RouterLink, StatusBadgeComponent, UiAlertComponent],
+  imports: [CurrencyPipe, DatePipe, LuxuryPublicStylesComponent, MatButtonModule, RouterLink, StatusBadgeComponent, UiAlertComponent],
   template: `
     <app-luxury-public-styles />
     <section class="page checkout-result-page">
@@ -46,6 +46,20 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               </div>
             </div>
 
+            @if (order()!.paymentSummary; as payment) {
+              <section class="checkout-reference checkout-payment-summary">
+                <span>Payment status</span>
+                <strong>{{ payment.status }}</strong>
+                <small>{{ payment.providerName }}{{ payment.providerReference ? ' - ' + payment.providerReference : '' }}</small>
+                <small>{{ payment.amount | currency:payment.currency:'symbol-narrow' }} updated {{ payment.updatedAtUtc | date:'short' }}</small>
+                @if (payment.paidAtUtc) {
+                  <small>Paid {{ payment.paidAtUtc | date:'medium' }}</small>
+                }
+              </section>
+            } @else {
+              <app-ui-alert tone="info">Payment has not started yet for this order.</app-ui-alert>
+            }
+
             <div class="checkout-result-steps">
               <div>
                 <strong>1. Order reserved</strong>
@@ -69,6 +83,15 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </button>
               </div>
             }
+
+            <div class="checkout-result-action-row">
+              <button mat-stroked-button type="button" [disabled]="isRefreshing()" (click)="refreshOrder()">
+                {{ isRefreshing() ? 'Refreshing...' : 'Refresh payment status' }}
+              </button>
+              @if (lastCheckedAt()) {
+                <span>Last checked {{ lastCheckedAt() | date:'shortTime' }}</span>
+              }
+            </div>
           } @else if (orderId) {
             <div class="checkout-reference">
               <span>Order reference</span>
@@ -85,32 +108,61 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     </section>
   `
 })
-export class CheckoutSuccessPageComponent implements OnInit {
+export class CheckoutSuccessPageComponent implements OnInit, OnDestroy {
   private readonly orderService = inject(BuyerOrderService);
   private readonly paymentRedirectService = inject(BuyerPaymentRedirectService);
   private readonly paymentService = inject(BuyerPaymentService);
   private readonly route = inject(ActivatedRoute);
+  private readonly ngZone = inject(NgZone);
 
   protected readonly orderId = this.route.snapshot.queryParamMap.get('orderId');
   protected readonly order = signal<BuyerOrderResult | null>(null);
   protected readonly isLoading = signal(false);
+  protected readonly isRefreshing = signal(false);
   protected readonly isRetrying = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly successMessage = signal<string | null>(null);
+  protected readonly lastCheckedAt = signal<Date | null>(null);
+  private pollAttemptCount = 0;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
 
   async ngOnInit(): Promise<void> {
     if (!this.orderId) {
       return;
     }
 
-    this.isLoading.set(true);
+    await this.loadOrder(true);
+  }
+
+  ngOnDestroy(): void {
+    this.clearPollTimer();
+  }
+
+  protected async refreshOrder(): Promise<void> {
+    await this.loadOrder(false);
+  }
+
+  private async loadOrder(showInitialLoading: boolean): Promise<void> {
+    if (!this.orderId) {
+      return;
+    }
+
+    if (showInitialLoading) {
+      this.isLoading.set(true);
+    } else {
+      this.isRefreshing.set(true);
+    }
+
     this.errorMessage.set(null);
     try {
       this.order.set(await this.orderService.getOrder(this.orderId));
+      this.lastCheckedAt.set(new Date());
+      this.schedulePendingPaymentPoll();
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
     } finally {
       this.isLoading.set(false);
+      this.isRefreshing.set(false);
     }
   }
 
@@ -151,5 +203,28 @@ export class CheckoutSuccessPageComponent implements OnInit {
     }
 
     return 'accent';
+  }
+
+  private schedulePendingPaymentPoll(): void {
+    this.clearPollTimer();
+    if (this.order()?.status !== 'PendingPayment' || this.pollAttemptCount >= 5) {
+      return;
+    }
+
+    this.pollAttemptCount += 1;
+    this.ngZone.runOutsideAngular(() => {
+      this.pollTimer = setTimeout(() => {
+        this.ngZone.run(() => {
+          void this.loadOrder(false);
+        });
+      }, 3000);
+    });
+  }
+
+  private clearPollTimer(): void {
+    if (this.pollTimer) {
+      clearTimeout(this.pollTimer);
+      this.pollTimer = null;
+    }
   }
 }

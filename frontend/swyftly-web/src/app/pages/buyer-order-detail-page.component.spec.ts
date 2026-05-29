@@ -5,6 +5,7 @@ import { BuyerEngagementService } from '../buyer/buyer-engagement.service';
 import { BuyerOrderResult } from '../buyer/buyer-order.models';
 import { BuyerOrderService } from '../buyer/buyer-order.service';
 import { BuyerPaymentRedirectService, BuyerPaymentService } from '../buyer/buyer-payment.service';
+import { BuyerRefundService } from '../buyer/buyer-refund.service';
 import { BuyerReturnService } from '../buyer/buyer-return.service';
 import { BuyerOrderDetailPageComponent } from './buyer-order-detail-page.component';
 import { createSellerPolicySnapshot } from './shop-page.component.spec';
@@ -15,6 +16,7 @@ describe('BuyerOrderDetailPageComponent', () => {
   let orderService: jasmine.SpyObj<BuyerOrderService>;
   let paymentRedirectService: jasmine.SpyObj<BuyerPaymentRedirectService>;
   let paymentService: jasmine.SpyObj<BuyerPaymentService>;
+  let refundService: jasmine.SpyObj<BuyerRefundService>;
   let returnService: jasmine.SpyObj<BuyerReturnService>;
   let router: Router;
 
@@ -23,6 +25,7 @@ describe('BuyerOrderDetailPageComponent', () => {
     orderService = jasmine.createSpyObj<BuyerOrderService>('BuyerOrderService', ['getOrder']);
     paymentRedirectService = jasmine.createSpyObj<BuyerPaymentRedirectService>('BuyerPaymentRedirectService', ['redirect']);
     paymentService = jasmine.createSpyObj<BuyerPaymentService>('BuyerPaymentService', ['initiatePayment']);
+    refundService = jasmine.createSpyObj<BuyerRefundService>('BuyerRefundService', ['listOrderRefunds']);
     returnService = jasmine.createSpyObj<BuyerReturnService>('BuyerReturnService', ['createReturn']);
     engagementService.createReview.and.resolveTo({
       reviewId: 'review-id',
@@ -40,6 +43,7 @@ describe('BuyerOrderDetailPageComponent', () => {
       product: null
     });
     orderService.getOrder.and.resolveTo(createOrder());
+    refundService.listOrderRefunds.and.resolveTo([createRefund()]);
     paymentService.initiatePayment.and.resolveTo({
       paymentId: 'payment-id',
       orderId: 'order-id',
@@ -77,6 +81,7 @@ describe('BuyerOrderDetailPageComponent', () => {
         { provide: BuyerOrderService, useValue: orderService },
         { provide: BuyerPaymentRedirectService, useValue: paymentRedirectService },
         { provide: BuyerPaymentService, useValue: paymentService },
+        { provide: BuyerRefundService, useValue: refundService },
         { provide: BuyerReturnService, useValue: returnService },
         {
           provide: ActivatedRoute,
@@ -135,7 +140,134 @@ describe('BuyerOrderDetailPageComponent', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Returns can be requested after an order is delivered');
     expect(text).toContain('Store policy snapshot');
+    expect(text).toContain('Payment status');
+    expect(text).toContain('Refunds');
     expect(returnService.createReturn).not.toHaveBeenCalled();
+  });
+
+  it('renders linked refund status on the order detail page', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(refundService.listOrderRefunds).toHaveBeenCalledWith('order-id');
+    expect(text).toContain('Your refund is being processed.');
+    expect(text).toContain('Open linked return');
+  });
+
+  it('links support with order and seller context', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const supportLink = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('a'))
+      .find(link => link.textContent?.includes('Contact support')) as HTMLAnchorElement | undefined;
+
+    expect(supportLink?.getAttribute('href')).toContain('/account/support');
+    expect(supportLink?.getAttribute('href')).toContain('orderId=order-id');
+    expect(supportLink?.getAttribute('href')).toContain('sellerId=seller-id');
+  });
+
+  it('links shipment exception support actions with order and seller context', async () => {
+    orderService.getOrder.and.resolveTo(createOrder({
+      shipments: [{
+        shipmentId: 'shipment-id',
+        status: 'DeliveryFailed',
+        carrierName: 'Manual carrier',
+        trackingNumber: 'TRACK-1',
+        trackingUrl: null,
+        shippedAtUtc: '2026-05-18T13:00:00Z',
+        deliveredAtUtc: null,
+        providerStatus: 'Delivery failed',
+        providerLastSyncedAtUtc: '2026-05-18T14:00:00Z',
+        events: []
+      }]
+    }));
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const supportLinks = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('a'))
+      .filter(link => link.textContent?.includes('Contact support')) as HTMLAnchorElement[];
+
+    expect(supportLinks.length).toBeGreaterThan(1);
+    for (const supportLink of supportLinks) {
+      expect(supportLink.getAttribute('href')).toContain('/account/support');
+      expect(supportLink.getAttribute('href')).toContain('orderId=order-id');
+      expect(supportLink.getAttribute('href')).toContain('sellerId=seller-id');
+    }
+  });
+
+  it('shows the delivered return quantity cap before submission', async () => {
+    orderService.getOrder.and.resolveTo(createOrder({
+      items: [{
+        orderItemId: 'order-item-id',
+        productId: 'product-id',
+        productVariantId: 'variant-id',
+        productTitle: 'Summer Dress',
+        sku: 'SKU-1',
+        size: 'M',
+        colour: 'Black',
+        unitPrice: 500,
+        quantity: 2,
+        lineTotal: 1000
+      }],
+      itemsSubtotal: 1000,
+      totalAmount: 1000
+    }));
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    const quantityInput = compiled.querySelector('input[type="number"]') as HTMLInputElement;
+
+    expect(quantityInput.getAttribute('max')).toBe('2');
+    expect(compiled.textContent).toContain('Up to 2 items can be requested from this order line.');
+  });
+
+  it('keeps return submission capped to the selected order item quantity', async () => {
+    orderService.getOrder.and.resolveTo(createOrder({
+      items: [{
+        orderItemId: 'order-item-id',
+        productId: 'product-id',
+        productVariantId: 'variant-id',
+        productTitle: 'Summer Dress',
+        sku: 'SKU-1',
+        size: 'M',
+        colour: 'Black',
+        unitPrice: 500,
+        quantity: 2,
+        lineTotal: 1000
+      }]
+    }));
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance as unknown as {
+      returnForm: { patchValue: (value: unknown) => void };
+    };
+    component.returnForm.patchValue({
+      orderItemId: 'order-item-id',
+      quantity: 5,
+      reason: 'Damaged',
+      isOpenedOrUnsealed: false,
+      details: '',
+      note: ''
+    });
+
+    const form = (fixture.nativeElement as HTMLElement).querySelector('form') as HTMLFormElement;
+    form.dispatchEvent(new Event('submit'));
+    await fixture.whenStable();
+
+    expect(returnService.createReturn).toHaveBeenCalledWith('order-id', jasmine.objectContaining({
+      items: [jasmine.objectContaining({ quantity: 2 })]
+    }));
   });
 
   it('creates a product review for a delivered order item', async () => {
@@ -160,6 +292,7 @@ describe('BuyerOrderDetailPageComponent', () => {
       title: 'Great fit',
       body: 'Loved it.'
     });
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('submitted for moderation');
   });
 
   it('retries payment for pending-payment orders', async () => {
@@ -219,6 +352,35 @@ function createOrder(overrides: Partial<BuyerOrderResult> = {}): BuyerOrderResul
     statusHistory: [{ statusHistoryId: 'history-id', previousStatus: null, newStatus: 'Delivered', changedAtUtc: '2026-05-18T12:00:00Z', reason: null }],
     shipments: [],
     sellerPolicySnapshot: createSellerPolicySnapshot(),
+    paymentSummary: {
+      paymentId: 'payment-id',
+      providerName: 'Fake',
+      providerReference: 'fake-reference',
+      status: 'Paid',
+      amount: 500,
+      currency: 'ZAR',
+      checkoutUrlAvailable: false,
+      paidAtUtc: '2026-05-18T12:05:00Z',
+      failedAtUtc: null,
+      cancelledAtUtc: null,
+      updatedAtUtc: '2026-05-18T12:05:00Z'
+    },
     ...overrides
+  };
+}
+
+function createRefund() {
+  return {
+    refundId: 'refund-id',
+    orderId: 'order-id',
+    returnRequestId: 'return-id',
+    amount: 250,
+    currency: 'ZAR',
+    status: 'Processing',
+    statusMessage: 'Your refund is being processed.',
+    requestedAtUtc: '2026-05-18T13:30:00Z',
+    approvedAtUtc: null,
+    refundedAtUtc: null,
+    timeline: []
   };
 }

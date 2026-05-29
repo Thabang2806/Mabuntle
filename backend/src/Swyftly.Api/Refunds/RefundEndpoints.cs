@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Swyftly.Api.Results;
+using Swyftly.Domain.Buyers;
 using Swyftly.Application.Identity;
 using Swyftly.Application.Refunds;
 using Swyftly.Domain.Refunds;
@@ -17,6 +18,34 @@ public static class RefundEndpoints
         var adminGroup = app.MapGroup("/api/admin")
             .WithTags("Admin Refunds")
             .RequireAuthorization(SwyftlyPolicies.FinanceRead);
+
+        var buyerGroup = app.MapGroup("/api/buyer")
+            .WithTags("Buyer Refunds")
+            .RequireAuthorization(SwyftlyPolicies.BuyerOnly);
+
+        buyerGroup.MapGet("/refunds", GetBuyerRefundsAsync)
+            .WithName("GetBuyerRefunds")
+            .WithSummary("Returns buyer-safe refund records for the authenticated buyer.")
+            .Produces<IReadOnlyCollection<BuyerRefundResult>>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        buyerGroup.MapGet("/refunds/{refundId:guid}", GetBuyerRefundAsync)
+            .WithName("GetBuyerRefund")
+            .WithSummary("Returns one buyer-safe refund record for the authenticated buyer.")
+            .Produces<BuyerRefundResult>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        buyerGroup.MapGet("/orders/{orderId:guid}/refunds", GetBuyerOrderRefundsAsync)
+            .WithName("GetBuyerOrderRefunds")
+            .WithSummary("Returns buyer-safe refund records for one buyer-owned order.")
+            .Produces<IReadOnlyCollection<BuyerRefundResult>>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        buyerGroup.MapGet("/returns/{returnRequestId:guid}/refunds", GetBuyerReturnRefundsAsync)
+            .WithName("GetBuyerReturnRefunds")
+            .WithSummary("Returns buyer-safe refund records for one buyer-owned return.")
+            .Produces<IReadOnlyCollection<BuyerRefundResult>>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status404NotFound);
 
         adminGroup.MapPost("/orders/{orderId:guid}/refunds", CreateOrderRefundAsync)
             .WithName("CreateOrderRefund")
@@ -60,6 +89,103 @@ public static class RefundEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict);
 
         return app;
+    }
+
+    private static async Task<IResult> GetBuyerRefundsAsync(
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var buyer = await GetCurrentBuyerAsync(principal, dbContext, cancellationToken);
+        if (buyer is null)
+        {
+            return BuyerNotFound();
+        }
+
+        var refunds = await BuyerRefundQuery(dbContext)
+            .Where(refund => refund.BuyerId == buyer.Id)
+            .OrderByDescending(refund => refund.RequestedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        return HttpResults.Ok(refunds.Select(MapBuyerRefund).ToArray());
+    }
+
+    private static async Task<IResult> GetBuyerRefundAsync(
+        Guid refundId,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var buyer = await GetCurrentBuyerAsync(principal, dbContext, cancellationToken);
+        if (buyer is null)
+        {
+            return BuyerNotFound();
+        }
+
+        var refund = await BuyerRefundQuery(dbContext)
+            .SingleOrDefaultAsync(
+                refund => refund.Id == refundId && refund.BuyerId == buyer.Id,
+                cancellationToken);
+
+        return refund is null
+            ? RefundNotFound()
+            : HttpResults.Ok(MapBuyerRefund(refund));
+    }
+
+    private static async Task<IResult> GetBuyerOrderRefundsAsync(
+        Guid orderId,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var buyer = await GetCurrentBuyerAsync(principal, dbContext, cancellationToken);
+        if (buyer is null)
+        {
+            return BuyerNotFound();
+        }
+
+        var orderExists = await dbContext.Orders
+            .AsNoTracking()
+            .AnyAsync(order => order.Id == orderId && order.BuyerId == buyer.Id, cancellationToken);
+        if (!orderExists)
+        {
+            return OrderNotFound();
+        }
+
+        var refunds = await BuyerRefundQuery(dbContext)
+            .Where(refund => refund.BuyerId == buyer.Id && refund.OrderId == orderId)
+            .OrderByDescending(refund => refund.RequestedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        return HttpResults.Ok(refunds.Select(MapBuyerRefund).ToArray());
+    }
+
+    private static async Task<IResult> GetBuyerReturnRefundsAsync(
+        Guid returnRequestId,
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var buyer = await GetCurrentBuyerAsync(principal, dbContext, cancellationToken);
+        if (buyer is null)
+        {
+            return BuyerNotFound();
+        }
+
+        var returnExists = await dbContext.ReturnRequests
+            .AsNoTracking()
+            .AnyAsync(returnRequest => returnRequest.Id == returnRequestId && returnRequest.BuyerId == buyer.Id, cancellationToken);
+        if (!returnExists)
+        {
+            return ReturnNotFound();
+        }
+
+        var refunds = await BuyerRefundQuery(dbContext)
+            .Where(refund => refund.BuyerId == buyer.Id && refund.ReturnRequestId == returnRequestId)
+            .OrderByDescending(refund => refund.RequestedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        return HttpResults.Ok(refunds.Select(MapBuyerRefund).ToArray());
     }
 
     private static async Task<IResult> CreateOrderRefundAsync(
@@ -143,6 +269,58 @@ public static class RefundEndpoints
         return HttpResults.Ok(refunds.Select(EfRefundWorkflowService.Map).ToArray());
     }
 
+    private static IQueryable<Refund> BuyerRefundQuery(SwyftlyDbContext dbContext) =>
+        dbContext.Refunds
+            .Include(refund => refund.Events)
+            .AsNoTracking();
+
+    private static BuyerRefundResult MapBuyerRefund(Refund refund) =>
+        new(
+            refund.Id,
+            refund.OrderId,
+            refund.ReturnRequestId,
+            refund.Amount,
+            refund.Currency,
+            refund.Status.ToString(),
+            BuyerStatusMessage(refund),
+            refund.RequestedAtUtc,
+            refund.ApprovedAtUtc,
+            refund.RefundedAtUtc,
+            refund.Events
+                .OrderBy(item => item.CreatedAtUtc)
+                .Select(item => new BuyerRefundTimelineEventResult(
+                    item.Status.ToString(),
+                    item.EventType,
+                    BuyerTimelineMessage(item),
+                    item.CreatedAtUtc))
+                .ToArray());
+
+    private static string BuyerStatusMessage(Refund refund) =>
+        refund.Status switch
+        {
+            RefundStatus.Requested => "Your refund request has been recorded and is waiting for finance review.",
+            RefundStatus.Approved => "Your refund has been approved and is waiting to be processed.",
+            RefundStatus.Processing when refund.Events.Any(item => item.EventType == "ProviderRefundActionRequired") =>
+                "Your refund needs finance or provider action before it can be completed.",
+            RefundStatus.Processing => "Your refund is being processed.",
+            RefundStatus.Refunded => "Your refund has been completed.",
+            RefundStatus.Failed => "Your refund could not be completed. Contact support if you need help.",
+            RefundStatus.Rejected => "This refund request was not approved.",
+            _ => "Refund status updated."
+        };
+
+    private static string BuyerTimelineMessage(RefundEvent refundEvent) =>
+        refundEvent.EventType switch
+        {
+            "RefundRequested" => "Refund request recorded.",
+            "RefundApproved" => "Refund approved for processing.",
+            "RefundProcessing" => "Refund processing started.",
+            "ProviderRefundActionRequired" => "Finance or provider action is still in progress.",
+            "Refunded" => "Refund completed.",
+            "RefundFailed" => "Refund could not be completed.",
+            _ => "Refund status updated."
+        };
+
     private static async Task<IResult> ApproveRefundAsync(
         Guid refundId,
         ApproveRefundApiRequest request,
@@ -213,6 +391,41 @@ public static class RefundEndpoints
         Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
             ? userId
             : null;
+
+    private static async Task<BuyerProfile?> GetCurrentBuyerAsync(
+        ClaimsPrincipal principal,
+        SwyftlyDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var userIdValue = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(userIdValue, out var userId)
+            ? await dbContext.BuyerProfiles.SingleOrDefaultAsync(buyer => buyer.UserId == userId, cancellationToken)
+            : null;
+    }
+
+    private static IResult BuyerNotFound() =>
+        HttpResults.Problem(
+            title: "Refunds.BuyerNotFound",
+            detail: "The authenticated user does not have a buyer profile.",
+            statusCode: StatusCodes.Status404NotFound);
+
+    private static IResult RefundNotFound() =>
+        HttpResults.Problem(
+            title: "Refunds.NotFound",
+            detail: "Refund was not found.",
+            statusCode: StatusCodes.Status404NotFound);
+
+    private static IResult OrderNotFound() =>
+        HttpResults.Problem(
+            title: "Refunds.OrderNotFound",
+            detail: "Order was not found.",
+            statusCode: StatusCodes.Status404NotFound);
+
+    private static IResult ReturnNotFound() =>
+        HttpResults.Problem(
+            title: "Refunds.ReturnNotFound",
+            detail: "Return request was not found.",
+            statusCode: StatusCodes.Status404NotFound);
 
     private static IResult ActorNotFound() =>
         HttpResults.Problem(

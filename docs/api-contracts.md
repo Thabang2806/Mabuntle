@@ -486,7 +486,7 @@ Angular buyer route:
 /assistant
 ```
 
-Angular status: Phase 6B keeps this route buyer-guarded and uses the same request/response contract. The screen now shows example prompt chips, extracted intent details, clarification/safety messages, loading/error/empty states, and product result cards without adding wishlist, review, checkout, or ordering behavior.
+Angular status: Phase 11H keeps this route buyer-guarded and uses the same AI request/response contract. The screen now shows browser-local recent prompt chips, confidence explanations, product/shop handoff actions, and structured usefulness feedback. Telemetry is best-effort and stores only sanitized event context, not raw prompts or results.
 
 ## Buyer AI Visual Search
 
@@ -550,7 +550,97 @@ Angular buyer route:
 /visual-search
 ```
 
-Angular status: Phase 6B keeps this route buyer-guarded and uses the same request/response contract. The screen now validates supported image uploads client-side, shows selected image preview/filename, extracted visual attributes, confidence, warnings, retention notes, loading/error/empty states, and product result cards without changing API payloads.
+Angular status: Phase 11H keeps this route buyer-guarded and uses the same visual-search request/response contract. The screen validates supported image uploads client-side, keeps recent text references browser-local, shows confidence bands and warnings, and records best-effort sanitized telemetry for search, product-open, shop-handoff, and structured feedback events. Uploaded image data, previews, base64, and provider payloads are not stored in telemetry.
+
+## Buyer AI Discovery Telemetry
+
+Buyer growth telemetry requires a `Buyer` JWT role. It measures whether `/assistant` and `/visual-search` produce useful product or shop handoffs without persisting prompts, uploaded image data, previews, base64 content, provider payloads, full AI responses, or free-text feedback.
+
+```http
+POST /api/buyer/growth-events
+```
+
+Request:
+
+```json
+{
+  "eventType": "AssistantShopHandoff",
+  "sourceTool": "Assistant",
+  "productId": null,
+  "resultCount": 4,
+  "confidenceBand": "Medium",
+  "category": "Dresses",
+  "colour": "Black",
+  "material": null,
+  "sourceRoute": "/assistant",
+  "feedbackReason": null
+}
+```
+
+Supported event types are `AssistantSearchSubmitted`, `AssistantProductOpened`, `AssistantShopHandoff`, `AssistantFeedbackSubmitted`, `VisualSearchSubmitted`, `VisualProductOpened`, `VisualShopHandoff`, and `VisualFeedbackSubmitted`. `sourceTool` must match the event family. `confidenceBand` is optional and limited to `High`, `Medium`, or `Low`. Feedback events require one of `GoodMatches`, `TooBroad`, `WrongStyle`, `WrongCategory`, `Unavailable`, or `LowConfidence`. Product-open events require an existing `productId`.
+
+Admin aggregate report:
+
+```http
+GET /api/admin/reports/buyer-growth?fromUtc=&toUtc=&bucket=Day|Week
+```
+
+Phase 11J adds reporting-only outcome attribution to later buyer actions. Product-open growth events create an attributed `ProductOpened` outcome, and successful cart add, checkout shipping quote, order creation, and signed paid webhook settlement attempt best-effort attribution to recent buyer AI product-open/shop-handoff activity. The default attribution window is 7 days. Attribution stores only buyer id, source tool, optional product/cart/order ids, outcome type, confidence band, timestamp, and window metadata. It does not store prompts, uploaded images, previews, base64 content, provider payloads, full AI responses, free-text feedback, or payment-provider internals.
+
+The report requires `Admin` or `SuperAdmin` and returns sanitized aggregates only: search/product-open/shop-handoff/feedback counts, confidence/source-tool breakdowns, top derived categories/colours/materials, outcome funnel counts/rates, outcome source/confidence breakdowns, and daily or weekly trend buckets. It does not return buyer identities, prompts, image data, provider payloads, raw AI responses, or row-level outcome records.
+
+## Buyer AI Discovery History
+
+Buyer AI discovery history requires a `Buyer` JWT role and is opt-in. Missing preferences default to history disabled and personalization disabled. History rows store safe summaries only: source tool, derived category/colour/material, confidence band, result count, returned product ids, source route, and timestamp. They intentionally do not store raw prompts, uploaded image data, previews, base64 content, provider payloads, full AI responses, or free-text feedback.
+
+```http
+GET /api/buyer/ai-discovery/preferences
+PUT /api/buyer/ai-discovery/preferences
+GET /api/buyer/ai-discovery/history?page=&pageSize=&tool=Assistant|VisualSearch
+DELETE /api/buyer/ai-discovery/history
+DELETE /api/buyer/ai-discovery/history/{historyId}
+```
+
+Preference response:
+
+```json
+{
+  "historyEnabled": false,
+  "personalizationEnabled": false,
+  "updatedAtUtc": null
+}
+```
+
+History item response:
+
+```json
+{
+  "historyId": "00000000-0000-0000-0000-000000000000",
+  "sourceTool": "Assistant",
+  "category": "Dresses",
+  "colour": "Black",
+  "material": null,
+  "confidenceBand": "Medium",
+  "resultCount": 4,
+  "productIds": ["00000000-0000-0000-0000-000000000000"],
+  "products": [],
+  "sourceRoute": "/assistant",
+  "createdAtUtc": "2026-05-29T12:00:00Z"
+}
+```
+
+Successful `/api/buyer/ai/shopping-assistant` and `/api/buyer/ai/visual-search` calls create a history row only after the buyer has explicitly enabled this preference. Phase 11H operational telemetry remains independent and continues to record sanitized aggregate/reporting events.
+
+Phase 11L adds opt-in AI discovery personalization. When `personalizationEnabled` is true, assistant and visual-search responses may lightly reorder already-eligible published/in-stock result cards and add buyer-safe explanation fields. Safe signals are limited to buyer-owned wishlist products/categories, recent cart/order product/category interest, and enabled AI history summaries. Personalization never stores or exposes raw prompts, uploaded images, previews, base64 content, provider payloads, support/dispute text, payment/refund data, full AI responses, or free-text feedback.
+
+Additive assistant/visual-search product-card fields:
+
+```json
+{
+  "personalizationApplied": true,
+  "personalizationReasons": ["Similar to saved items"]
+}
+```
 
 The admin dashboard landing page returns aggregate operational counts only. It intentionally does not expose buyer or seller detail records on the landing page. Dedicated finance and AI analytics are exposed through the admin reports routes above.
 
@@ -881,7 +971,7 @@ Product detail pages include buyer add-to-cart controls. Unauthenticated or non-
 
 ## Buyer Cart
 
-Cart endpoints require a buyer JWT role. A buyer has at most one active cart, and the MVP cart can contain products from only one seller.
+Cart endpoints require a buyer JWT role. A buyer has at most one active cart, and the MVP cart can contain products from only one seller. Once checkout creates an order, the source cart is marked `CheckedOut`; a later add-to-cart action creates a new active cart.
 
 ```http
 GET /api/cart
@@ -936,7 +1026,7 @@ Cart response:
 }
 ```
 
-Trying to add a product from a different seller returns a validation problem. `DELETE /api/cart` clears the active cart and returns `204`.
+Trying to add a product from a different seller returns a validation problem. `DELETE /api/cart` clears the active cart and returns `204`; checked-out carts linked to orders are historical checkout evidence and are not deleted through the active-cart endpoint.
 
 `POST /api/cart/shipping-options` returns active seller-managed delivery methods that match the selected checkout address. It uses the active single-seller cart plus either an owned saved `deliveryAddressId` or an inline `deliveryAddress`; the backend verifies the address with deterministic local rules, computes each shipping amount, applies any seller free-shipping threshold, and returns matching active platform pickup points for `PickupPoint` delivery methods.
 
@@ -1262,7 +1352,7 @@ POST /api/seller/orders/{orderId}/book-carrier
 POST /api/seller/orders/{orderId}/sync-carrier-tracking
 ```
 
-`POST /api/orders/from-cart` creates a `PendingPayment` order from the authenticated buyer's active cart and reserves inventory for the cart items. Repeating the request for the same active cart returns the existing pending-payment order instead of creating a duplicate. The cart stays active until a paid webhook confirms payment; successful payment clears the active cart after reservations and ledger processing complete.
+`POST /api/orders/from-cart` creates a `PendingPayment` order from the authenticated buyer's active cart, reserves inventory for the cart items, and marks the source cart `CheckedOut` so the buyer can start a new active cart after checkout. Repeating the request for the same cart id returns the existing pending-payment order instead of creating a duplicate. Successful payment remains webhook-confirmed and applies the payment, ledger, and reservation-confirmation work; failed/cancelled webhook processing releases active reservations without reopening the checked-out cart.
 
 Request:
 
@@ -1277,7 +1367,7 @@ Request:
 }
 ```
 
-`cartId` is optional; when omitted, the buyer's active cart is used. `reservationMinutes` is optional and defaults to 15 minutes. New orders require exactly one delivery address source: either an owned saved `deliveryAddressId` or an inline one-off `deliveryAddress`, plus an active seller delivery method that serves that address. The backend recomputes shipping from the selected delivery method and cart subtotal; Angular does not send `shippingAmount`. If the selected method type is `PickupPoint`, `pickupPointId` is required and must refer to an active platform pickup point matching the checkout address country/province. Non-pickup methods reject `pickupPointId`. The selected/inline address, address verification result, selected delivery method/rate, selected pickup point, and current seller policy are copied to the order as snapshots; later saved-address, seller delivery-method, pickup-point, or seller policy edits do not change historical orders. Older orders can return `deliveryAddress: null`, nullable delivery-method snapshot fields, `pickupPoint: null`, and `sellerPolicySnapshot: null`.
+`cartId` is optional; when omitted, the buyer's active cart is used. `reservationMinutes` is optional and defaults to 15 minutes. New orders require exactly one delivery address source: either an owned saved `deliveryAddressId` or an inline one-off `deliveryAddress`, plus an active seller delivery method that serves that address. The backend recomputes shipping from the selected delivery method and cart subtotal; Angular does not send `shippingAmount`. If the selected method type is `PickupPoint`, `pickupPointId` is required and must refer to an active platform pickup point matching the checkout address country/province. Non-pickup methods reject `pickupPointId`. The selected/inline address, address verification result, selected delivery method/rate, selected pickup point, and current seller policy are copied to the order as snapshots; later saved-address, seller delivery-method, pickup-point, or seller policy edits do not change historical orders. Older orders can return `deliveryAddress: null`, nullable delivery-method snapshot fields, `pickupPoint: null`, `sellerPolicySnapshot: null`, and `paymentSummary: null`.
 
 Inline delivery-address request:
 
@@ -1371,6 +1461,19 @@ Response:
     "productDisclaimer": "Colour and fit may vary slightly by screen and size.",
     "snapshotAtUtc": "2026-05-26T10:00:00+00:00"
   },
+  "paymentSummary": {
+    "paymentId": "00000000-0000-0000-0000-000000000000",
+    "providerName": "Fake",
+    "providerReference": "fake_reference",
+    "status": "Pending",
+    "amount": 999.98,
+    "currency": "ZAR",
+    "checkoutUrlAvailable": true,
+    "paidAtUtc": null,
+    "failedAtUtc": null,
+    "cancelledAtUtc": null,
+    "updatedAtUtc": "2026-05-27T20:00:00+00:00"
+  },
   "statusHistory": [
     {
       "statusHistoryId": "00000000-0000-0000-0000-000000000000",
@@ -1413,7 +1516,7 @@ Response:
 }
 ```
 
-`shippingAmount` is recomputed server-side from the selected seller delivery method. Platform fee and discount values remain placeholders and currently default to zero.
+`shippingAmount` is recomputed server-side from the selected seller delivery method. Platform fee and discount values remain placeholders and currently default to zero. Buyer order list/detail reads include the latest buyer-owned `paymentSummary` when a payment attempt exists; seller order reads keep this field null. The payment summary is buyer-safe and does not expose raw provider responses, webhook payloads, reconciliation notes, ledger entries, or admin-only payment data.
 
 Manual fulfilment starts after payment has moved the order to `Paid`. `POST /mark-processing` changes the order to `Processing` and creates an `AwaitingFulfilment` shipment if one does not exist. `POST /mark-ready-to-ship` moves a paid or processing order to `ReadyToShip` and marks the shipment `ReadyForCourier`. `POST /tracking` accepts:
 
@@ -2335,6 +2438,42 @@ Angular seller analytics route:
 
 Refund endpoints use finance policies. Reads require `FinanceRead` (`Admin`, `SuperAdmin`, `FinanceOperator`, or `FinanceApprover`). Creating refund requests requires `FinanceOperate` (`FinanceOperator` or `SuperAdmin`). Approving provider refunds and confirming manual provider refunds require `FinanceApprove` (`FinanceApprover` or `SuperAdmin`). Dual control applies to every role, including `SuperAdmin`: the actor who created a refund request cannot approve the same refund.
 
+Buyer refund reads are read-only, buyer-scoped, and expose only safe refund outcome context. They do not allow buyers to create, approve, reject, process, confirm, or mutate refunds.
+
+```http
+GET /api/buyer/refunds
+GET /api/buyer/refunds/{refundId}
+GET /api/buyer/orders/{orderId}/refunds
+GET /api/buyer/returns/{returnRequestId}/refunds
+```
+
+Buyer refund response:
+
+```json
+{
+  "refundId": "00000000-0000-0000-0000-000000000000",
+  "orderId": "00000000-0000-0000-0000-000000000000",
+  "returnRequestId": null,
+  "amount": 499.00,
+  "currency": "ZAR",
+  "status": "Processing",
+  "statusMessage": "Your refund is being processed.",
+  "requestedAtUtc": "2026-05-29T10:00:00Z",
+  "approvedAtUtc": "2026-05-29T11:00:00Z",
+  "refundedAtUtc": null,
+  "timeline": [
+    {
+      "status": "Processing",
+      "eventType": "ProviderRefundActionRequired",
+      "message": "Finance or provider action is still in progress.",
+      "createdAtUtc": "2026-05-29T11:30:00Z"
+    }
+  ]
+}
+```
+
+Buyer refund reads omit raw provider payloads, provider response bodies, finance reconciliation notes, internal finance notes, actor ids, audit logs, and raw failure internals. `ProviderRefundActionRequired` is presented as finance/provider action still in progress.
+
 ```http
 POST /api/admin/orders/{orderId}/refunds
 POST /api/admin/returns/{returnRequestId}/refunds
@@ -3025,7 +3164,7 @@ Supported `fieldsToApply` values are `title`, `shortDescription`, `fullDescripti
 
 ## Current Scope
 
-Health/readiness, identity foundation with HttpOnly refresh cookies, seller onboarding, seller inventory adjustment and bulk CSV import/export, seller delivery-method/rate management including pickup-point delivery methods, seller store settings UI with payout-profile change re-verification and seller notification preferences, admin seller payout-profile change review, admin seller approval and Angular moderation polish, admin product review and Angular moderation polish, admin buyer-review moderation, admin audit-log UI polish, admin dashboard summary, admin category/attribute catalog management, admin platform pickup-point management, admin marketplace finance reports, admin order/payment read APIs and Angular read screens, public product search, public verified-buyer product review reads, buyer-facing shop/category/product/seller/cart/checkout/assistant/visual-search pages, buyer account order/return/dispute/support/wishlist/review/notification/settings Angular routes, buyer profile settings, saved delivery addresses with local address verification, delivery instructions, order delivery-address verification snapshots, order delivery-method and pickup-point snapshots, fulfilment exception tracking, in-app notification preferences, buyer transactional email notification outbox delivery, buyer SignalR notification live updates, seller transactional in-app/email notifications, seller SignalR notification live updates, and seller notification UI, seller product draft endpoints with production-hardened media uploads and image metadata updates, S3-compatible image storage configuration, media scanning abstraction, WebP image variants, media cleanup, moderation-aware published listing revisions, polished seller product editor UX, buyer cart endpoints with saved-for-later wishlist moves, product image metadata, and seller shipping-option quotes, buyer wishlist/review/notification backend APIs with saved-state hydration and wishlist-to-cart moves, inventory reservation services, order creation from cart, provider-neutral carrier booking/tracking with Manual and Fake providers, carrier provider comparison notes, payment provider abstractions with fake and PayFast providers, local payment persistence with retryable checkout URLs, idempotent payment webhook handling including duplicate race fallback and paid-cart cleanup, payment reconciliation review evidence, seller delivery confirmation, successful-payment ledger entries, seller balance/payout read APIs, admin payout hold/release/make-available/process/reconcile with a fake payout provider, refund workflow with ledger reversals, payout adjustments, and manual PayFast refund confirmation, finance dual-control policies, dispute workflow with evidence/messages/admin resolution, admin finance Angular routes for refunds/payouts/disputes, support ticket workflow with private internal notes and Angular support queue/detail routes, seller ad campaign draft/submission API and Angular dashboard, seller analytics dashboard with first-party storefront funnel and source reporting, admin ad campaign review, ad event tracking and seller campaign metrics, product moderation, AI suggestion persistence/DTOs, the backend AI listing assistant service abstraction, seller AI suggestion generation/apply endpoints, the Angular seller AI assistant UI, buyer AI shopping intent extraction/recommendations, buyer visual search with a fake vision provider, and private product embedding generation exist. PayFast sandbox verification, payment-provider status-query settlement, automatic PayFast refunds, real payout provider integration, real carrier provider integration, carrier-provided rate calculation, external address verification/geocoding, pickup-network APIs, production vision AI, buyer-favoured dispute money movement, admin order/payment mutation workflows, SMS/push notification delivery, admin email workflows, hard-delete taxonomy operations, bulk category import, taxonomy versioning, and third-party analytics integrations are intentionally not implemented yet.
+Health/readiness, identity foundation with HttpOnly refresh cookies, seller onboarding, seller inventory adjustment and bulk CSV import/export, seller delivery-method/rate management including pickup-point delivery methods, seller store settings UI with payout-profile change re-verification and seller notification preferences, admin seller payout-profile change review, admin seller approval and Angular moderation polish, admin product review and Angular moderation polish, admin buyer-review moderation, admin audit-log UI polish, admin dashboard summary, admin category/attribute catalog management, admin platform pickup-point management, admin marketplace finance reports, admin buyer-growth aggregate reports, admin order/payment read APIs and Angular read screens, public product search, public verified-buyer product review reads, buyer-facing shop/category/product/seller/cart/checkout/assistant/visual-search pages, buyer account order/return/dispute/support/wishlist/review/notification/settings Angular routes, buyer profile settings, saved delivery addresses with local address verification, delivery instructions, order delivery-address verification snapshots, order delivery-method and pickup-point snapshots, fulfilment exception tracking, in-app notification preferences, buyer transactional email notification outbox delivery, buyer SignalR notification live updates, buyer AI discovery telemetry for assistant/visual-search handoffs and structured feedback, seller transactional in-app/email notifications, seller SignalR notification live updates, and seller notification UI, seller product draft endpoints with production-hardened media uploads and image metadata updates, S3-compatible image storage configuration, media scanning abstraction, WebP image variants, media cleanup, moderation-aware published listing revisions, polished seller product editor UX, buyer cart endpoints with saved-for-later wishlist moves, product image metadata, and seller shipping-option quotes, buyer wishlist/review/notification backend APIs with saved-state hydration and wishlist-to-cart moves, inventory reservation services, order creation from cart, provider-neutral carrier booking/tracking with Manual and Fake providers, carrier provider comparison notes, payment provider abstractions with fake and PayFast providers, local payment persistence with retryable checkout URLs, idempotent payment webhook handling including duplicate race fallback and paid-cart cleanup, payment reconciliation review evidence, seller delivery confirmation, successful-payment ledger entries, seller balance/payout read APIs, admin payout hold/release/make-available/process/reconcile with a fake payout provider, refund workflow with ledger reversals, payout adjustments, and manual PayFast refund confirmation, finance dual-control policies, dispute workflow with evidence/messages/admin resolution, admin finance Angular routes for refunds/payouts/disputes, support ticket workflow with private internal notes and Angular support queue/detail routes, seller ad campaign draft/submission API and Angular dashboard, seller analytics dashboard with first-party storefront funnel and source reporting, admin ad campaign review, ad event tracking and seller campaign metrics, product moderation, AI suggestion persistence/DTOs, the backend AI listing assistant service abstraction, seller AI suggestion generation/apply endpoints, the Angular seller AI assistant UI, buyer AI shopping intent extraction/recommendations, buyer visual search with a fake vision provider, and private product embedding generation exist. PayFast sandbox verification, payment-provider status-query settlement, automatic PayFast refunds, real payout provider integration, real carrier provider integration, carrier-provided rate calculation, external address verification/geocoding, pickup-network APIs, production vision AI, buyer-favoured dispute money movement, admin order/payment mutation workflows, SMS/push notification delivery, admin email workflows, hard-delete taxonomy operations, bulk category import, taxonomy versioning, and third-party analytics integrations are intentionally not implemented yet.
 
 ## API Rules
 
