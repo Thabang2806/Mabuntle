@@ -1,7 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerNotificationResponse } from '../buyer/buyer-engagement.models';
 import { BuyerEngagementService } from '../buyer/buyer-engagement.service';
@@ -18,7 +17,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     BuyerWorkspaceNavComponent,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
     PageHeaderComponent,
     RouterLink,
     StatusBadgeComponent,
@@ -34,8 +32,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Read marketplace updates about your account activity."
       >
         <div pageHeaderActions>
-          <a mat-stroked-button routerLink="/account/settings">Notification settings</a>
-          <button mat-stroked-button type="button" [disabled]="unreadCount() === 0 || isSaving()" (click)="markAllRead()">
+          <a data-ui-button="secondary" routerLink="/account/settings">Notification settings</a>
+          <button data-ui-button="secondary" type="button" [disabled]="unreadCount() === 0 || isSaving()" (click)="markAllRead()">
             Mark all read
           </button>
         </div>
@@ -63,7 +61,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="No notifications yet"
             message="Order, return, support, and account updates will appear here when marketplace activity creates them."
           >
-            <a mat-flat-button routerLink="/account">Back to account</a>
+            <a data-ui-button="primary" routerLink="/account">Back to account</a>
           </app-empty-state>
         } @else {
           <div class="buyer-notification-list">
@@ -84,12 +82,11 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
                 <div class="buyer-action-row">
                   @if (relatedRoute(notification)) {
-                    <a mat-stroked-button [routerLink]="relatedRoute(notification)">Open</a>
+                    <a data-ui-button="secondary" [routerLink]="relatedRoute(notification)">Open</a>
                   }
 
                   @if (!notification.readAtUtc) {
-                    <button
-                      mat-stroked-button
+                    <button data-ui-button="secondary"
                       type="button"
                       [disabled]="savingNotificationId() === notification.notificationId"
                       (click)="markRead(notification)"

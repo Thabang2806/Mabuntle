@@ -34,8 +34,8 @@ describe('SellerAdCampaignsPageComponent', () => {
     expect(compiled.textContent).toContain('PendingReview');
     expect(compiled.querySelector('.hf-ads-layout')).not.toBeNull();
     expect(compiled.textContent).toContain('Ad spend');
-    expect(compiled.querySelector('a[href="/seller/ads/new"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/seller/ads/campaign-id"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/ads/new"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/ads/campaign-id"]')).not.toBeNull();
   });
 });
 

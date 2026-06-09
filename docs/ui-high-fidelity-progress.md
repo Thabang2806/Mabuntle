@@ -78,5 +78,5 @@ For the next implementation pass, evolve this into the luxury editorial hybrid d
 - Mark a mockup `Done` only after Angular build and tests pass.
 - Keep routes unchanged unless a later plan explicitly adds aliases.
 - Do not copy placeholder inventory as live product data.
-- Do not copy mojibake symbols from static mockups; use clean text or existing Material controls.
+- Do not copy mojibake symbols from static mockups; use clean text and the shared Tailwind/native UI primitives.
 - Record manual desktop/mobile visual review notes after each screen pass.

@@ -1,7 +1,6 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { SellerAdCampaignResponse } from '../seller/seller-ad-campaign.models';
 import { SellerAdCampaignService } from '../seller/seller-ad-campaign.service';
 import { getApiErrorMessage } from '../auth/api-error';
@@ -11,7 +10,7 @@ import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge
 
 @Component({
   selector: 'app-seller-ad-campaigns-page',
-  imports: [CurrencyPipe, DatePipe, MatButtonModule, MetricTileComponent, RouterLink, SellerWorkspaceNavComponent, StatusBadgeComponent],
+  imports: [CurrencyPipe, DatePipe, MetricTileComponent, RouterLink, SellerWorkspaceNavComponent, StatusBadgeComponent],
   template: `
     <section class="page seller-ops-page seller-products hf-seller-ads-page">
       <app-seller-workspace-nav />
@@ -22,7 +21,7 @@ import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge
           <h1>Campaigns and promoted listings</h1>
           <p>Create promoted listing campaigns, monitor budget posture, and keep campaign review state visible.</p>
         </div>
-        <a mat-flat-button routerLink="/seller/ads/new">New campaign</a>
+        <a data-ui-button="primary" routerLink="/ads/new">New campaign</a>
       </div>
 
       @if (isLoading()) {
@@ -37,7 +36,7 @@ import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge
             <span class="status-pill">Ads</span>
             <h2>No campaigns yet</h2>
             <p>Create a draft campaign once you have published products ready to promote.</p>
-            <a mat-flat-button routerLink="/seller/ads/new">Create campaign</a>
+            <a data-ui-button="primary" routerLink="/ads/new">Create campaign</a>
           </div>
         } @else {
           <section class="hf-metric-grid" aria-label="Seller advertising summary">
@@ -62,7 +61,7 @@ import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge
               </div>
 
               @for (campaign of campaigns(); track campaign.adCampaignId) {
-                <a class="hf-ad-campaign-row" [routerLink]="['/seller/ads', campaign.adCampaignId]">
+                <a class="hf-ad-campaign-row" [routerLink]="['/ads', campaign.adCampaignId]">
                   <div class="hf-ad-thumb" aria-hidden="true">{{ campaign.name.charAt(0) }}</div>
                   <div class="hf-ad-row-main">
                     <strong>{{ campaign.name }}</strong>
@@ -92,7 +91,7 @@ import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge
                 <span><strong>{{ reviewCount() }}</strong> awaiting review</span>
                 <span><strong>{{ warningCount() }}</strong> with warnings</span>
               </div>
-              <a mat-flat-button routerLink="/seller/ads/new">Create campaign</a>
+              <a data-ui-button="primary" routerLink="/ads/new">Create campaign</a>
             </aside>
           </section>
         }
@@ -127,7 +126,7 @@ export class SellerAdCampaignsPageComponent implements OnInit {
     const promotedProducts = new Set(campaigns.flatMap(campaign => campaign.productIds)).size;
 
     return [
-      { label: 'Ad spend', value: formatZar(spent), badge: 'Loaded campaigns', tone: 'accent' },
+      { label: 'Ad spend', value: renderZar(spent), badge: 'Loaded campaigns', tone: 'accent' },
       { label: 'Campaigns', value: String(campaigns.length), badge: `${this.activeCount()} active`, tone: 'success' },
       { label: 'Products', value: String(promotedProducts), badge: 'Promoted listings', tone: 'neutral' },
       { label: 'Review queue', value: String(this.reviewCount()), badge: 'Drafts and review', tone: this.reviewCount() > 0 ? 'warning' : 'success' }
@@ -172,6 +171,6 @@ export class SellerAdCampaignsPageComponent implements OnInit {
   }
 }
 
-function formatZar(value: number): string {
+function renderZar(value: number): string {
   return `R${Math.round(value).toLocaleString('en-ZA')}`;
 }

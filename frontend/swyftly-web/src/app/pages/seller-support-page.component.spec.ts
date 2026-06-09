@@ -58,7 +58,7 @@ describe('SellerSupportPageComponent', () => {
     await fixture.whenStable();
 
     expect(supportService.createTicket).toHaveBeenCalled();
-    expect(router.navigate).toHaveBeenCalledWith(['/seller/support', 'new-ticket-id']);
+    expect(router.navigate).toHaveBeenCalledWith(['/support', 'new-ticket-id']);
   });
 });
 

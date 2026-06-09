@@ -8,12 +8,6 @@ import {
   ValidatorFn,
   Validators
 } from '@angular/forms';
-import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { getApiErrorMessage } from '../auth/api-error';
 import {
   SellerDeliveryMethodRequest,
@@ -44,19 +38,14 @@ import { SellerWorkspaceNavComponent } from '../seller/seller-workspace-nav.comp
 import { PageHeaderComponent } from '../shared/ui/page-header.component';
 import { StatusBadgeComponent, StatusBadgeTone } from '../shared/ui/status-badge.component';
 import { UiAlertComponent } from '../shared/ui/ui-alert.component';
+import { FRONTEND_HOSTS } from '../frontend-experience';
 
 @Component({
   selector: 'app-seller-store-settings-page',
   imports: [
     CurrencyPipe,
-    MatButtonModule,
-    MatCheckboxModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     PageHeaderComponent,
     ReactiveFormsModule,
-    RouterLink,
     SellerWorkspaceNavComponent,
     StatusBadgeComponent,
     UiAlertComponent
@@ -71,7 +60,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Maintain the public store profile and fulfilment address used by your seller workspace."
       >
         @if (storefrontPreviewUrl(); as previewUrl) {
-          <a mat-stroked-button pageHeaderActions [routerLink]="previewUrl">View storefront</a>
+          <a data-ui-button="secondary" pageHeaderActions [href]="previewUrl">View storefront</a>
         }
       </app-page-header>
 
@@ -104,147 +93,147 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             <span class="eyebrow">Seller profile</span>
             <h2>Business identity</h2>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Display name</mat-label>
-              <input matInput formControlName="displayName" />
+            <label class="ui-field">
+              <span>Display name</span>
+              <input formControlName="displayName" />
               @if (profileForm.controls.displayName.hasError('required')) {
-                <mat-error>Display name is required.</mat-error>
+                <span class="ui-field-error">Display name is required.</span>
               }
-            </mat-form-field>
+            </label>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Contact email</mat-label>
-              <input matInput type="email" formControlName="contactEmail" />
+            <label class="ui-field">
+              <span>Contact email</span>
+              <input type="email" formControlName="contactEmail" />
               @if (profileForm.controls.contactEmail.hasError('required')) {
-                <mat-error>Contact email is required.</mat-error>
+                <span class="ui-field-error">Contact email is required.</span>
               } @else if (profileForm.controls.contactEmail.hasError('email')) {
-                <mat-error>Enter a valid email address.</mat-error>
+                <span class="ui-field-error">Enter a valid email address.</span>
               }
-            </mat-form-field>
+            </label>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Phone number</mat-label>
-              <input matInput formControlName="phoneNumber" />
+            <label class="ui-field">
+              <span>Phone number</span>
+              <input formControlName="phoneNumber" />
               @if (profileForm.controls.phoneNumber.hasError('required')) {
-                <mat-error>Phone number is required.</mat-error>
+                <span class="ui-field-error">Phone number is required.</span>
               }
-            </mat-form-field>
+            </label>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Business type</mat-label>
-              <mat-select formControlName="businessType">
-                <mat-option value="Individual">Individual</mat-option>
-                <mat-option value="RegisteredBusiness">Registered business</mat-option>
-              </mat-select>
-            </mat-form-field>
+            <label class="ui-field">
+              <span>Business type</span>
+              <select formControlName="businessType">
+                <option value="Individual">Individual</option>
+                <option value="RegisteredBusiness">Registered business</option>
+              </select>
+            </label>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Business name</mat-label>
-              <input matInput formControlName="businessName" />
+            <label class="ui-field">
+              <span>Business name</span>
+              <input formControlName="businessName" />
               @if (profileForm.hasError('businessNameRequired')) {
-                <mat-error>Business name is required for registered businesses.</mat-error>
+                <span class="ui-field-error">Business name is required for registered businesses.</span>
               }
-            </mat-form-field>
+            </label>
 
-            <button mat-flat-button type="submit" [disabled]="isSaving()">Save profile</button>
+            <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Save profile</button>
           </form>
 
           <form [formGroup]="storefrontForm" (ngSubmit)="saveStorefront()" class="route-card wizard-form" novalidate>
             <span class="eyebrow">Public storefront</span>
             <h2>Brand presentation</h2>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Store name</mat-label>
-              <input matInput formControlName="storeName" />
+            <label class="ui-field">
+              <span>Store name</span>
+              <input formControlName="storeName" />
               @if (storefrontForm.controls.storeName.hasError('required')) {
-                <mat-error>Store name is required.</mat-error>
+                <span class="ui-field-error">Store name is required.</span>
               }
-            </mat-form-field>
+            </label>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Store slug</mat-label>
-              <input matInput formControlName="slug" />
+            <label class="ui-field">
+              <span>Store slug</span>
+              <input formControlName="slug" />
               @if (storefrontForm.controls.slug.hasError('required')) {
-                <mat-error>Store slug is required.</mat-error>
+                <span class="ui-field-error">Store slug is required.</span>
               } @else if (storefrontForm.controls.slug.hasError('pattern')) {
-                <mat-error>Use lowercase letters, numbers, and hyphens.</mat-error>
+                <span class="ui-field-error">Use lowercase letters, numbers, and hyphens.</span>
               }
-            </mat-form-field>
+            </label>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Description</mat-label>
-              <textarea matInput rows="4" formControlName="description"></textarea>
-            </mat-form-field>
+            <label class="ui-field">
+              <span>Description</span>
+              <textarea rows="4" formControlName="description"></textarea>
+            </label>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Logo URL</mat-label>
-              <input matInput formControlName="logoUrl" />
-            </mat-form-field>
+            <label class="ui-field">
+              <span>Logo URL</span>
+              <input formControlName="logoUrl" />
+            </label>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Banner URL</mat-label>
-              <input matInput formControlName="bannerUrl" />
-            </mat-form-field>
+            <label class="ui-field">
+              <span>Banner URL</span>
+              <input formControlName="bannerUrl" />
+            </label>
 
-            <button mat-flat-button type="submit" [disabled]="isSaving()">Save storefront</button>
+            <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Save storefront</button>
           </form>
 
           <form [formGroup]="addressForm" (ngSubmit)="saveAddress()" class="route-card wizard-form" novalidate>
             <span class="eyebrow">Fulfilment</span>
             <h2>Dispatch address</h2>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Address line 1</mat-label>
-              <input matInput formControlName="addressLine1" />
+            <label class="ui-field">
+              <span>Address line 1</span>
+              <input formControlName="addressLine1" />
               @if (addressForm.controls.addressLine1.hasError('required')) {
-                <mat-error>Address line 1 is required.</mat-error>
+                <span class="ui-field-error">Address line 1 is required.</span>
               }
-            </mat-form-field>
+            </label>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Address line 2</mat-label>
-              <input matInput formControlName="addressLine2" />
-            </mat-form-field>
+            <label class="ui-field">
+              <span>Address line 2</span>
+              <input formControlName="addressLine2" />
+            </label>
 
             <div class="form-grid">
-              <mat-form-field appearance="outline">
-                <mat-label>City</mat-label>
-                <input matInput formControlName="city" />
+              <label class="ui-field">
+                <span>City</span>
+                <input formControlName="city" />
                 @if (addressForm.controls.city.hasError('required')) {
-                  <mat-error>City is required.</mat-error>
+                  <span class="ui-field-error">City is required.</span>
                 }
-              </mat-form-field>
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Province</mat-label>
-                <input matInput formControlName="province" />
+              <label class="ui-field">
+                <span>Province</span>
+                <input formControlName="province" />
                 @if (addressForm.controls.province.hasError('required')) {
-                  <mat-error>Province is required.</mat-error>
+                  <span class="ui-field-error">Province is required.</span>
                 }
-              </mat-form-field>
+              </label>
             </div>
 
             <div class="form-grid">
-              <mat-form-field appearance="outline">
-                <mat-label>Postal code</mat-label>
-                <input matInput formControlName="postalCode" />
+              <label class="ui-field">
+                <span>Postal code</span>
+                <input formControlName="postalCode" />
                 @if (addressForm.controls.postalCode.hasError('required')) {
-                  <mat-error>Postal code is required.</mat-error>
+                  <span class="ui-field-error">Postal code is required.</span>
                 }
-              </mat-form-field>
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Country code</mat-label>
-                <input matInput maxlength="2" formControlName="countryCode" />
+              <label class="ui-field">
+                <span>Country code</span>
+                <input maxlength="2" formControlName="countryCode" />
                 @if (addressForm.controls.countryCode.hasError('required')) {
-                  <mat-error>Country code is required.</mat-error>
+                  <span class="ui-field-error">Country code is required.</span>
                 } @else if (addressForm.controls.countryCode.hasError('pattern')) {
-                  <mat-error>Use a 2-letter country code.</mat-error>
+                  <span class="ui-field-error">Use a 2-letter country code.</span>
                 }
-              </mat-form-field>
+              </label>
             </div>
 
-            <button mat-flat-button type="submit" [disabled]="isSaving()">Save address</button>
+            <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Save address</button>
           </form>
 
           <section class="route-card wizard-form seller-delivery-methods">
@@ -269,11 +258,11 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                     </div>
                     <app-status-badge [label]="method.isActive ? 'Active' : 'Inactive'" [tone]="method.isActive ? 'success' : 'warning'" />
                     <div class="seller-delivery-method-actions">
-                      <button mat-stroked-button type="button" (click)="editDeliveryMethod(method)">Edit</button>
+                      <button data-ui-button="secondary" type="button" (click)="editDeliveryMethod(method)">Edit</button>
                       @if (method.isActive) {
-                        <button mat-stroked-button type="button" (click)="setDeliveryMethodActive(method, false)" [disabled]="isSaving()">Deactivate</button>
+                        <button data-ui-button="secondary" type="button" (click)="setDeliveryMethodActive(method, false)" [disabled]="isSaving()">Deactivate</button>
                       } @else {
-                        <button mat-stroked-button type="button" (click)="setDeliveryMethodActive(method, true)" [disabled]="isSaving()">Activate</button>
+                        <button data-ui-button="secondary" type="button" (click)="setDeliveryMethodActive(method, true)" [disabled]="isSaving()">Activate</button>
                       }
                     </div>
                   </article>
@@ -286,93 +275,93 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             <form [formGroup]="deliveryMethodForm" (ngSubmit)="saveDeliveryMethod()" class="seller-delivery-method-form" novalidate>
               <h3>{{ editingDeliveryMethodId() ? 'Edit delivery method' : 'Add delivery method' }}</h3>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Name</mat-label>
-                <input matInput formControlName="name" />
+              <label class="ui-field">
+                <span>Name</span>
+                <input formControlName="name" />
                 @if (deliveryMethodForm.controls.name.hasError('required')) {
-                  <mat-error>Name is required.</mat-error>
+                  <span class="ui-field-error">Name is required.</span>
                 }
-              </mat-form-field>
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Description</mat-label>
-                <textarea matInput rows="3" formControlName="description"></textarea>
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Description</span>
+                <textarea rows="3" formControlName="description"></textarea>
+              </label>
 
               <div class="form-grid">
-                <mat-form-field appearance="outline">
-                  <mat-label>Method type</mat-label>
-                  <mat-select formControlName="methodType">
-                    <mat-option value="Standard">Standard</mat-option>
-                    <mat-option value="Express">Express</mat-option>
-                    <mat-option value="LocalCourier">Local courier</mat-option>
-                    <mat-option value="PickupPoint">Pickup point</mat-option>
-                  </mat-select>
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Method type</span>
+                  <select formControlName="methodType">
+                    <option value="Standard">Standard</option>
+                    <option value="Express">Express</option>
+                    <option value="LocalCourier">Local courier</option>
+                    <option value="PickupPoint">Pickup point</option>
+                  </select>
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Status</mat-label>
-                  <mat-select formControlName="isActive">
-                    <mat-option [value]="true">Active</mat-option>
-                    <mat-option [value]="false">Inactive</mat-option>
-                  </mat-select>
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Status</span>
+                  <select formControlName="isActive">
+                    <option [ngValue]="true">Active</option>
+                    <option [ngValue]="false">Inactive</option>
+                  </select>
+                </label>
               </div>
 
               <div class="form-grid">
-                <mat-form-field appearance="outline">
-                  <mat-label>Country code</mat-label>
-                  <input matInput maxlength="2" formControlName="countryCode" />
+                <label class="ui-field">
+                  <span>Country code</span>
+                  <input maxlength="2" formControlName="countryCode" />
                   @if (deliveryMethodForm.controls.countryCode.invalid) {
-                    <mat-error>Use a two-letter country code.</mat-error>
+                    <span class="ui-field-error">Use a two-letter country code.</span>
                   }
-                </mat-form-field>
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Province</mat-label>
-                  <input matInput formControlName="province" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Province</span>
+                  <input formControlName="province" />
+                </label>
               </div>
 
               <div class="form-grid">
-                <mat-form-field appearance="outline">
-                  <mat-label>Base price</mat-label>
-                  <input matInput type="number" min="0" formControlName="basePrice" />
+                <label class="ui-field">
+                  <span>Base price</span>
+                  <input type="number" min="0" formControlName="basePrice" />
                   @if (deliveryMethodForm.controls.basePrice.invalid) {
-                    <mat-error>Base price cannot be negative.</mat-error>
+                    <span class="ui-field-error">Base price cannot be negative.</span>
                   }
-                </mat-form-field>
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Free shipping threshold</mat-label>
-                  <input matInput type="number" min="0" formControlName="freeShippingThreshold" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Free shipping threshold</span>
+                  <input type="number" min="0" formControlName="freeShippingThreshold" />
+                </label>
               </div>
 
               <div class="form-grid">
-                <mat-form-field appearance="outline">
-                  <mat-label>Estimated min days</mat-label>
-                  <input matInput type="number" min="0" formControlName="estimatedMinDays" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Estimated min days</span>
+                  <input type="number" min="0" formControlName="estimatedMinDays" />
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Estimated max days</mat-label>
-                  <input matInput type="number" min="0" formControlName="estimatedMaxDays" />
+                <label class="ui-field">
+                  <span>Estimated max days</span>
+                  <input type="number" min="0" formControlName="estimatedMaxDays" />
                   @if (deliveryMethodForm.hasError('invalidDayRange')) {
-                    <mat-error>Max days must be at least min days.</mat-error>
+                    <span class="ui-field-error">Max days must be at least min days.</span>
                   }
-                </mat-form-field>
+                </label>
               </div>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Display order</mat-label>
-                <input matInput type="number" min="0" formControlName="displayOrder" />
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Display order</span>
+                <input type="number" min="0" formControlName="displayOrder" />
+              </label>
 
               <div class="form-actions">
-                <button mat-flat-button type="submit" [disabled]="isSaving()">Save delivery method</button>
+                <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Save delivery method</button>
                 @if (editingDeliveryMethodId()) {
-                  <button mat-stroked-button type="button" (click)="cancelDeliveryMethodEdit()">Cancel edit</button>
+                  <button data-ui-button="secondary" type="button" (click)="cancelDeliveryMethodEdit()">Cancel edit</button>
                 }
               </div>
             </form>
@@ -400,45 +389,45 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             }
 
             <form [formGroup]="policyForm" (ngSubmit)="saveStorePolicy()" class="seller-delivery-method-form" novalidate>
-              <mat-form-field appearance="outline">
-                <mat-label>Return window days</mat-label>
-                <input matInput type="number" min="0" max="365" formControlName="returnWindowDays" />
+              <label class="ui-field">
+                <span>Return window days</span>
+                <input type="number" min="0" max="365" formControlName="returnWindowDays" />
                 @if (policyForm.controls.returnWindowDays.invalid) {
-                  <mat-error>Use a return window from 0 to 365 days.</mat-error>
+                  <span class="ui-field-error">Use a return window from 0 to 365 days.</span>
                 }
-              </mat-form-field>
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Return policy</mat-label>
-                <textarea matInput rows="4" formControlName="returnPolicy"></textarea>
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Return policy</span>
+                <textarea rows="4" formControlName="returnPolicy"></textarea>
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Exchange policy</mat-label>
-                <textarea matInput rows="4" formControlName="exchangePolicy"></textarea>
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Exchange policy</span>
+                <textarea rows="4" formControlName="exchangePolicy"></textarea>
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Fulfilment guidance</mat-label>
-                <textarea matInput rows="3" formControlName="fulfilmentPolicy"></textarea>
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Fulfilment guidance</span>
+                <textarea rows="3" formControlName="fulfilmentPolicy"></textarea>
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Support expectations</mat-label>
-                <textarea matInput rows="3" formControlName="supportPolicy"></textarea>
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Support expectations</span>
+                <textarea rows="3" formControlName="supportPolicy"></textarea>
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Product care notes</mat-label>
-                <textarea matInput rows="3" formControlName="careInstructions"></textarea>
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Product care notes</span>
+                <textarea rows="3" formControlName="careInstructions"></textarea>
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Product disclaimer</mat-label>
-                <textarea matInput rows="3" formControlName="productDisclaimer"></textarea>
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Product disclaimer</span>
+                <textarea rows="3" formControlName="productDisclaimer"></textarea>
+              </label>
 
-              <button mat-flat-button type="submit" [disabled]="isSaving()">Save store policies</button>
+              <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Save store policies</button>
             </form>
           </section>
 
@@ -484,27 +473,27 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               }
 
               <form [formGroup]="payoutChangeForm" (ngSubmit)="savePayoutChangeDraft()" class="seller-delivery-method-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>New payout provider reference</mat-label>
-                  <input matInput formControlName="payoutProviderReference" />
+                <label class="ui-field">
+                  <span>New payout provider reference</span>
+                  <input formControlName="payoutProviderReference" />
                   @if (payoutChangeForm.controls.payoutProviderReference.hasError('required')) {
-                    <mat-error>Payout provider reference is required.</mat-error>
+                    <span class="ui-field-error">Payout provider reference is required.</span>
                   }
-                </mat-form-field>
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Reason for change</mat-label>
-                  <textarea matInput rows="4" formControlName="reason"></textarea>
+                <label class="ui-field">
+                  <span>Reason for change</span>
+                  <textarea rows="4" formControlName="reason"></textarea>
                   @if (payoutChangeForm.controls.reason.hasError('required')) {
-                    <mat-error>Reason is required.</mat-error>
+                    <span class="ui-field-error">Reason is required.</span>
                   }
-                </mat-form-field>
+                </label>
 
                 <div class="form-actions">
-                  <button mat-flat-button type="submit" [disabled]="isSaving() || payoutChangeState()?.activeRequest?.status === 'PendingReview'">Save draft</button>
-                  <button mat-stroked-button type="button" [disabled]="isSaving() || !payoutChangeState()?.activeRequest || payoutChangeState()?.activeRequest?.status === 'PendingReview'" (click)="submitPayoutChangeReview()">Submit review</button>
+                  <button data-ui-button="primary" type="submit" [disabled]="isSaving() || payoutChangeState()?.activeRequest?.status === 'PendingReview'">Save draft</button>
+                  <button data-ui-button="secondary" type="button" [disabled]="isSaving() || !payoutChangeState()?.activeRequest || payoutChangeState()?.activeRequest?.status === 'PendingReview'" (click)="submitPayoutChangeReview()">Submit review</button>
                   @if (payoutChangeState()?.activeRequest) {
-                    <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="cancelPayoutChange()">Cancel request</button>
+                    <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="cancelPayoutChange()">Cancel request</button>
                   }
                 </div>
               </form>
@@ -525,14 +514,14 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                       <span>{{ category.description }}</span>
                     </div>
                     <div class="notification-preference-controls">
-                      <mat-checkbox formControlName="isEnabled">In-app</mat-checkbox>
-                      <mat-checkbox formControlName="emailEnabled">Email</mat-checkbox>
+                      <label class="ui-checkbox"><input type="checkbox" formControlName="isEnabled"><span>In-app</span></label>
+                      <label class="ui-checkbox"><input type="checkbox" formControlName="emailEnabled"><span>Email</span></label>
                     </div>
                   </div>
                 }
               </div>
 
-              <button mat-flat-button type="submit" [disabled]="isSaving()">Save notification preferences</button>
+              <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Save notification preferences</button>
             </form>
           </section>
         </div>
@@ -566,7 +555,7 @@ export class SellerStoreSettingsPageComponent implements OnInit {
 
   protected readonly storefrontPreviewUrl = computed(() => {
     const slug = this.onboarding()?.storefront?.slug;
-    return slug ? `/seller/${slug}` : null;
+    return slug ? `${FRONTEND_HOSTS.client}/seller/${slug}` : null;
   });
 
   protected readonly profileForm = this.formBuilder.group({

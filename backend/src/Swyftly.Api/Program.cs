@@ -56,7 +56,9 @@ var allowedFrontendOrigins = new[]
         "https://localhost:4200",
         "http://localhost:4201",
         "https://localhost:4201",
-        "https://mabuntle.com"
+        "https://mabuntle.com",
+        "https://seller.mabuntle.com",
+        "https://admin.mabuntle.com"
     }
     .Concat(configuredFrontendOrigins)
     .Where(origin => !string.IsNullOrWhiteSpace(origin))
@@ -200,9 +202,9 @@ builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new()
     {
-        Title = "Swyftly API",
+        Title = "Mabuntle API",
         Version = "v1",
-        Description = "Foundation API for the Swyftly marketplace."
+        Description = "Foundation API for the Mabuntle marketplace."
     });
 
     options.CustomSchemaIds(type => (type.FullName ?? type.Name).Replace("+", "."));
@@ -331,7 +333,7 @@ app.MapGet("/health/ready", async (HealthCheckService healthCheckService) =>
 
     var response = new ReadinessHealthResponse(
         report.Status.ToString(),
-        "Swyftly.Api",
+        "Mabuntle.Api",
         DateTimeOffset.UtcNow,
         Math.Round(report.TotalDuration.TotalMilliseconds, 2),
         checks);

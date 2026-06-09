@@ -74,6 +74,91 @@
                 }
               ]
             },
+            "client-cloudflare": {
+              "outputPath": "dist/swyftly-client",
+              "browser": "src/main.ts",
+              "tsConfig": "tsconfig.client.json",
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.cloudflare.ts"
+                }
+              ]
+            },
+            "seller-cloudflare": {
+              "outputPath": "dist/swyftly-seller",
+              "browser": "src/main.seller.ts",
+              "tsConfig": "tsconfig.seller.json",
+              "prerender": false,
+              "ssr": false,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.cloudflare.ts"
+                }
+              ]
+            },
+            "admin-cloudflare": {
+              "outputPath": "dist/swyftly-admin",
+              "browser": "src/main.admin.ts",
+              "tsConfig": "tsconfig.admin.json",
+              "prerender": false,
+              "ssr": false,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.cloudflare.ts"
+                }
+              ]
+            },
+            "client-development": {
+              "outputPath": "dist/swyftly-client-dev",
+              "browser": "src/main.ts",
+              "tsConfig": "tsconfig.client.json",
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "prerender": false,
+              "ssr": false,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.development.ts"
+                }
+              ]
+            },
+            "seller-development": {
+              "outputPath": "dist/swyftly-seller-dev",
+              "browser": "src/main.seller.ts",
+              "tsConfig": "tsconfig.seller.json",
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "prerender": false,
+              "ssr": false,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.development.ts"
+                }
+              ]
+            },
+            "admin-development": {
+              "outputPath": "dist/swyftly-admin-dev",
+              "browser": "src/main.admin.ts",
+              "tsConfig": "tsconfig.admin.json",
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "prerender": false,
+              "ssr": false,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.development.ts"
+                }
+              ]
+            },
             "development": {
               "optimization": false,
               "extractLicenses": false,
@@ -96,6 +181,18 @@
             },
             "development": {
               "buildTarget": "swyftly-web:build:development"
+            },
+            "client": {
+              "buildTarget": "swyftly-web:build:client-development",
+              "port": 4200
+            },
+            "seller": {
+              "buildTarget": "swyftly-web:build:seller-development",
+              "port": 4201
+            },
+            "admin": {
+              "buildTarget": "swyftly-web:build:admin-development",
+              "port": 4202
             }
           },
           "defaultConfiguration": "development"

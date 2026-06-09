@@ -2,9 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
 import { AdminPayoutResponse } from '../admin/admin-payout.models';
 import { AdminPayoutService } from '../admin/admin-payout.service';
@@ -26,9 +23,6 @@ type PayoutAction = 'hold' | 'release' | 'make-available' | 'process' | 'reconci
     CurrencyPipe,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     MetricTileComponent,
     PageHeaderComponent,
     ReactiveFormsModule,
@@ -48,9 +42,9 @@ type PayoutAction = 'hold' | 'release' | 'make-available' | 'process' | 'reconci
           description="Review pending and held seller payouts, with finance role checks visible before each action."
         >
           <div pageHeaderActions>
-            <a mat-stroked-button routerLink="/admin/refunds">Refunds</a>
-            <a mat-stroked-button routerLink="/admin/reports">Reports</a>
-            <a mat-flat-button routerLink="/admin/audit-logs">Audit logs</a>
+            <a data-ui-button="secondary" routerLink="/refunds">Refunds</a>
+            <a data-ui-button="secondary" routerLink="/reports">Reports</a>
+            <a data-ui-button="primary" routerLink="/audit-logs">Audit logs</a>
           </div>
         </app-page-header>
 
@@ -136,7 +130,7 @@ type PayoutAction = 'hold' | 'release' | 'make-available' | 'process' | 'reconci
                     }
                   </span>
                   <span role="cell">
-                    <button mat-stroked-button type="button" (click)="selectPayout(payout); $event.stopPropagation()">Select</button>
+                    <button data-ui-button="secondary" type="button" (click)="selectPayout(payout); $event.stopPropagation()">Select</button>
                   </span>
                 </div>
               }
@@ -178,23 +172,23 @@ type PayoutAction = 'hold' | 'release' | 'make-available' | 'process' | 'reconci
                   <app-ui-alert tone="warning">
                     Payout processing is blocked until the seller payout-profile change request is approved or rejected.
                     @if (selectedPayout()!.pendingPayoutProfileChangeRequestId) {
-                      <a routerLink="/admin/payout-profile-changes">Review payout profile change</a>
+                      <a routerLink="/payout-profile-changes">Review payout profile change</a>
                     }
                   </app-ui-alert>
                 }
 
                 <form [formGroup]="reasonForm" class="admin-finance-form" novalidate>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Reason</mat-label>
-                    <textarea matInput rows="4" formControlName="reason"></textarea>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Reason</span>
+                    <textarea rows="4" formControlName="reason"></textarea>
+                  </label>
 
                   <div class="admin-finance-actions">
-                    <button mat-stroked-button type="button" [disabled]="!canOperate() || isActing()" (click)="runAction('hold')">Hold</button>
-                    <button mat-stroked-button type="button" [disabled]="!canApprove() || isActing()" (click)="runAction('release')">Release</button>
-                    <button mat-stroked-button type="button" [disabled]="!canOperate() || isActing()" (click)="runAction('make-available')">Make available</button>
-                    <button mat-flat-button type="button" [disabled]="!canApprove() || isActing() || selectedPayout()!.hasPendingPayoutProfileChange" (click)="runAction('process')">Process</button>
-                    <button mat-stroked-button type="button" [disabled]="!canApprove() || isActing()" (click)="runAction('reconcile')">Reconcile</button>
+                    <button data-ui-button="secondary" type="button" [disabled]="!canOperate() || isActing()" (click)="runAction('hold')">Hold</button>
+                    <button data-ui-button="secondary" type="button" [disabled]="!canApprove() || isActing()" (click)="runAction('release')">Release</button>
+                    <button data-ui-button="secondary" type="button" [disabled]="!canOperate() || isActing()" (click)="runAction('make-available')">Make available</button>
+                    <button data-ui-button="primary" type="button" [disabled]="!canApprove() || isActing() || selectedPayout()!.hasPendingPayoutProfileChange" (click)="runAction('process')">Process</button>
+                    <button data-ui-button="secondary" type="button" [disabled]="!canApprove() || isActing()" (click)="runAction('reconcile')">Reconcile</button>
                   </div>
                 </form>
 
@@ -234,13 +228,13 @@ export class AdminPayoutsPageComponent implements OnInit {
     },
     {
       label: 'Queue total',
-      value: this.formatZar(this.totalPayoutAmount()),
+      value: this.renderZar(this.totalPayoutAmount()),
       badge: 'Internal',
       tone: 'accent' as StatusBadgeTone
     },
     {
       label: 'Held amount',
-      value: this.formatZar(this.heldPayoutAmount()),
+      value: this.renderZar(this.heldPayoutAmount()),
       badge: this.heldPayoutAmount() > 0 ? 'Held' : 'Clear',
       tone: this.heldPayoutAmount() > 0 ? 'warning' as StatusBadgeTone : 'success' as StatusBadgeTone
     },
@@ -374,7 +368,7 @@ export class AdminPayoutsPageComponent implements OnInit {
     }
   }
 
-  private formatZar(value: number): string {
+  private renderZar(value: number): string {
     return new Intl.NumberFormat('en-ZA', {
       style: 'currency',
       currency: 'ZAR',

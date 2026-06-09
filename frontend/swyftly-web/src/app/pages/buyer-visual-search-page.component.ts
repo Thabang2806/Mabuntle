@@ -2,9 +2,6 @@ import { CurrencyPipe, isPlatformBrowser } from '@angular/common';
 import { Component, PLATFORM_ID, signal, inject } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerGrowthConfidenceBand, BuyerGrowthFeedbackReason } from '../buyer/buyer-growth-telemetry.models';
 import { BuyerGrowthTelemetryService } from '../buyer/buyer-growth-telemetry.service';
@@ -33,9 +30,6 @@ interface VisualConfidenceBand {
   selector: 'app-buyer-visual-search-page',
   imports: [
     CurrencyPipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     LuxuryBuyerStylesComponent,
     EmptyStateComponent,
     PageHeaderComponent,
@@ -53,7 +47,7 @@ interface VisualConfidenceBand {
         heading="Search from an image"
         description="Upload a product image or describe a reference so Swyftly can extract visual attributes and match published products."
       >
-        <a mat-stroked-button routerLink="/shop" pageHeaderActions>Browse shop</a>
+        <a data-ui-button="secondary" routerLink="/shop" pageHeaderActions>Browse shop</a>
       </app-page-header>
 
       <section class="ai-discovery-shell">
@@ -81,24 +75,24 @@ interface VisualConfidenceBand {
                 <strong>{{ selectedFileName() }}</strong>
                 <span>{{ isReadingImage() ? 'Preparing image...' : 'Ready to search' }}</span>
               </div>
-              <button mat-button type="button" (click)="clearSelectedFile(imageInput)">Remove</button>
+              <button data-ui-button="ghost" type="button" (click)="clearSelectedFile(imageInput)">Remove</button>
             </div>
           }
 
-          <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-            <mat-label>Image reference</mat-label>
-            <input matInput formControlName="imageReference" placeholder="black formal maxi dress flatlay">
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Image reference</span>
+            <input formControlName="imageReference" placeholder="black formal maxi dress flatlay">
+          </label>
 
           @if (recentReferences().length > 0) {
             <div class="ai-recent-panel" aria-label="Recent visual references">
               <div>
                 <strong>Recent references</strong>
-                <button mat-button type="button" (click)="clearRecentReferences()">Clear</button>
+                <button data-ui-button="ghost" type="button" (click)="clearRecentReferences()">Clear</button>
               </div>
               <div class="ai-chip-row">
                 @for (recent of recentReferences(); track recent.text) {
-                  <button mat-stroked-button type="button" (click)="useRecentReference(recent.text)">
+                  <button data-ui-button="secondary" type="button" (click)="useRecentReference(recent.text)">
                     {{ recent.text }}
                   </button>
                 }
@@ -108,10 +102,10 @@ interface VisualConfidenceBand {
           }
 
           <div class="visual-control-row">
-            <button mat-flat-button type="submit" [disabled]="isLoading() || isReadingImage()">
+            <button data-ui-button="primary" type="submit" [disabled]="isLoading() || isReadingImage()">
               {{ isLoading() ? 'Searching...' : 'Search visually' }}
             </button>
-            <button mat-stroked-button type="button" (click)="resetSearch(imageInput)" [disabled]="isLoading()">
+            <button data-ui-button="secondary" type="button" (click)="resetSearch(imageInput)" [disabled]="isLoading()">
               Reset search
             </button>
           </div>
@@ -169,7 +163,7 @@ interface VisualConfidenceBand {
               <h2>Product matches</h2>
               <p>{{ products().length }} {{ products().length === 1 ? 'match' : 'matches' }} returned by backend search.</p>
             </div>
-            <a mat-stroked-button routerLink="/shop" [queryParams]="visualShopQueryParams()" (click)="trackShopHandoff()">Search manually</a>
+            <a data-ui-button="secondary" routerLink="/shop" [queryParams]="visualShopQueryParams()" (click)="trackShopHandoff()">Search manually</a>
           </div>
 
           @if (products().length > 0) {
@@ -215,7 +209,7 @@ interface VisualConfidenceBand {
               heading="No product cards to show"
               message="Try a clearer item photo, a more specific reference, or a broader manual search."
             >
-              <a mat-stroked-button routerLink="/shop" [queryParams]="visualShopQueryParams()" (click)="trackShopHandoff()">Open shop</a>
+              <a data-ui-button="secondary" routerLink="/shop" [queryParams]="visualShopQueryParams()" (click)="trackShopHandoff()">Open shop</a>
             </app-empty-state>
           }
         </section>
@@ -227,7 +221,7 @@ interface VisualConfidenceBand {
           </div>
           <div class="ai-chip-row">
             @for (reason of feedbackReasons; track reason.value) {
-              <button mat-stroked-button type="button" (click)="submitFeedback(reason.value)">
+              <button data-ui-button="secondary" type="button" (click)="submitFeedback(reason.value)">
                 {{ reason.label }}
               </button>
             }

@@ -1,6 +1,5 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
 import { getApiErrorMessage } from '../auth/api-error';
 import { AdminDashboardSummaryResponse } from '../admin/admin-dashboard.models';
@@ -8,7 +7,7 @@ import { AdminDashboardService } from '../admin/admin-dashboard.service';
 
 @Component({
   selector: 'app-admin-page',
-  imports: [AdminWorkspaceNavComponent, MatButtonModule, RouterLink],
+  imports: [AdminWorkspaceNavComponent, RouterLink],
   template: `
     <section class="page admin-dashboard">
       <app-admin-workspace-nav />
@@ -48,7 +47,7 @@ import { AdminDashboardService } from '../admin/admin-dashboard.service';
                 <strong>{{ summary()!.platformCommissionPlaceholder }}</strong>
               </div>
             </div>
-            <a mat-stroked-button routerLink="/admin/reports">Open reports</a>
+            <a data-ui-button="secondary" routerLink="/reports">Open reports</a>
           </div>
         }
       }
@@ -72,20 +71,20 @@ export class AdminPageComponent implements OnInit {
   protected readonly isLoading = signal(true);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly navigationItems = [
-    { label: 'Sellers', route: '/admin/sellers', status: 'Review', description: 'Seller verification queue.' },
-    { label: 'Products', route: '/admin/products', status: 'Review', description: 'Product moderation queue.' },
-    { label: 'Reviews', route: '/admin/reviews', status: 'Trust', description: 'Verified-buyer review moderation.' },
-    { label: 'Orders', route: '/admin/orders', status: 'Read', description: 'Marketplace order search and detail context.' },
-    { label: 'Payments', route: '/admin/payments', status: 'Read', description: 'Payment records, provider references, and webhook event context.' },
-    { label: 'Reports', route: '/admin/reports', status: 'Finance', description: 'Marketplace and finance reporting.' },
-    { label: 'AI usage', route: '/admin/ai-usage', status: 'Analytics', description: 'AI usage, cost, quality, and moderation reporting.' },
-    { label: 'Refunds', route: '/admin/refunds', status: 'Finance', description: 'Refund request and approval queue.' },
-    { label: 'Disputes', route: '/admin/disputes', status: 'Resolve', description: 'Dispute review and resolution queue.' },
-    { label: 'Payouts', route: '/admin/payouts', status: 'Finance', description: 'Payout hold, availability, processing, and reconciliation.' },
-    { label: 'Support', route: '/admin/support', status: 'Ops', description: 'Buyer and seller support ticket queue.' },
-    { label: 'Categories', route: '/admin/categories', status: 'Reference', description: 'Catalog taxonomy and attribute definitions.' },
-    { label: 'Ads', route: '/admin/ads', status: 'Review', description: 'Ad campaign review queue.' },
-    { label: 'Audit logs', route: '/admin/audit-logs', status: 'Audit', description: 'Administrative action history.' }
+    { label: 'Sellers', route: '/sellers', status: 'Review', description: 'Seller verification queue.' },
+    { label: 'Products', route: '/products', status: 'Review', description: 'Product moderation queue.' },
+    { label: 'Reviews', route: '/reviews', status: 'Trust', description: 'Verified-buyer review moderation.' },
+    { label: 'Orders', route: '/orders', status: 'Read', description: 'Marketplace order search and detail context.' },
+    { label: 'Payments', route: '/payments', status: 'Read', description: 'Payment records, provider references, and webhook event context.' },
+    { label: 'Reports', route: '/reports', status: 'Finance', description: 'Marketplace and finance reporting.' },
+    { label: 'AI usage', route: '/ai-usage', status: 'Analytics', description: 'AI usage, cost, quality, and moderation reporting.' },
+    { label: 'Refunds', route: '/refunds', status: 'Finance', description: 'Refund request and approval queue.' },
+    { label: 'Disputes', route: '/disputes', status: 'Resolve', description: 'Dispute review and resolution queue.' },
+    { label: 'Payouts', route: '/payouts', status: 'Finance', description: 'Payout hold, availability, processing, and reconciliation.' },
+    { label: 'Support', route: '/support', status: 'Ops', description: 'Buyer and seller support ticket queue.' },
+    { label: 'Categories', route: '/categories', status: 'Reference', description: 'Catalog taxonomy and attribute definitions.' },
+    { label: 'Ads', route: '/ads', status: 'Review', description: 'Ad campaign review queue.' },
+    { label: 'Audit logs', route: '/audit-logs', status: 'Audit', description: 'Administrative action history.' }
   ];
 
   async ngOnInit(): Promise<void> {
@@ -99,12 +98,12 @@ export class AdminPageComponent implements OnInit {
     }
 
     return [
-      { label: 'Pending seller approvals', value: summary.pendingSellerApprovals, route: '/admin/sellers' },
-      { label: 'Pending product reviews', value: summary.pendingProductReviews, route: '/admin/products' },
-      { label: 'New orders today', value: summary.newOrdersToday, route: '/admin/orders' },
-      { label: 'Open disputes', value: summary.openDisputes, route: '/admin/disputes' },
-      { label: 'Pending refunds', value: summary.pendingRefunds, route: '/admin/refunds' },
-      { label: 'Pending payouts', value: summary.pendingPayouts, route: '/admin/payouts' }
+      { label: 'Pending seller approvals', value: summary.pendingSellerApprovals, route: '/sellers' },
+      { label: 'Pending product reviews', value: summary.pendingProductReviews, route: '/products' },
+      { label: 'New orders today', value: summary.newOrdersToday, route: '/orders' },
+      { label: 'Open disputes', value: summary.openDisputes, route: '/disputes' },
+      { label: 'Pending refunds', value: summary.pendingRefunds, route: '/refunds' },
+      { label: 'Pending payouts', value: summary.pendingPayouts, route: '/payouts' }
     ];
   }
 

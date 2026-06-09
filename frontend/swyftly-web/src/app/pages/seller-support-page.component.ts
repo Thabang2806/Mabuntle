@@ -2,10 +2,6 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { getApiErrorMessage } from '../auth/api-error';
 import { SellerSupportTicketCategory, SellerSupportTicketResponse } from '../seller/seller-support.models';
 import { SellerSupportService } from '../seller/seller-support.service';
@@ -20,10 +16,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -56,38 +48,38 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           <section class="seller-panel">
             <h2>Create ticket</h2>
             <form [formGroup]="ticketForm" (ngSubmit)="createTicket()" class="seller-form-grid" novalidate>
-              <mat-form-field appearance="outline">
-                <mat-label>Category</mat-label>
-                <mat-select formControlName="category">
+              <label class="ui-field">
+                <span>Category</span>
+                <select formControlName="category">
                   @for (category of categories; track category) {
-                    <mat-option [value]="category">{{ category }}</mat-option>
+                    <option [value]="category">{{ category }}</option>
                   }
-                </mat-select>
-              </mat-form-field>
+                </select>
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Subject</mat-label>
-                <input matInput formControlName="subject" />
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Subject</span>
+                <input formControlName="subject" />
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Description</mat-label>
-                <textarea matInput rows="4" formControlName="description"></textarea>
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Description</span>
+                <textarea rows="4" formControlName="description"></textarea>
+              </label>
 
               <div class="form-grid">
-                <mat-form-field appearance="outline">
-                  <mat-label>Linked order ID</mat-label>
-                  <input matInput formControlName="linkedOrderId" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Linked order ID</span>
+                  <input formControlName="linkedOrderId" />
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Linked product ID</mat-label>
-                  <input matInput formControlName="linkedProductId" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Linked product ID</span>
+                  <input formControlName="linkedProductId" />
+                </label>
               </div>
 
-              <button mat-flat-button type="submit" [disabled]="isSaving()">Create ticket</button>
+              <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Create ticket</button>
             </form>
           </section>
 
@@ -140,7 +132,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   <small>{{ ticket.messages.length }} message{{ ticket.messages.length === 1 ? '' : 's' }}</small>
                 </span>
                 <span role="cell">
-                  <a mat-stroked-button [routerLink]="['/seller/support', ticket.supportTicketId]">Open</a>
+                  <a data-ui-button="secondary" [routerLink]="['/support', ticket.supportTicketId]">Open</a>
                 </span>
               </div>
             }
@@ -214,7 +206,7 @@ export class SellerSupportPageComponent implements OnInit {
         linkedProductId: ''
       });
       this.successMessage.set('Support ticket created.');
-      await this.router.navigate(['/seller/support', ticket.supportTicketId]);
+      await this.router.navigate(['/support', ticket.supportTicketId]);
     } catch (error) {
       this.errorMessage.set(getApiErrorMessage(error));
     } finally {

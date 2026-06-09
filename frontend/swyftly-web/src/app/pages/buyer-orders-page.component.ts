@@ -2,9 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerOrderResult } from '../buyer/buyer-order.models';
 import { BuyerOrderService } from '../buyer/buyer-order.service';
@@ -21,9 +18,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     CurrencyPipe,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -40,24 +34,24 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Track purchase status, shipment progress, and after-sales actions."
       >
         <div pageHeaderActions>
-          <a mat-stroked-button routerLink="/shop">Shop again</a>
+          <a data-ui-button="secondary" routerLink="/shop">Shop again</a>
         </div>
       </app-page-header>
 
       <form [formGroup]="filtersForm" (ngSubmit)="applyFilters()" class="route-card buyer-filter-bar" novalidate>
-        <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-          <mat-label>Search orders</mat-label>
-          <input matInput formControlName="search" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Search orders</span>
+          <input formControlName="search" />
+        </label>
 
-        <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-          <mat-label>Status</mat-label>
-          <input matInput formControlName="status" placeholder="Delivered, Paid, Shipped" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Status</span>
+          <input formControlName="status" placeholder="Delivered, Paid, Shipped" />
+        </label>
 
         <div class="buyer-action-row">
-          <button mat-flat-button type="submit">Apply filters</button>
-          <button mat-stroked-button type="button" (click)="clearFilters()">Clear</button>
+          <button data-ui-button="primary" type="submit">Apply filters</button>
+          <button data-ui-button="secondary" type="button" (click)="clearFilters()">Clear</button>
         </div>
       </form>
 
@@ -74,7 +68,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="No orders found"
             message="Orders that match your filters will appear here."
           >
-            <a mat-flat-button routerLink="/shop">Browse marketplace</a>
+            <a data-ui-button="primary" routerLink="/shop">Browse marketplace</a>
           </app-empty-state>
         } @else {
           <div class="admin-table buyer-ops-table" role="table" aria-label="Buyer orders">
@@ -106,7 +100,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   <small>{{ shipmentSummary(order) }}</small>
                 </span>
                 <span role="cell">
-                  <a mat-stroked-button [routerLink]="['/account/orders', order.orderId]">Open</a>
+                  <a data-ui-button="secondary" [routerLink]="['/account/orders', order.orderId]">Open</a>
                 </span>
               </div>
             }

@@ -2,10 +2,9 @@ import { Routes } from '@angular/router';
 import { requireRoleGuard } from './auth/auth.guard';
 import { AccountPageComponent } from './pages/account-page.component';
 import { HomePageComponent } from './pages/home-page.component';
+import { ADMIN_ROLES, FINANCE_READ_ROLES, SUPPORT_ROLES } from './route-roles';
 
-export const ADMIN_ROLES = ['Admin', 'SuperAdmin'] as const;
-export const FINANCE_READ_ROLES = ['Admin', 'SuperAdmin', 'FinanceOperator', 'FinanceApprover'] as const;
-export const SUPPORT_ROLES = ['Admin', 'SuperAdmin', 'SupportAgent'] as const;
+export { ADMIN_ROLES, FINANCE_READ_ROLES, SUPPORT_ROLES } from './route-roles';
 
 export const routes: Routes = [
   { path: '', component: HomePageComponent, title: 'Swyftly' },

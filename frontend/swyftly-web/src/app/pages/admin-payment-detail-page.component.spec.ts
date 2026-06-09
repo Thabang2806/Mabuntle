@@ -38,7 +38,7 @@ describe('AdminPaymentDetailPageComponent', () => {
     expect(compiled.textContent).toContain('provider-payment-1');
     expect(compiled.textContent).toContain('payment.captured');
     expect(compiled.textContent).toContain('provider-event-1');
-    expect(compiled.querySelector('a[href="/admin/orders/order-id"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/orders/order-id"]')).not.toBeNull();
   });
 });
 

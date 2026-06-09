@@ -121,7 +121,7 @@ describe('SellerStoreSettingsPageComponent', () => {
     expect(compiled.textContent).toContain('Store settings');
     expect(compiled.textContent).toContain('Verified');
     expect(compiled.textContent).toContain('Standard courier');
-    expect(compiled.querySelector('a[href="/seller/luxe-seller"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="https://mabuntle.com/seller/luxe-seller"]')).not.toBeNull();
     expect(compiled.textContent).toContain('Payout profile changes');
     expect(compiled.textContent).toContain('provider-ref');
     expect(compiled.textContent).toContain('Seller notification preferences');

@@ -36,9 +36,9 @@ describe('SellerWorkspaceNavComponent', () => {
     expect(compiled.textContent).toContain('Growth and finance');
     expect(compiled.textContent).toContain('Notifications');
     expect(compiled.querySelector('.workspace-nav-badge')?.textContent?.trim()).toBe('2');
-    expect(compiled.querySelector('a[href="/seller/products"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/seller/inventory"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/seller/orders"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/seller/ads"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/products"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/inventory"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/orders"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/ads"]')).not.toBeNull();
   });
 });

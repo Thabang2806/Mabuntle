@@ -1,11 +1,6 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { AdminCategoryResponse, AdminCategoryAttributeResponse } from '../admin/admin-category.models';
 import { AdminCategoryService } from '../admin/admin-category.service';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
@@ -20,11 +15,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     AdminWorkspaceNavComponent,
     EmptyStateComponent,
-    MatButtonModule,
-    MatCheckboxModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -41,7 +31,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Manage the taxonomy and seller product-form attributes without deleting historical product data."
       >
         <div pageHeaderActions>
-          <a mat-stroked-button routerLink="/admin/products">Product review</a>
+          <a data-ui-button="secondary" routerLink="/products">Product review</a>
         </div>
       </app-page-header>
 
@@ -88,12 +78,12 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </dl>
 
                 <div class="buyer-action-row">
-                  <button mat-stroked-button type="button" (click)="selectCategory(category)">Select</button>
-                  <button mat-stroked-button type="button" (click)="editCategory(category)">Edit</button>
+                  <button data-ui-button="secondary" type="button" (click)="selectCategory(category)">Select</button>
+                  <button data-ui-button="secondary" type="button" (click)="editCategory(category)">Edit</button>
                   @if (category.isActive) {
-                    <button mat-stroked-button type="button" (click)="deactivateCategory(category)">Deactivate</button>
+                    <button data-ui-button="secondary" type="button" (click)="deactivateCategory(category)">Deactivate</button>
                   } @else {
-                    <button mat-stroked-button type="button" (click)="activateCategory(category)">Activate</button>
+                    <button data-ui-button="secondary" type="button" (click)="activateCategory(category)">Activate</button>
                   }
                 </div>
 
@@ -115,36 +105,36 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   <p class="eyebrow">{{ editingCategoryId() ? 'Edit category' : 'Create category' }}</p>
                   <h2>Category details</h2>
                 </div>
-                <button mat-stroked-button type="button" (click)="startNewCategory()">New</button>
+                <button data-ui-button="secondary" type="button" (click)="startNewCategory()">New</button>
               </div>
 
               <form [formGroup]="categoryForm" (ngSubmit)="saveCategory()" class="admin-finance-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Parent category</mat-label>
-                  <mat-select formControlName="parentCategoryId">
-                    <mat-option [value]="''">None</mat-option>
+                <label class="ui-field">
+                  <span>Parent category</span>
+                  <select formControlName="parentCategoryId">
+                    <option [value]="''">None</option>
                     @for (category of parentOptions(); track category.categoryId) {
-                      <mat-option [value]="category.categoryId">{{ category.name }}</mat-option>
+                      <option [value]="category.categoryId">{{ category.name }}</option>
                     }
-                  </mat-select>
-                </mat-form-field>
+                  </select>
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Name</mat-label>
-                  <input matInput formControlName="name" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Name</span>
+                  <input formControlName="name" />
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Slug</mat-label>
-                  <input matInput formControlName="slug" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Slug</span>
+                  <input formControlName="slug" />
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Display order</mat-label>
-                  <input matInput type="number" min="0" formControlName="displayOrder" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Display order</span>
+                  <input type="number" min="0" formControlName="displayOrder" />
+                </label>
 
-                <button mat-flat-button type="submit" [disabled]="isActing()">Save category</button>
+                <button data-ui-button="primary" type="submit" [disabled]="isActing()">Save category</button>
               </form>
             </section>
 
@@ -155,7 +145,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                     <p class="eyebrow">Selected category</p>
                     <h2>{{ selectedCategory()!.name }}</h2>
                   </div>
-                  <button mat-stroked-button type="button" (click)="startNewAttribute()">New attribute</button>
+                  <button data-ui-button="secondary" type="button" (click)="startNewAttribute()">New attribute</button>
                 </div>
 
                 @if (selectedCategory()!.attributes.length === 0) {
@@ -180,11 +170,11 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                           <small>{{ attribute.allowedValues.length ? attribute.allowedValues.join(', ') : 'No allowed values' }}</small>
                         </span>
                         <span role="cell">
-                          <button mat-stroked-button type="button" (click)="editAttribute(attribute)">Edit</button>
+                          <button data-ui-button="secondary" type="button" (click)="editAttribute(attribute)">Edit</button>
                           @if (attribute.isActive) {
-                            <button mat-stroked-button type="button" (click)="deactivateAttribute(attribute)">Deactivate</button>
+                            <button data-ui-button="secondary" type="button" (click)="deactivateAttribute(attribute)">Deactivate</button>
                           } @else {
-                            <button mat-stroked-button type="button" (click)="activateAttribute(attribute)">Activate</button>
+                            <button data-ui-button="secondary" type="button" (click)="activateAttribute(attribute)">Activate</button>
                           }
                         </span>
                       </div>
@@ -198,40 +188,40 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                     Key, type, required, and allowed-value changes may be blocked when product listings already depend on them.
                   </app-ui-alert>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Name</mat-label>
-                    <input matInput formControlName="name" />
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Name</span>
+                    <input formControlName="name" />
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Key</mat-label>
-                    <input matInput formControlName="key" />
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Key</span>
+                    <input formControlName="key" />
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Data type</mat-label>
-                    <mat-select formControlName="dataType">
+                  <label class="ui-field">
+                    <span>Data type</span>
+                    <select formControlName="dataType">
                       @for (dataType of dataTypes; track dataType) {
-                        <mat-option [value]="dataType">{{ dataType }}</mat-option>
+                        <option [value]="dataType">{{ dataType }}</option>
                       }
-                    </mat-select>
-                  </mat-form-field>
+                    </select>
+                  </label>
 
-                  <mat-checkbox formControlName="isRequired">Required for seller listings</mat-checkbox>
+                  <label class="ui-checkbox"><input type="checkbox" formControlName="isRequired" /><span>Required for seller listings</span></label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Allowed values</mat-label>
-                    <textarea matInput rows="3" formControlName="allowedValuesText" placeholder="One per line or comma-separated"></textarea>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Allowed values</span>
+                    <textarea rows="3" formControlName="allowedValuesText" placeholder="One per line or comma-separated"></textarea>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Display order</mat-label>
-                    <input matInput type="number" min="0" formControlName="displayOrder" />
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Display order</span>
+                    <input type="number" min="0" formControlName="displayOrder" />
+                  </label>
 
                   <div class="buyer-action-row">
-                    <button mat-flat-button type="submit" [disabled]="isActing()">Save attribute</button>
-                    <button mat-stroked-button type="button" (click)="startNewAttribute()">Clear</button>
+                    <button data-ui-button="primary" type="submit" [disabled]="isActing()">Save attribute</button>
+                    <button data-ui-button="secondary" type="button" (click)="startNewAttribute()">Clear</button>
                   </div>
                 </form>
               </section>

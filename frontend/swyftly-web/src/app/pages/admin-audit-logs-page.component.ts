@@ -2,9 +2,6 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
 import { AdminAuditLogDetailResponse } from '../admin/admin-audit-log.models';
 import { AdminAuditLogService } from '../admin/admin-audit-log.service';
@@ -19,9 +16,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     AdminWorkspaceNavComponent,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -37,35 +31,35 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Review sensitive admin actions across sellers, products, finance, support, and moderation workflows."
       >
         <div pageHeaderActions>
-          <a mat-stroked-button routerLink="/admin/sellers">Seller queue</a>
-          <a mat-stroked-button routerLink="/admin/products">Product queue</a>
+          <a data-ui-button="secondary" routerLink="/sellers">Seller queue</a>
+          <a data-ui-button="secondary" routerLink="/products">Product queue</a>
         </div>
       </app-page-header>
 
       <form [formGroup]="filtersForm" (ngSubmit)="search()" class="route-card admin-audit-filters" novalidate>
-        <mat-form-field appearance="outline">
-          <mat-label>Action type</mat-label>
-          <input matInput formControlName="actionType">
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Action type</span>
+          <input formControlName="actionType">
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Entity type</mat-label>
-          <input matInput formControlName="entityType">
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Entity type</span>
+          <input formControlName="entityType">
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Entity id</mat-label>
-          <input matInput formControlName="entityId">
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Entity id</span>
+          <input formControlName="entityId">
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Actor user id</mat-label>
-          <input matInput formControlName="actorUserId">
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Actor user id</span>
+          <input formControlName="actorUserId">
+        </label>
 
         <div class="admin-audit-actions">
-          <button mat-flat-button type="submit" [disabled]="isLoading()">Apply filters</button>
-          <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="clearFilters()">Clear</button>
+          <button data-ui-button="primary" type="submit" [disabled]="isLoading()">Apply filters</button>
+          <button data-ui-button="secondary" type="button" [disabled]="isLoading()" (click)="clearFilters()">Clear</button>
         </div>
       </form>
 

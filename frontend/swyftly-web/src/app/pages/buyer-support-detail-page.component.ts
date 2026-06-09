@@ -2,9 +2,6 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerSupportTicketResponse } from '../buyer/buyer-support.models';
 import { BuyerSupportService } from '../buyer/buyer-support.service';
@@ -18,9 +15,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     BuyerWorkspaceNavComponent,
     DatePipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -71,11 +65,11 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             <section class="buyer-panel">
               <h2>Add message</h2>
               <form [formGroup]="messageForm" (ngSubmit)="addMessage()" class="buyer-form-grid" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Message</mat-label>
-                  <textarea matInput rows="5" formControlName="message"></textarea>
-                </mat-form-field>
-                <button mat-flat-button type="submit" [disabled]="isSaving()">Send message</button>
+                <label class="ui-field">
+                  <span>Message</span>
+                  <textarea rows="5" formControlName="message"></textarea>
+                </label>
+                <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Send message</button>
               </form>
             </section>
           </div>

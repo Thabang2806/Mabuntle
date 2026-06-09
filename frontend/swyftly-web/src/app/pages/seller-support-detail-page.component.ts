@@ -2,9 +2,6 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
 import { SellerSupportTicketResponse } from '../seller/seller-support.models';
 import { SellerSupportService } from '../seller/seller-support.service';
@@ -17,9 +14,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   selector: 'app-seller-support-detail-page',
   imports: [
     DatePipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -31,7 +25,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     <section class="page seller-ops-page">
       <app-seller-workspace-nav />
 
-      <a class="admin-back-link" routerLink="/seller/support">Back to support</a>
+      <a class="admin-back-link" routerLink="/support">Back to support</a>
 
       <app-page-header
         eyebrow="Seller support"
@@ -71,11 +65,11 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             <section class="seller-panel">
               <h2>Add message</h2>
               <form [formGroup]="messageForm" (ngSubmit)="addMessage()" class="seller-form-grid" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Message</mat-label>
-                  <textarea matInput rows="5" formControlName="message"></textarea>
-                </mat-form-field>
-                <button mat-flat-button type="submit" [disabled]="isSaving()">Send message</button>
+                <label class="ui-field">
+                  <span>Message</span>
+                  <textarea rows="5" formControlName="message"></textarea>
+                </label>
+                <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Send message</button>
               </form>
             </section>
           </div>

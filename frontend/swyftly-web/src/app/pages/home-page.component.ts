@@ -1,6 +1,5 @@
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { DashboardCardComponent } from '../shared/ui/dashboard-card.component';
 import { LuxuryPublicStylesComponent } from '../shared/ui/luxury-public-styles.component';
 import { PageHeaderComponent } from '../shared/ui/page-header.component';
@@ -9,7 +8,7 @@ import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
 
 @Component({
   selector: 'app-home-page',
-  imports: [DashboardCardComponent, LuxuryPublicStylesComponent, MatButtonModule, PageHeaderComponent, ProductVisualFallbackComponent, RouterLink, StatusBadgeComponent],
+  imports: [DashboardCardComponent, LuxuryPublicStylesComponent, PageHeaderComponent, ProductVisualFallbackComponent, RouterLink, StatusBadgeComponent],
   template: `
     <app-luxury-public-styles />
     <section class="market-home">
@@ -22,8 +21,8 @@ import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
           </p>
 
           <div class="market-home-actions">
-            <a mat-flat-button routerLink="/shop">Shop new arrivals</a>
-            <a mat-stroked-button routerLink="/sell">Start selling</a>
+            <a data-ui-button="primary" routerLink="/shop">Shop new arrivals</a>
+            <a data-ui-button="secondary" routerLink="/sell">Start selling</a>
           </div>
 
           <a class="market-search-entry" routerLink="/shop" aria-label="Open product search">
@@ -99,8 +98,8 @@ import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
             </p>
           </div>
           <div class="market-home-actions">
-            <a mat-flat-button routerLink="/sell">Learn about selling</a>
-            <a mat-stroked-button routerLink="/login">Seller sign in</a>
+            <a data-ui-button="primary" routerLink="/sell">Learn about selling</a>
+            <a data-ui-button="secondary" routerLink="/login">Seller sign in</a>
           </div>
         </div>
       </section>
@@ -115,7 +114,7 @@ import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
         <div class="route-grid">
           @for (item of trustCards; track item.heading) {
             <app-dashboard-card [eyebrow]="item.eyebrow" [heading]="item.heading" [description]="item.description">
-              <a mat-button [routerLink]="item.route">{{ item.action }}</a>
+              <a data-ui-button="ghost" [routerLink]="item.route">{{ item.action }}</a>
             </app-dashboard-card>
           }
         </div>

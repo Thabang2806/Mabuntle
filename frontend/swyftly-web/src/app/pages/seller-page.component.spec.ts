@@ -73,14 +73,14 @@ describe('SellerPageComponent', () => {
     expect(compiled.textContent).toContain('Complete onboarding to apply');
     expect(compiled.textContent).toContain('Supporting documents');
     expect(compiled.textContent).toContain('Prepare product drafts');
-    expect(compiled.querySelector('a[href="/seller/orders"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/seller/inventory"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/seller/returns"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/seller/payouts"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/seller/support"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/seller/ads"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/seller/analytics"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/seller/settings/store"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/orders"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/inventory"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/returns"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/payouts"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/support"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/ads"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/analytics"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/settings/store"]')).not.toBeNull();
     expect(dashboardService.getSummary).not.toHaveBeenCalled();
   });
 
@@ -184,7 +184,7 @@ describe('SellerPageComponent', () => {
     expect(compiled.textContent).toContain('Delivery exceptions need review');
     expect(compiled.textContent).toContain('Latest seller events');
     expect(compiled.textContent).toContain('5 unread seller updates');
-    expect(compiled.querySelector('a[href="/seller/notifications"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/notifications"]')).not.toBeNull();
     expect(compiled.querySelector('.hf-seller-dashboard-hero')).not.toBeNull();
     expect(compiled.querySelector('.hf-seller-opportunity-card')).not.toBeNull();
     expect(compiled.textContent).toContain('Orders');
@@ -208,8 +208,8 @@ describe('SellerPageComponent', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Workspace links remain available below.');
-    expect(compiled.querySelector('a[href="/seller/products"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/seller/orders"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/products"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/orders"]')).not.toBeNull();
   });
 
   it('does not save profile when required fields are missing', async () => {
@@ -348,7 +348,7 @@ function createDashboardSummary(
         severity: 'danger',
         title: 'Delivery exceptions need review',
         message: 'Failed or returned shipments need seller follow-up.',
-        route: '/seller/orders',
+        route: '/orders',
         count: 1
       }
     ],
@@ -358,7 +358,7 @@ function createDashboardSummary(
         title: 'Order abc12345',
         status: 'ReadyToShip',
         occurredAtUtc: '2026-05-26T13:00:00Z',
-        route: '/seller/orders/00000000-0000-0000-0000-000000000001'
+        route: '/orders/00000000-0000-0000-0000-000000000001'
       }
     ],
     ...overrides

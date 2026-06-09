@@ -2,9 +2,6 @@ import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminSupportTicketResponse } from '../admin/admin-support.models';
 import { AdminSupportService } from '../admin/admin-support.service';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
@@ -18,9 +15,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     DatePipe,
     DecimalPipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     AdminWorkspaceNavComponent,
     PageHeaderComponent,
     ReactiveFormsModule,
@@ -32,7 +26,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     <section class="page admin-support-page">
       <app-admin-workspace-nav />
 
-      <a class="admin-back-link" routerLink="/admin/support">Back to support tickets</a>
+      <a class="admin-back-link" routerLink="/support">Back to support tickets</a>
 
       <app-page-header
         eyebrow="Support case"
@@ -77,52 +71,52 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               </dl>
 
               <div class="admin-finance-actions">
-                <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="claimTicket()">Claim</button>
-                <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="unclaimTicket()">Unclaim</button>
-                <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="resolveTicket()">Resolve</button>
-                <button mat-flat-button type="button" [disabled]="isSaving()" (click)="closeTicket()">Close</button>
+                <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="claimTicket()">Claim</button>
+                <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="unclaimTicket()">Unclaim</button>
+                <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="resolveTicket()">Resolve</button>
+                <button data-ui-button="primary" type="button" [disabled]="isSaving()" (click)="closeTicket()">Close</button>
               </div>
             </section>
 
             <aside class="admin-finance-action-panel">
               <h2>Operational triage</h2>
               <form [formGroup]="triageForm" (ngSubmit)="triageTicket()" class="admin-finance-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Priority</mat-label>
-                  <input matInput formControlName="priority" placeholder="Normal, High, Urgent" />
-                </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Internal note</mat-label>
-                  <textarea matInput rows="3" formControlName="internalNote"></textarea>
-                </mat-form-field>
-                <button mat-stroked-button type="submit" [disabled]="isSaving()">Save triage</button>
+                <label class="ui-field">
+                  <span>Priority</span>
+                  <input formControlName="priority" placeholder="Normal, High, Urgent" />
+                </label>
+                <label class="ui-field">
+                  <span>Internal note</span>
+                  <textarea rows="3" formControlName="internalNote"></textarea>
+                </label>
+                <button data-ui-button="secondary" type="submit" [disabled]="isSaving()">Save triage</button>
               </form>
 
               <h2>Escalation</h2>
               <form [formGroup]="escalationForm" (ngSubmit)="escalateTicket()" class="admin-finance-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Escalation reason</mat-label>
-                  <textarea matInput rows="3" formControlName="reason"></textarea>
-                </mat-form-field>
-                <button mat-stroked-button type="submit" [disabled]="isSaving()">Escalate</button>
+                <label class="ui-field">
+                  <span>Escalation reason</span>
+                  <textarea rows="3" formControlName="reason"></textarea>
+                </label>
+                <button data-ui-button="secondary" type="submit" [disabled]="isSaving()">Escalate</button>
               </form>
 
               <h2>Add support response</h2>
               <form [formGroup]="publicMessageForm" (ngSubmit)="addPublicMessage()" class="admin-finance-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Public message</mat-label>
-                  <textarea matInput rows="4" formControlName="message"></textarea>
-                </mat-form-field>
-                <button mat-flat-button type="submit" [disabled]="isSaving()">Send public reply</button>
+                <label class="ui-field">
+                  <span>Public message</span>
+                  <textarea rows="4" formControlName="message"></textarea>
+                </label>
+                <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Send public reply</button>
               </form>
 
               <h2>Internal note</h2>
               <form [formGroup]="internalNoteForm" (ngSubmit)="addInternalNote()" class="admin-finance-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Internal note</mat-label>
-                  <textarea matInput rows="4" formControlName="message"></textarea>
-                </mat-form-field>
-                <button mat-stroked-button type="submit" [disabled]="isSaving()">Add internal note</button>
+                <label class="ui-field">
+                  <span>Internal note</span>
+                  <textarea rows="4" formControlName="message"></textarea>
+                </label>
+                <button data-ui-button="secondary" type="submit" [disabled]="isSaving()">Add internal note</button>
               </form>
             </aside>
           </div>

@@ -2,9 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminOrderSummaryResponse } from '../admin/admin-order-payment.models';
 import { AdminOrderPaymentService } from '../admin/admin-order-payment.service';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
@@ -21,9 +18,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     CurrencyPipe,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -40,25 +34,25 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Read-only marketplace order search for finance, fulfilment, and dispute context."
       >
         <div pageHeaderActions>
-          <a mat-stroked-button routerLink="/admin/payments">Payments</a>
-          <a mat-stroked-button routerLink="/admin/refunds">Refunds</a>
+          <a data-ui-button="secondary" routerLink="/payments">Payments</a>
+          <a data-ui-button="secondary" routerLink="/refunds">Refunds</a>
         </div>
       </app-page-header>
 
       <form [formGroup]="filtersForm" (ngSubmit)="applyFilters()" class="route-card admin-support-filters" novalidate>
-        <mat-form-field appearance="outline">
-          <mat-label>Search</mat-label>
-          <input matInput formControlName="search" placeholder="Order, buyer, seller, product" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Search</span>
+          <input formControlName="search" placeholder="Order, buyer, seller, product" />
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Status</mat-label>
-          <input matInput formControlName="status" placeholder="Paid, Shipped, Delivered" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Status</span>
+          <input formControlName="status" placeholder="Paid, Shipped, Delivered" />
+        </label>
 
         <div class="buyer-action-row">
-          <button mat-flat-button type="submit">Apply filters</button>
-          <button mat-stroked-button type="button" (click)="clearFilters()">Clear</button>
+          <button data-ui-button="primary" type="submit">Apply filters</button>
+          <button data-ui-button="secondary" type="button" (click)="clearFilters()">Clear</button>
         </div>
       </form>
 
@@ -104,7 +98,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   <small>Payment {{ order.paymentStatus ?? 'None' }}{{ order.shipmentStatus ? ', shipment ' + order.shipmentStatus : '' }}</small>
                 </span>
                 <span role="cell">
-                  <a mat-stroked-button [routerLink]="['/admin/orders', order.orderId]">Open</a>
+                  <a data-ui-button="secondary" [routerLink]="['/orders', order.orderId]">Open</a>
                 </span>
               </div>
             }

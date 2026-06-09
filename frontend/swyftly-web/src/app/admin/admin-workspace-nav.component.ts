@@ -53,43 +53,43 @@ export class AdminWorkspaceNavComponent implements OnInit {
     {
       label: 'Overview',
       items: [
-        { label: 'Dashboard', route: '/admin', exact: true }
+        { label: 'Dashboard', route: '/', exact: true }
       ]
     },
     {
       label: 'Moderation',
       items: [
-        { label: 'Sellers', route: '/admin/sellers' },
-        { label: 'Products', route: '/admin/products' },
-        { label: 'Reviews', route: '/admin/reviews' },
-        { label: 'Ads', route: '/admin/ads' }
+        { label: 'Sellers', route: '/sellers' },
+        { label: 'Products', route: '/products' },
+        { label: 'Reviews', route: '/reviews' },
+        { label: 'Ads', route: '/ads' }
       ]
     },
     {
       label: 'Operations',
       items: [
-        { label: 'Orders', route: '/admin/orders' },
-        { label: 'Support', route: '/admin/support' },
-        { label: 'Disputes', route: '/admin/disputes' }
+        { label: 'Orders', route: '/orders' },
+        { label: 'Support', route: '/support' },
+        { label: 'Disputes', route: '/disputes' }
       ]
     },
     {
       label: 'Finance',
       items: [
-        { label: 'Payments', route: '/admin/payments' },
-        { label: 'Refunds', route: '/admin/refunds' },
-        { label: 'Payouts', route: '/admin/payouts' },
-        { label: 'Payout profile', route: '/admin/payout-profile-changes' }
+        { label: 'Payments', route: '/payments' },
+        { label: 'Refunds', route: '/refunds' },
+        { label: 'Payouts', route: '/payouts' },
+        { label: 'Payout profile', route: '/payout-profile-changes' }
       ]
     },
     {
       label: 'Platform',
       items: [
-        { label: 'Categories', route: '/admin/categories' },
-        { label: 'Pickup points', route: '/admin/pickup-points' },
-        { label: 'Reports', route: '/admin/reports' },
-        { label: 'AI usage', route: '/admin/ai-usage' },
-        { label: 'Audit logs', route: '/admin/audit-logs' }
+        { label: 'Categories', route: '/categories' },
+        { label: 'Pickup points', route: '/pickup-points' },
+        { label: 'Reports', route: '/reports' },
+        { label: 'AI usage', route: '/ai-usage' },
+        { label: 'Audit logs', route: '/audit-logs' }
       ]
     }
   ];

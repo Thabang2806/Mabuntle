@@ -1,7 +1,185 @@
 @tailwind base;
-@import '@angular/material/prebuilt-themes/indigo-pink.css';
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  .ui-button {
+    min-height: 2.6rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.65rem 1rem;
+    border: 1px solid rgb(58 29 50 / 18%);
+    border-radius: 8px;
+    color: var(--swyftly-primary);
+    background: #ffffff;
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 800;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .ui-button:hover,
+  .ui-button:focus-visible {
+    border-color: rgb(58 29 50 / 34%);
+    color: var(--swyftly-primary);
+    background: rgb(244 237 231 / 78%);
+    text-decoration: none;
+  }
+
+  .ui-button:disabled,
+  .ui-button[aria-disabled='true'] {
+    opacity: 0.58;
+    cursor: not-allowed;
+  }
+
+  .ui-button--primary {
+    border-color: var(--swyftly-primary);
+    color: #ffffff;
+    background: var(--swyftly-primary);
+    box-shadow: 0 10px 24px rgb(42 20 37 / 12%);
+  }
+
+  .ui-button--primary:hover,
+  .ui-button--primary:focus-visible {
+    border-color: var(--swyftly-primary-hover);
+    color: #ffffff;
+    background: var(--swyftly-primary-hover);
+  }
+
+  .ui-button--ghost {
+    border-color: transparent;
+    background: transparent;
+  }
+
+  [data-ui-button] {
+    min-height: 2.6rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.65rem 1rem;
+    border: 1px solid rgb(58 29 50 / 18%);
+    border-radius: 8px;
+    color: var(--swyftly-primary);
+    background: #ffffff;
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 800;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  }
+
+  [data-ui-button]:hover,
+  [data-ui-button]:focus-visible {
+    border-color: rgb(58 29 50 / 34%);
+    color: var(--swyftly-primary);
+    background: rgb(244 237 231 / 78%);
+    text-decoration: none;
+  }
+
+  [data-ui-button]:disabled,
+  [data-ui-button][aria-disabled='true'],
+  a[data-ui-button].disabled-link {
+    opacity: 0.58;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  [data-ui-button='primary'] {
+    border-color: var(--swyftly-primary);
+    color: #ffffff;
+    background: var(--swyftly-primary);
+    box-shadow: 0 10px 24px rgb(42 20 37 / 12%);
+  }
+
+  [data-ui-button='primary']:hover,
+  [data-ui-button='primary']:focus-visible {
+    border-color: var(--swyftly-primary-hover);
+    color: #ffffff;
+    background: var(--swyftly-primary-hover);
+  }
+
+  [data-ui-button='ghost'] {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .ui-field {
+    display: grid;
+    gap: 0.45rem;
+    color: var(--swyftly-text);
+    font-size: 0.88rem;
+    font-weight: 800;
+  }
+
+  .ui-field input,
+  .ui-field select,
+  .ui-field textarea {
+    width: 100%;
+    min-height: 3rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid rgb(216 194 173 / 86%);
+    border-radius: 8px;
+    color: var(--swyftly-text);
+    background: rgb(255 255 255 / 94%);
+    font: inherit;
+    font-weight: 600;
+    line-height: 1.35;
+    outline: none;
+    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+  }
+
+  .ui-field input:focus,
+  .ui-field select:focus,
+  .ui-field textarea:focus {
+    border-color: var(--swyftly-accent);
+    box-shadow: 0 0 0 3px rgb(183 110 121 / 16%);
+  }
+
+  .ui-field-error {
+    color: var(--swyftly-danger);
+    font-size: 0.78rem;
+    font-weight: 800;
+  }
+
+  .ui-field-hint {
+    color: var(--swyftly-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .ui-checkbox {
+    min-height: 2.4rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    color: var(--swyftly-text);
+    font-size: 0.88rem;
+    font-weight: 800;
+    line-height: 1.35;
+    cursor: pointer;
+  }
+
+  .ui-checkbox input {
+    width: 1.05rem;
+    height: 1.05rem;
+    accent-color: var(--swyftly-primary);
+  }
+
+  .ui-checkbox:has(input:disabled) {
+    opacity: 0.58;
+    cursor: not-allowed;
+  }
+}
 
 :root {
   --swyftly-primary: #3a1d32;

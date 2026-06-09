@@ -3,8 +3,7 @@ import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/rou
 import { AuthService } from './auth/auth.service';
 import { BuyerNotificationResponse } from './buyer/buyer-engagement.models';
 import { BuyerNotificationRealtimeService } from './buyer/buyer-notification-realtime.service';
-import { SellerNotificationResponse } from './seller/seller-notification.models';
-import { SellerNotificationRealtimeService } from './seller/seller-notification-realtime.service';
+import { FRONTEND_HOSTS } from './frontend-experience';
 import { MobileBottomNavComponent, MobileBottomNavItem } from './shared/ui/mobile-bottom-nav.component';
 
 type NavigationItem = {
@@ -22,8 +21,8 @@ type NavigationItem = {
 export class AppComponent implements OnInit {
   protected readonly authService = inject(AuthService);
   protected readonly notificationRealtime = inject(BuyerNotificationRealtimeService);
-  protected readonly sellerNotificationRealtime = inject(SellerNotificationRealtimeService);
   private readonly router = inject(Router);
+  protected readonly sellerRegisterUrl = `${FRONTEND_HOSTS.seller}/register/seller`;
 
   protected readonly publicNavigationItems: NavigationItem[] = [
     { label: 'Shop', route: '/shop' },
@@ -57,35 +56,11 @@ export class AppComponent implements OnInit {
   });
 
   protected readonly sellerNavigationItems = computed<NavigationItem[]>(() => {
-    if (!this.authService.hasAnyRole(['Seller'])) {
-      return [];
-    }
-
-    return [
-      { label: 'Seller', route: '/seller', badge: this.sellerNotificationRealtime.unreadCount() }
-    ];
+    return [];
   });
 
   protected readonly adminNavigationItems = computed<NavigationItem[]>(() => {
-    const items: NavigationItem[] = [];
-
-    if (this.authService.hasAnyRole(['Admin', 'SuperAdmin'])) {
-      items.push({ label: 'Admin', route: '/admin' });
-      items.push({ label: 'Categories', route: '/admin/categories' });
-      items.push({ label: 'Pickup points', route: '/admin/pickup-points' });
-    }
-
-    if (this.authService.hasAnyRole(['Admin', 'SuperAdmin', 'SupportAgent'])) {
-      items.push({ label: 'Support', route: '/admin/support' });
-    }
-
-    if (this.authService.hasAnyRole(['Admin', 'SuperAdmin', 'FinanceOperator', 'FinanceApprover'])) {
-      items.push({ label: 'Refunds', route: '/admin/refunds' });
-      items.push({ label: 'Payouts', route: '/admin/payouts' });
-      items.push({ label: 'Payout profile', route: '/admin/payout-profile-changes' });
-    }
-
-    return items;
+    return [];
   });
 
   protected readonly hasWorkspaceNavigation = computed(() => {
@@ -99,25 +74,6 @@ export class AppComponent implements OnInit {
       { label: 'Home', route: '/' },
       { label: 'Search', route: '/shop' }
     ];
-
-    if (this.authService.hasAnyRole(['Admin', 'SuperAdmin', 'FinanceOperator', 'FinanceApprover', 'SupportAgent'])) {
-      return [
-        ...items,
-        { label: 'Admin', route: '/admin' },
-        { label: 'Queues', route: '/admin/products' },
-        { label: 'Finance', route: '/admin/payouts' }
-      ];
-    }
-
-    if (this.authService.hasAnyRole(['Seller'])) {
-      return [
-        ...items,
-        { label: 'Seller', route: '/seller' },
-        { label: 'Alerts', route: '/seller/notifications', badge: this.sellerNotificationRealtime.unreadCount() },
-        { label: 'Orders', route: '/seller/orders' },
-        { label: 'Payouts', route: '/seller/payouts' }
-      ];
-    }
 
     if (this.authService.hasAnyRole(['Buyer'])) {
       return [
@@ -166,23 +122,4 @@ export class AppComponent implements OnInit {
     return '/account/notifications';
   }
 
-  protected sellerNotificationRoute(notification: SellerNotificationResponse): string {
-    if (notification.relatedEntityType === 'Product' && notification.relatedEntityId) {
-      return `/seller/products/${notification.relatedEntityId}/edit`;
-    }
-
-    if (notification.relatedEntityType === 'AdCampaign' && notification.relatedEntityId) {
-      return `/seller/ads/${notification.relatedEntityId}`;
-    }
-
-    if (notification.relatedEntityType === 'SellerProfile') {
-      return '/seller';
-    }
-
-    if (notification.relatedEntityType === 'SellerAnalytics') {
-      return '/seller/analytics';
-    }
-
-    return '/seller/notifications';
-  }
 }

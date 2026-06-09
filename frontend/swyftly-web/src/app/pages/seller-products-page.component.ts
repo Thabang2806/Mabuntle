@@ -1,10 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectChange, MatSelectModule } from '@angular/material/select';
 import { getApiErrorMessage } from '../auth/api-error';
 import { SellerProductSummaryResponse } from '../seller/seller-product.models';
 import { SellerProductService } from '../seller/seller-product.service';
@@ -19,10 +15,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     ProductVisualFallbackComponent,
     RouterLink,
     SellerWorkspaceNavComponent,
@@ -39,7 +31,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           <h1>Products</h1>
           <p>Manage draft listings, variants, images, stock, and review submission.</p>
         </div>
-        <a mat-flat-button routerLink="/seller/products/new">New product</a>
+        <a data-ui-button="primary" routerLink="/products/new">New product</a>
       </div>
 
       @if (isLoading()) {
@@ -50,20 +42,20 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         }
 
         <section class="seller-filter-bar" aria-label="Product filters">
-          <mat-form-field appearance="outline">
-            <mat-label>Search products</mat-label>
-            <input matInput [value]="searchTerm()" (input)="updateSearch($event)" />
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Search products</span>
+            <input [value]="searchTerm()" (input)="updateSearch($event)" />
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Status</mat-label>
-            <mat-select [value]="statusFilter()" (selectionChange)="updateStatus($event)">
-              <mat-option value="All">All statuses</mat-option>
+          <label class="ui-field">
+            <span>Status</span>
+            <select [value]="statusFilter()" (change)="updateStatus($event)">
+              <option value="All">All statuses</option>
               @for (status of statusOptions(); track status) {
-                <mat-option [value]="status">{{ status }}</mat-option>
+                <option [value]="status">{{ status }}</option>
               }
-            </mat-select>
-          </mat-form-field>
+            </select>
+          </label>
         </section>
 
         @if (products().length === 0 && !errorMessage()) {
@@ -72,7 +64,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="No products yet"
             message="Create your first product draft before adding images and variants."
           >
-            <a mat-flat-button routerLink="/seller/products/new">Create product</a>
+            <a data-ui-button="primary" routerLink="/products/new">Create product</a>
           </app-empty-state>
         } @else if (filteredProducts().length === 0 && !errorMessage()) {
           <app-empty-state
@@ -127,7 +119,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </span>
                 <span role="cell"><app-status-badge [label]="product.status" [tone]="statusTone(product.status)" /></span>
                 <span role="cell">
-                  <a mat-stroked-button [routerLink]="['/seller/products', product.productId, 'edit']">Edit</a>
+                  <a data-ui-button="secondary" [routerLink]="['/products', product.productId, 'edit']">Edit</a>
                 </span>
               </div>
             }
@@ -172,8 +164,8 @@ export class SellerProductsPageComponent implements OnInit {
     this.searchTerm.set((event.target as HTMLInputElement).value);
   }
 
-  protected updateStatus(event: MatSelectChange): void {
-    this.statusFilter.set(event.value as string);
+  protected updateStatus(event: Event): void {
+    this.statusFilter.set((event.target as HTMLSelectElement).value);
   }
 
   protected statusTone(status: string): StatusBadgeTone {

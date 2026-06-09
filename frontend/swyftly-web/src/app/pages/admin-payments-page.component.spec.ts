@@ -78,8 +78,8 @@ describe('AdminPaymentsPageComponent', () => {
     expect(compiled.textContent).toContain('provider-payment-1');
     expect(compiled.textContent).toContain('Manual reconciliation');
     expect(compiled.textContent).toContain('StalePendingPayment');
-    expect(compiled.querySelector('a[href="/admin/payments/payment-id"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/admin/payments/reconciliation-payment-id"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/payments/payment-id"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/payments/reconciliation-payment-id"]')).not.toBeNull();
   });
 
   it('sends status and order filters to the admin payment API', async () => {

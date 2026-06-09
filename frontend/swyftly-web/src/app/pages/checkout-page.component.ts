@@ -2,9 +2,6 @@ import { CurrencyPipe } from '@angular/common';
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { StorefrontAnalyticsService } from '../analytics/storefront-analytics.service';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerPaymentRedirectService, BuyerPaymentService } from '../buyer/buyer-payment.service';
@@ -25,9 +22,6 @@ import { Subscription } from 'rxjs';
     CurrencyPipe,
     EmptyStateComponent,
     LuxuryPublicStylesComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     ProductVisualFallbackComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -66,7 +60,7 @@ import { Subscription } from 'rxjs';
             heading="No items to checkout"
             message="Add products to your cart before checkout."
           >
-            <a mat-flat-button routerLink="/shop">Shop products</a>
+            <a data-ui-button="primary" routerLink="/shop">Shop products</a>
           </app-empty-state>
         } @else {
           <div class="checkout-layout">
@@ -131,79 +125,79 @@ import { Subscription } from 'rxjs';
                   </div>
                 } @else {
                   <div class="form-grid">
-                  <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                    <mat-label>Full name</mat-label>
-                    <input matInput formControlName="fullName">
+                  <label class="ui-field">
+                    <span>Full name</span>
+                    <input formControlName="fullName">
                     @if (shippingForm.controls.fullName.hasError('required')) {
-                      <mat-error>Full name is required.</mat-error>
+                      <span class="ui-field-error">Full name is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                    <mat-label>Phone</mat-label>
-                    <input matInput formControlName="phone">
+                  <label class="ui-field">
+                    <span>Phone</span>
+                    <input formControlName="phone">
                     @if (shippingForm.controls.phone.hasError('required')) {
-                      <mat-error>Phone is required.</mat-error>
+                      <span class="ui-field-error">Phone is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                    <mat-label>Address line 1</mat-label>
-                    <input matInput formControlName="addressLine1">
+                  <label class="ui-field">
+                    <span>Address line 1</span>
+                    <input formControlName="addressLine1">
                     @if (shippingForm.controls.addressLine1.hasError('required')) {
-                      <mat-error>Address is required.</mat-error>
+                      <span class="ui-field-error">Address is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                    <mat-label>Address line 2</mat-label>
-                    <input matInput formControlName="addressLine2">
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Address line 2</span>
+                    <input formControlName="addressLine2">
+                  </label>
 
-                  <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                    <mat-label>Suburb</mat-label>
-                    <input matInput formControlName="suburb">
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Suburb</span>
+                    <input formControlName="suburb">
+                  </label>
 
-                  <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                    <mat-label>City</mat-label>
-                    <input matInput formControlName="city">
+                  <label class="ui-field">
+                    <span>City</span>
+                    <input formControlName="city">
                     @if (shippingForm.controls.city.hasError('required')) {
-                      <mat-error>City is required.</mat-error>
+                      <span class="ui-field-error">City is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                    <mat-label>Province</mat-label>
-                    <input matInput formControlName="province">
+                  <label class="ui-field">
+                    <span>Province</span>
+                    <input formControlName="province">
                     @if (shippingForm.controls.province.hasError('required')) {
-                      <mat-error>Province is required.</mat-error>
+                      <span class="ui-field-error">Province is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                    <mat-label>Postal code</mat-label>
-                    <input matInput formControlName="postalCode">
+                  <label class="ui-field">
+                    <span>Postal code</span>
+                    <input formControlName="postalCode">
                     @if (shippingForm.controls.postalCode.hasError('required')) {
-                      <mat-error>Postal code is required.</mat-error>
+                      <span class="ui-field-error">Postal code is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                    <mat-label>Country code</mat-label>
-                    <input matInput formControlName="countryCode" maxlength="2">
+                  <label class="ui-field">
+                    <span>Country code</span>
+                    <input formControlName="countryCode" maxlength="2">
                     @if (shippingForm.controls.countryCode.invalid) {
-                      <mat-error>Use a two-letter country code.</mat-error>
+                      <span class="ui-field-error">Use a two-letter country code.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                    <mat-label>Delivery instructions</mat-label>
-                    <textarea matInput rows="3" formControlName="deliveryInstructions" maxlength="500"></textarea>
+                  <label class="ui-field">
+                    <span>Delivery instructions</span>
+                    <textarea rows="3" formControlName="deliveryInstructions" maxlength="500"></textarea>
                     @if (shippingForm.controls.deliveryInstructions.hasError('maxlength')) {
-                      <mat-error>Delivery instructions must be 500 characters or fewer.</mat-error>
+                      <span class="ui-field-error">Delivery instructions must be 500 characters or fewer.</span>
                     }
-                  </mat-form-field>
+                  </label>
                 </div>
                 }
               </section>
@@ -226,8 +220,7 @@ import { Subscription } from 'rxjs';
                   </app-ui-alert>
                 }
 
-                <button
-                  mat-stroked-button
+                <button data-ui-button="secondary"
                   type="button"
                   (click)="loadShippingOptions()"
                   [disabled]="isLoadingShipping() || !cart()?.cartId"
@@ -312,7 +305,7 @@ import { Subscription } from 'rxjs';
                   <h2>Review and start checkout</h2>
                 </div>
                 <p>Review seller, items, and delivery details before creating the reserved order. Payment starts in a hosted checkout after the order is created.</p>
-                <button mat-flat-button class="checkout-primary-action" type="submit" [disabled]="!canStartCheckout() || isSubmitting()">
+                <button data-ui-button="primary" class="checkout-primary-action" type="submit" [disabled]="!canStartCheckout() || isSubmitting()">
                   {{ isSubmitting() ? 'Starting checkout...' : 'Start checkout' }}
                 </button>
                 @if (!hasDeliverySelected()) {

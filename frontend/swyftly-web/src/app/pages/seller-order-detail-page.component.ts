@@ -2,9 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
 import { SellerInventoryMovementResponse, SellerInventoryMovementType } from '../seller/seller-inventory.models';
 import { SellerInventoryService } from '../seller/seller-inventory.service';
@@ -20,9 +17,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     CurrencyPipe,
     DatePipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -34,7 +28,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     <section class="page seller-ops-page">
       <app-seller-workspace-nav />
 
-      <a class="admin-back-link" routerLink="/seller/orders">Back to orders</a>
+      <a class="admin-back-link" routerLink="/orders">Back to orders</a>
 
       <app-page-header
         eyebrow="Seller operations"
@@ -84,7 +78,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 <dl class="seller-facts">
                   <div><dt>Recipient</dt><dd>{{ order()!.deliveryAddress!.recipientName }}</dd></div>
                   <div><dt>Phone</dt><dd>{{ order()!.deliveryAddress!.phoneNumber }}</dd></div>
-                  <div><dt>Address</dt><dd>{{ formatDeliveryAddress(order()!.deliveryAddress!) }}</dd></div>
+                  <div><dt>Address</dt><dd>{{ renderDeliveryAddress(order()!.deliveryAddress!) }}</dd></div>
                   @if (order()!.deliveryAddress!.deliveryInstructions) {
                     <div><dt>Instructions</dt><dd>{{ order()!.deliveryAddress!.deliveryInstructions }}</dd></div>
                   }
@@ -115,50 +109,50 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               <h2>Fulfilment actions</h2>
               <p>Use these controls for manual marketplace fulfilment. Carrier booking is available when the API is configured with a carrier provider.</p>
               <div class="seller-action-row">
-                <button mat-flat-button type="button" [disabled]="isActing()" (click)="markProcessing()">Mark processing</button>
-                <button mat-stroked-button type="button" [disabled]="isActing() || !canMarkReadyToShip()" (click)="markReadyToShip()">Ready to ship</button>
-                <button mat-stroked-button type="button" [disabled]="isActing()" (click)="markShipped()">Mark shipped</button>
-                <button mat-stroked-button type="button" [disabled]="isActing() || !canMarkDelivered()" (click)="markDelivered()">Mark delivered</button>
+                <button data-ui-button="primary" type="button" [disabled]="isActing()" (click)="markProcessing()">Mark processing</button>
+                <button data-ui-button="secondary" type="button" [disabled]="isActing() || !canMarkReadyToShip()" (click)="markReadyToShip()">Ready to ship</button>
+                <button data-ui-button="secondary" type="button" [disabled]="isActing()" (click)="markShipped()">Mark shipped</button>
+                <button data-ui-button="secondary" type="button" [disabled]="isActing() || !canMarkDelivered()" (click)="markDelivered()">Mark delivered</button>
               </div>
 
               <form [formGroup]="trackingForm" (ngSubmit)="addTracking()" class="seller-form-grid" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Carrier name</mat-label>
-                  <input matInput formControlName="carrierName" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Carrier name</span>
+                  <input formControlName="carrierName" />
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Tracking number</mat-label>
-                  <input matInput formControlName="trackingNumber" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Tracking number</span>
+                  <input formControlName="trackingNumber" />
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Tracking URL</mat-label>
-                  <input matInput formControlName="trackingUrl" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Tracking URL</span>
+                  <input formControlName="trackingUrl" />
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Note</mat-label>
-                  <textarea matInput rows="3" formControlName="note"></textarea>
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Note</span>
+                  <textarea rows="3" formControlName="note"></textarea>
+                </label>
 
-                <button mat-flat-button type="submit" [disabled]="isActing()">Add tracking</button>
+                <button data-ui-button="primary" type="submit" [disabled]="isActing()">Add tracking</button>
               </form>
 
               <form [formGroup]="exceptionForm" class="seller-form-grid" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Exception reason</mat-label>
-                  <textarea matInput rows="3" formControlName="reason" maxlength="500"></textarea>
+                <label class="ui-field">
+                  <span>Exception reason</span>
+                  <textarea rows="3" formControlName="reason" maxlength="500"></textarea>
                   @if (exceptionForm.controls.reason.hasError('required')) {
-                    <mat-error>Reason is required.</mat-error>
+                    <span class="ui-field-error">Reason is required.</span>
                   } @else if (exceptionForm.controls.reason.hasError('maxlength')) {
-                    <mat-error>Reason must be 500 characters or fewer.</mat-error>
+                    <span class="ui-field-error">Reason must be 500 characters or fewer.</span>
                   }
-                </mat-form-field>
+                </label>
 
                 <div class="seller-action-row">
-                  <button mat-stroked-button type="button" [disabled]="isActing() || exceptionForm.invalid || !canMarkDeliveryFailed()" (click)="markDeliveryFailed()">Mark delivery failed</button>
-                  <button mat-stroked-button type="button" [disabled]="isActing() || exceptionForm.invalid || !canMarkReturnedToSender()" (click)="markReturnedToSender()">Returned to sender</button>
+                  <button data-ui-button="secondary" type="button" [disabled]="isActing() || exceptionForm.invalid || !canMarkDeliveryFailed()" (click)="markDeliveryFailed()">Mark delivery failed</button>
+                  <button data-ui-button="secondary" type="button" [disabled]="isActing() || exceptionForm.invalid || !canMarkReturnedToSender()" (click)="markReturnedToSender()">Returned to sender</button>
                 </div>
               </form>
             </section>
@@ -185,47 +179,47 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
                 <div class="seller-action-row">
                   @if (latestShipment()!.providerLabelUrl) {
-                    <a mat-stroked-button [href]="latestShipment()!.providerLabelUrl" target="_blank" rel="noreferrer">Open label</a>
+                    <a data-ui-button="secondary" [href]="latestShipment()!.providerLabelUrl" target="_blank" rel="noreferrer">Open label</a>
                   }
                   @if (latestShipment()!.trackingUrl) {
-                    <a mat-stroked-button [href]="latestShipment()!.trackingUrl" target="_blank" rel="noreferrer">Track shipment</a>
+                    <a data-ui-button="secondary" [href]="latestShipment()!.trackingUrl" target="_blank" rel="noreferrer">Track shipment</a>
                   }
-                  <button mat-stroked-button type="button" [disabled]="isActing() || !latestShipment()!.providerShipmentReference" (click)="syncCarrierTracking()">Sync carrier tracking</button>
+                  <button data-ui-button="secondary" type="button" [disabled]="isActing() || !latestShipment()!.providerShipmentReference" (click)="syncCarrierTracking()">Sync carrier tracking</button>
                 </div>
               }
 
               <form [formGroup]="carrierBookingForm" (ngSubmit)="bookCarrier()" class="seller-form-grid" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Service code</mat-label>
-                  <input matInput formControlName="serviceCode" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Service code</span>
+                  <input formControlName="serviceCode" />
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Weight kg</mat-label>
-                  <input matInput type="number" formControlName="packageWeightKg" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Weight kg</span>
+                  <input type="number" formControlName="packageWeightKg" />
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Length cm</mat-label>
-                  <input matInput type="number" formControlName="packageLengthCm" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Length cm</span>
+                  <input type="number" formControlName="packageLengthCm" />
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Width cm</mat-label>
-                  <input matInput type="number" formControlName="packageWidthCm" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Width cm</span>
+                  <input type="number" formControlName="packageWidthCm" />
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Height cm</mat-label>
-                  <input matInput type="number" formControlName="packageHeightCm" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Height cm</span>
+                  <input type="number" formControlName="packageHeightCm" />
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Collection note</mat-label>
-                  <textarea matInput rows="3" formControlName="collectionNote" maxlength="500"></textarea>
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Collection note</span>
+                  <textarea rows="3" formControlName="collectionNote" maxlength="500"></textarea>
+                </label>
 
-                <button mat-flat-button type="submit" [disabled]="isActing() || carrierBookingForm.invalid || !canBookCarrier()">Book carrier</button>
+                <button data-ui-button="primary" type="submit" [disabled]="isActing() || carrierBookingForm.invalid || !canBookCarrier()">Book carrier</button>
               </form>
             </section>
           </div>
@@ -485,7 +479,7 @@ export class SellerOrderDetailPageComponent implements OnInit {
     return 'neutral';
   }
 
-  protected formatDeliveryAddress(address: NonNullable<SellerOrderResult['deliveryAddress']>): string {
+  protected renderDeliveryAddress(address: NonNullable<SellerOrderResult['deliveryAddress']>): string {
     return [
       address.addressLine1,
       address.addressLine2,

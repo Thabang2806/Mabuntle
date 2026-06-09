@@ -34,7 +34,7 @@ describe('AdminOrdersPageComponent', () => {
     expect(compiled.textContent).toContain('Orders');
     expect(compiled.textContent).toContain('Seller Store');
     expect(compiled.textContent).toContain('Payment Paid');
-    expect(compiled.querySelector('a[href="/admin/orders/order-id"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/orders/order-id"]')).not.toBeNull();
   });
 
   it('sends status filters to the admin order API', async () => {

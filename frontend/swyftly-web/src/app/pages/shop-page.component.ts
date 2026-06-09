@@ -1,10 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { getApiErrorMessage } from '../auth/api-error';
 import { ProductCardComponent } from '../shop/product-card.component';
 import { ProductSearchItemResponse, PublicCategoryResponse } from '../shop/public-catalog.models';
@@ -20,10 +16,6 @@ type ShopFilterKey = 'query' | 'categorySlug' | 'availability' | 'minPrice' | 'm
   selector: 'app-shop-page',
   imports: [
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     LuxuryPublicStylesComponent,
     ProductCardComponent,
     ReactiveFormsModule,
@@ -44,20 +36,20 @@ type ShopFilterKey = 'query' | 'categorySlug' | 'availability' | 'minPrice' | 'm
         <div class="shop-hero-actions">
           <app-status-badge label="Published catalog" tone="accent" />
           <app-status-badge [label]="sortLabel()" />
-          <a mat-stroked-button routerLink="/">Marketplace home</a>
+          <a data-ui-button="secondary" routerLink="/">Marketplace home</a>
         </div>
 
         <div class="shop-quick-links" aria-label="Category quick filters">
-          <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="applyCategory(null)">All products</button>
+          <button data-ui-button="secondary" type="button" [disabled]="isLoading()" (click)="applyCategory(null)">All products</button>
           @for (category of quickCategories(); track category.categoryId) {
-            <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="applyCategory(category.slug)">
+            <button data-ui-button="secondary" type="button" [disabled]="isLoading()" (click)="applyCategory(category.slug)">
               {{ category.name }}
             </button>
           }
         </div>
       </div>
 
-      <button class="shop-filter-toggle" mat-stroked-button type="button" (click)="filtersExpanded.set(!filtersExpanded())">
+      <button class="shop-filter-toggle" data-ui-button="secondary" type="button" (click)="filtersExpanded.set(!filtersExpanded())">
         {{ filtersExpanded() ? 'Hide filters' : 'Show filters' }}
       </button>
 
@@ -79,77 +71,77 @@ type ShopFilterKey = 'query' | 'categorySlug' | 'availability' | 'minPrice' | 'm
           <div class="shop-filter-facets" aria-label="Quick refinements">
             <span>Quick refinements</span>
             <div>
-              <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="applyAvailability('in_stock')">In stock</button>
+              <button data-ui-button="secondary" type="button" [disabled]="isLoading()" (click)="applyAvailability('in_stock')">In stock</button>
               @for (category of quickCategories().slice(0, 3); track category.categoryId) {
-                <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="applyCategory(category.slug)">
+                <button data-ui-button="secondary" type="button" [disabled]="isLoading()" (click)="applyCategory(category.slug)">
                   {{ category.name }}
                 </button>
               }
             </div>
           </div>
 
-          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-            <mat-label>Search</mat-label>
-            <input matInput formControlName="query">
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Search</span>
+            <input formControlName="query">
+          </label>
 
-          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-            <mat-label>Category</mat-label>
-            <mat-select formControlName="categorySlug">
-              <mat-option value="">All categories</mat-option>
+          <label class="ui-field">
+            <span>Category</span>
+            <select formControlName="categorySlug">
+              <option value="">All categories</option>
               @for (category of categories(); track category.categoryId) {
-                <mat-option [value]="category.slug">{{ categoryLabel(category) }}</mat-option>
+                <option [ngValue]="category.slug">{{ categoryLabel(category) }}</option>
               }
-            </mat-select>
-          </mat-form-field>
+            </select>
+          </label>
 
-          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-            <mat-label>Availability</mat-label>
-            <mat-select formControlName="availability">
-              <mat-option value="">All products</mat-option>
-              <mat-option value="in_stock">In stock</mat-option>
-              <mat-option value="out_of_stock">Out of stock</mat-option>
-            </mat-select>
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Availability</span>
+            <select formControlName="availability">
+              <option value="">All products</option>
+              <option value="in_stock">In stock</option>
+              <option value="out_of_stock">Out of stock</option>
+            </select>
+          </label>
 
-          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-            <mat-label>Min price</mat-label>
-            <input matInput type="number" min="0" formControlName="minPrice">
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Min price</span>
+            <input type="number" min="0" formControlName="minPrice">
+          </label>
 
-          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-            <mat-label>Max price</mat-label>
-            <input matInput type="number" min="0" formControlName="maxPrice">
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Max price</span>
+            <input type="number" min="0" formControlName="maxPrice">
+          </label>
 
-          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-            <mat-label>Size</mat-label>
-            <input matInput formControlName="size">
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Size</span>
+            <input formControlName="size">
+          </label>
 
-          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-            <mat-label>Colour</mat-label>
-            <input matInput formControlName="colour">
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Colour</span>
+            <input formControlName="colour">
+          </label>
 
-          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-            <mat-label>Material</mat-label>
-            <input matInput formControlName="material">
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Material</span>
+            <input formControlName="material">
+          </label>
 
-          <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-            <mat-label>Sort</mat-label>
-            <mat-select formControlName="sort">
-              <mat-option value="newest">Newest</mat-option>
-              <mat-option value="price_asc">Price low to high</mat-option>
-              <mat-option value="price_desc">Price high to low</mat-option>
-              <mat-option value="relevance">Relevance</mat-option>
-            </mat-select>
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Sort</span>
+            <select formControlName="sort">
+              <option value="newest">Newest</option>
+              <option value="price_asc">Price low to high</option>
+              <option value="price_desc">Price high to low</option>
+              <option value="relevance">Relevance</option>
+            </select>
+          </label>
 
           <div class="shop-filter-actions">
-            <button mat-flat-button type="submit" [disabled]="isLoading()">Apply</button>
-            <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="clearFilters()">Clear</button>
+            <button data-ui-button="primary" type="submit" [disabled]="isLoading()">Apply</button>
+            <button data-ui-button="secondary" type="button" [disabled]="isLoading()" (click)="clearFilters()">Clear</button>
           </div>
 
           <div class="shop-filter-note">
@@ -174,7 +166,7 @@ type ShopFilterKey = 'query' | 'categorySlug' | 'availability' | 'minPrice' | 'm
                     <span aria-hidden="true">x</span>
                   </button>
                 }
-                <button mat-button type="button" (click)="clearFilters()">Clear all</button>
+                <button data-ui-button="ghost" type="button" (click)="clearFilters()">Clear all</button>
               </div>
             }
 
@@ -184,7 +176,7 @@ type ShopFilterKey = 'query' | 'categorySlug' | 'availability' | 'minPrice' | 'm
                 heading="No products found"
                 message="Try a broader search, choose fewer filters, or browse all products."
               >
-                <button mat-flat-button type="button" (click)="clearFilters()">Clear filters</button>
+                <button data-ui-button="primary" type="button" (click)="clearFilters()">Clear filters</button>
               </app-empty-state>
             } @else {
               <div class="shop-result-bar">
@@ -199,8 +191,8 @@ type ShopFilterKey = 'query' | 'categorySlug' | 'availability' | 'minPrice' | 'm
               </div>
 
               <div class="shop-pagination">
-                <button mat-stroked-button type="button" [disabled]="page() <= 1 || isLoading()" (click)="search(page() - 1)">Previous</button>
-                <button mat-stroked-button type="button" [disabled]="page() * pageSize() >= totalCount() || isLoading()" (click)="search(page() + 1)">Next</button>
+                <button data-ui-button="secondary" type="button" [disabled]="page() <= 1 || isLoading()" (click)="search(page() - 1)">Previous</button>
+                <button data-ui-button="secondary" type="button" [disabled]="page() * pageSize() >= totalCount() || isLoading()" (click)="search(page() + 1)">Next</button>
               </div>
             }
           }

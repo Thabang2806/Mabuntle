@@ -1,0 +1,16 @@
+/* Seller workspace Cloudflare build entrypoint. */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/seller",
+    "types": [
+      "node"
+    ]
+  },
+  "files": [
+    "src/main.seller.ts"
+  ],
+  "include": [
+    "src/**/*.d.ts"
+  ]
+}

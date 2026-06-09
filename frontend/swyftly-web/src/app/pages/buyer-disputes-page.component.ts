@@ -1,10 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerDisputeResponse } from '../buyer/buyer-dispute.models';
 import { BuyerDisputeService } from '../buyer/buyer-dispute.service';
@@ -20,10 +16,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     BuyerWorkspaceNavComponent,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     StatusBadgeComponent,
@@ -85,7 +77,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                     }
                   </span>
                   <span role="cell">
-                    <button mat-stroked-button type="button" (click)="selectDispute(dispute)">Review</button>
+                    <button data-ui-button="secondary" type="button" (click)="selectDispute(dispute)">Review</button>
                   </span>
                 </div>
               }
@@ -116,11 +108,11 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </section>
 
                 <form [formGroup]="messageForm" (ngSubmit)="addMessage()" class="admin-finance-form" novalidate>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Message</mat-label>
-                    <textarea matInput rows="3" formControlName="message"></textarea>
-                  </mat-form-field>
-                  <button mat-flat-button type="submit" [disabled]="isSaving()">Send message</button>
+                  <label class="ui-field">
+                    <span>Message</span>
+                    <textarea rows="3" formControlName="message"></textarea>
+                  </label>
+                  <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Send message</button>
                 </form>
 
                 <section class="admin-finance-subsection">
@@ -142,27 +134,27 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </section>
 
                 <form [formGroup]="evidenceForm" (ngSubmit)="addEvidence()" class="admin-finance-form" novalidate>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Evidence type</mat-label>
-                    <mat-select formControlName="evidenceType">
-                      <mat-option value="Image">Image</mat-option>
-                      <mat-option value="Document">Document</mat-option>
-                      <mat-option value="Message">Message</mat-option>
-                      <mat-option value="Other">Other</mat-option>
-                    </mat-select>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Evidence type</span>
+                    <select formControlName="evidenceType">
+                      <option value="Image">Image</option>
+                      <option value="Document">Document</option>
+                      <option value="Message">Message</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Storage reference or URL</mat-label>
-                    <input matInput formControlName="storageReference" />
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Storage reference or URL</span>
+                    <input formControlName="storageReference" />
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Description</mat-label>
-                    <textarea matInput rows="2" formControlName="description"></textarea>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Description</span>
+                    <textarea rows="2" formControlName="description"></textarea>
+                  </label>
 
-                  <button mat-stroked-button type="submit" [disabled]="isSaving()">Add evidence</button>
+                  <button data-ui-button="secondary" type="submit" [disabled]="isSaving()">Add evidence</button>
                 </form>
               }
             </aside>

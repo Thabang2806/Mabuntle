@@ -25,7 +25,7 @@ describe('SellOnSwyftlyPageComponent', () => {
     expect(compiled.textContent).toContain('Build a reviewed fashion, beauty, or jewellery storefront.');
     expect(compiled.textContent).toContain('How selling works');
     expect(compiled.textContent).toContain('Real carrier adapters');
-    expect(links).toContain('/register/seller');
-    expect(links).toContain('/login');
+    expect(links).toContain('https://seller.mabuntle.com/register/seller');
+    expect(links).toContain('https://seller.mabuntle.com/login');
   });
 });

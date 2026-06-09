@@ -18,8 +18,8 @@
 ## Frontend
 
 - Use Angular standalone components.
-- Use Angular Material for standard controls.
-- Use Tailwind for layout utilities and spacing.
+- Use Tailwind-based primitives and native controls for app UI.
+- Keep shared buttons, fields, tables, badges, alerts, tabs, and workspace shells behavior-focused and accessible.
 - Keep public marketplace pages SSR friendly.
 - Keep provider calls behind backend APIs.
 

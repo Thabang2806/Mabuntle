@@ -1,7 +1,6 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { AdminOrderDetailResponse } from '../admin/admin-order-payment.models';
 import { AdminOrderPaymentService } from '../admin/admin-order-payment.service';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
@@ -16,7 +15,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     AdminWorkspaceNavComponent,
     CurrencyPipe,
     DatePipe,
-    MatButtonModule,
     PageHeaderComponent,
     RouterLink,
     StatusBadgeComponent,
@@ -25,7 +23,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   template: `
     <section class="page admin-finance-page">
       <app-admin-workspace-nav />
-      <a class="admin-back-link" routerLink="/admin/orders">Back to orders</a>
+      <a class="admin-back-link" routerLink="/orders">Back to orders</a>
 
       @if (isLoading()) {
         <div class="route-card">Loading order...</div>
@@ -39,7 +37,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         >
           <div pageHeaderActions>
             <app-status-badge [label]="order()!.status" [tone]="statusTone(order()!.status)" />
-            <a mat-stroked-button [routerLink]="['/admin/payments']" [queryParams]="{ orderId: order()!.orderId }">Related payments</a>
+            <a data-ui-button="secondary" [routerLink]="['/payments']" [queryParams]="{ orderId: order()!.orderId }">Related payments</a>
           </div>
         </app-page-header>
 
@@ -82,7 +80,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               <dl class="seller-facts">
                 <div><dt>Recipient</dt><dd>{{ order()!.deliveryAddress!.recipientName }}</dd></div>
                 <div><dt>Phone</dt><dd>{{ order()!.deliveryAddress!.phoneNumber }}</dd></div>
-                <div><dt>Address</dt><dd>{{ formatDeliveryAddress(order()!.deliveryAddress!) }}</dd></div>
+                <div><dt>Address</dt><dd>{{ renderDeliveryAddress(order()!.deliveryAddress!) }}</dd></div>
                 @if (order()!.deliveryAddress!.deliveryInstructions) {
                   <div><dt>Instructions</dt><dd>{{ order()!.deliveryAddress!.deliveryInstructions }}</dd></div>
                 }
@@ -137,7 +135,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 <span><strong>{{ payment.provider }}</strong><small>{{ payment.providerReference ?? payment.paymentId }}</small></span>
                 <span>{{ payment.amount | currency:payment.currency:'symbol-narrow' }}</span>
                 <span><app-status-badge [label]="payment.status" [tone]="statusTone(payment.status)" /></span>
-                <span><a mat-stroked-button [routerLink]="['/admin/payments', payment.paymentId]">Open</a></span>
+                <span><a data-ui-button="secondary" [routerLink]="['/payments', payment.paymentId]">Open</a></span>
               </div>
             } @empty {
               <p>No payment records are attached to this order yet.</p>
@@ -226,7 +224,7 @@ export class AdminOrderDetailPageComponent implements OnInit {
     return 'neutral';
   }
 
-  protected formatDeliveryAddress(address: NonNullable<AdminOrderDetailResponse['deliveryAddress']>): string {
+  protected renderDeliveryAddress(address: NonNullable<AdminOrderDetailResponse['deliveryAddress']>): string {
     return [
       address.addressLine1,
       address.addressLine2,

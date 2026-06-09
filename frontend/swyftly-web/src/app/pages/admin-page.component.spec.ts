@@ -44,15 +44,15 @@ describe('AdminPageComponent', () => {
 
     const links = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('a'))
       .map(link => link.getAttribute('href'));
-    expect(links).toContain('/admin/sellers');
-    expect(links).toContain('/admin/products');
-    expect(links).toContain('/admin/reviews');
-    expect(links).toContain('/admin/orders');
-    expect(links).toContain('/admin/payments');
-    expect(links).toContain('/admin/refunds');
-    expect(links).toContain('/admin/disputes');
-    expect(links).toContain('/admin/payouts');
-    expect(links).toContain('/admin/ads');
+    expect(links).toContain('/sellers');
+    expect(links).toContain('/products');
+    expect(links).toContain('/reviews');
+    expect(links).toContain('/orders');
+    expect(links).toContain('/payments');
+    expect(links).toContain('/refunds');
+    expect(links).toContain('/disputes');
+    expect(links).toContain('/payouts');
+    expect(links).toContain('/ads');
   });
 });
 

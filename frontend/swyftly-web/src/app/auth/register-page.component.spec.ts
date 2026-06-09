@@ -39,7 +39,7 @@ describe('RegisterPageComponent', () => {
 
     expect(compiled.textContent).toContain('Create seller account');
     expect(compiled.textContent).toContain('complete onboarding');
-    expect(compiled.querySelector('a[href="/sell"]')?.textContent).toContain('Review seller requirements');
+    expect(compiled.querySelector('a[href="https://mabuntle.com/sell"]')?.textContent).toContain('Review seller requirements');
   });
 
   it('submits the existing seller registration payload and shows success-to-login state', async () => {

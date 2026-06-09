@@ -10,6 +10,32 @@ powershell -ExecutionPolicy Bypass -File scripts\verify-dev-environment.ps1
 
 The helper checks the .NET SDK, NuGet source/connectivity, existing restore assets, PostgreSQL TCP reachability, Node/npm, frontend dependencies, Karma config, and Chrome availability. It exits non-zero when a critical local blocker is found.
 
+## Local frontend development
+
+Start the local API first:
+
+```powershell
+dotnet run --project backend\src\Swyftly.Api
+```
+
+Then run the split Angular apps from `frontend/swyftly-web`:
+
+```powershell
+cmd /c npm run serve:client
+cmd /c npm run serve:seller
+cmd /c npm run serve:admin
+```
+
+The local apps run at:
+
+| App | URL |
+| --- | --- |
+| Client marketplace | `http://localhost:4200` |
+| Seller workspace | `http://localhost:4201` |
+| Admin console | `http://localhost:4202` |
+
+All three serve targets use `src/environments/environment.development.ts`, so API calls target the local API origin, currently `https://localhost:7268`. Cloudflare production build scripts remain separate.
+
 Common recovery steps:
 
 | Blocker | Recovery |
@@ -20,6 +46,23 @@ Common recovery steps:
 | Backend DLLs are locked | Stop any running `Swyftly.Api`, Visual Studio debug sessions, or background `dotnet` processes before rebuilding. |
 | PostgreSQL connection is missing | Set `ConnectionStrings__DefaultConnection`, pass `-ConnectionString` to the preflight helper, or update `backend/src/Swyftly.Api/appsettings.Development.json`. |
 | Existing seed accounts use an old password | Re-run the seed with `-ResetPasswords` and the password you want to use for local testing. |
+
+## Deployment smoke verification
+
+After Cloudflare Pages custom domains and the Lightsail API DNS are configured, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\check-deployment-smoke.ps1
+```
+
+The helper checks DNS and HTTP status for:
+
+- `mabuntle.com`
+- `seller.mabuntle.com`
+- `admin.mabuntle.com`
+- `api.mabuntle.com`
+
+It exits non-zero when a required DNS or HTTP check fails. API health endpoints must return `200`; frontend deep links may return a Cloudflare trailing-slash redirect as long as the redirect is not a loop.
 
 ## Development user seed
 

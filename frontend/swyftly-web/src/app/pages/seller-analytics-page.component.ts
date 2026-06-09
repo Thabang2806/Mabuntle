@@ -2,11 +2,6 @@ import { CurrencyPipe, DatePipe, DecimalPipe, PercentPipe } from '@angular/commo
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import {
   SellerAdPerformanceDetailResponse,
   SellerAnalyticsCsvReport,
@@ -34,11 +29,6 @@ import { SellerWorkspaceNavComponent } from '../seller/seller-workspace-nav.comp
     CurrencyPipe,
     DatePipe,
     DecimalPipe,
-    MatButtonModule,
-    MatCheckboxModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     PercentPipe,
     ReactiveFormsModule,
     RouterLink,
@@ -54,43 +44,43 @@ import { SellerWorkspaceNavComponent } from '../seller/seller-workspace-nav.comp
           <h1>Performance workspace</h1>
           <p>Review seller-owned sales, product, inventory, ad, customer-care, and storefront conversion signals.</p>
         </div>
-        <a mat-stroked-button routerLink="/seller">Seller workspace</a>
+        <a data-ui-button="secondary" routerLink="">Seller workspace</a>
       </div>
 
       <form [formGroup]="filtersForm" (ngSubmit)="loadAnalytics()" class="route-card admin-audit-filters" novalidate>
-        <mat-form-field appearance="outline" class="swyftly-field">
-          <mat-label>From</mat-label>
-          <input matInput type="datetime-local" formControlName="from">
-        </mat-form-field>
+        <label class="ui-field swyftly-field">
+          <span>From</span>
+          <input type="datetime-local" formControlName="from">
+        </label>
 
-        <mat-form-field appearance="outline" class="swyftly-field">
-          <mat-label>To</mat-label>
-          <input matInput type="datetime-local" formControlName="to">
-        </mat-form-field>
+        <label class="ui-field swyftly-field">
+          <span>To</span>
+          <input type="datetime-local" formControlName="to">
+        </label>
 
-        <mat-form-field appearance="outline" class="swyftly-field">
-          <mat-label>Bucket</mat-label>
-          <mat-select formControlName="bucket">
-            <mat-option value="Day">Daily</mat-option>
-            <mat-option value="Week">Weekly</mat-option>
-          </mat-select>
-        </mat-form-field>
+        <label class="ui-field swyftly-field">
+          <span>Bucket</span>
+          <select formControlName="bucket">
+            <option value="Day">Daily</option>
+            <option value="Week">Weekly</option>
+          </select>
+        </label>
 
-        <mat-form-field appearance="outline" class="swyftly-field">
-          <mat-label>Funnel source</mat-label>
-          <mat-select formControlName="sourceCategory">
-            <mat-option value="">All sources</mat-option>
+        <label class="ui-field swyftly-field">
+          <span>Funnel source</span>
+          <select formControlName="sourceCategory">
+            <option value="">All sources</option>
             @for (source of sourceCategories; track source) {
-              <mat-option [value]="source">{{ source }}</mat-option>
+              <option [value]="source">{{ source }}</option>
             }
-          </mat-select>
-        </mat-form-field>
+          </select>
+        </label>
 
         <div class="admin-audit-actions">
-          <button mat-flat-button type="submit" [disabled]="isLoading()">Apply filters</button>
+          <button data-ui-button="primary" type="submit" [disabled]="isLoading()">Apply filters</button>
           @if (performance() && !errorMessage()) {
             @for (report of csvReports; track report) {
-              <a mat-stroked-button [href]="getCsvExportUrl(report)" target="_blank" rel="noreferrer">{{ report }} CSV</a>
+              <a data-ui-button="secondary" [href]="getCsvExportUrl(report)" target="_blank" rel="noreferrer">{{ report }} CSV</a>
             }
           }
         </div>
@@ -243,7 +233,7 @@ import { SellerWorkspaceNavComponent } from '../seller/seller-workspace-nav.comp
                       <span role="cell">{{ product.addToCartCount }}</span>
                       <span role="cell">{{ product.paidOrderCount }}</span>
                       <span role="cell">{{ product.revenue | currency:'ZAR':'symbol-narrow' }}</span>
-                      <span role="cell"><a mat-stroked-button [routerLink]="['/seller/products', product.productId, 'edit']">Open</a></span>
+                      <span role="cell"><a data-ui-button="secondary" [routerLink]="['/products', product.productId, 'edit']">Open</a></span>
                     </div>
                   }
                 </div>
@@ -274,7 +264,7 @@ import { SellerWorkspaceNavComponent } from '../seller/seller-workspace-nav.comp
                       <span role="cell">{{ product.grossSales | currency:'ZAR':'symbol-narrow' }}</span>
                       <span role="cell">{{ product.returnCount }} / {{ product.returnRate | percent:'1.0-2' }}</span>
                       <span role="cell">{{ product.availableQuantity }}</span>
-                      <span role="cell"><a mat-stroked-button [routerLink]="['/seller/products', product.productId, 'edit']">Open</a></span>
+                      <span role="cell"><a data-ui-button="secondary" [routerLink]="['/products', product.productId, 'edit']">Open</a></span>
                     </div>
                   }
                 </div>
@@ -328,50 +318,50 @@ import { SellerWorkspaceNavComponent } from '../seller/seller-workspace-nav.comp
               }
 
               <form [formGroup]="scheduleForm" (ngSubmit)="saveSchedule()" class="seller-report-schedule-form" novalidate>
-                <mat-checkbox formControlName="isEnabled">Enable scheduled digest</mat-checkbox>
+                <label class="ui-checkbox"><input type="checkbox" formControlName="isEnabled"><span>Enable scheduled digest</span></label>
 
-                <mat-form-field appearance="outline" class="swyftly-field">
-                  <mat-label>Frequency</mat-label>
-                  <mat-select formControlName="frequency">
-                    <mat-option value="Weekly">Weekly</mat-option>
-                    <mat-option value="Monthly">Monthly</mat-option>
-                  </mat-select>
-                </mat-form-field>
+                <label class="ui-field swyftly-field">
+                  <span>Frequency</span>
+                  <select formControlName="frequency">
+                    <option value="Weekly">Weekly</option>
+                    <option value="Monthly">Monthly</option>
+                  </select>
+                </label>
 
-                <mat-form-field appearance="outline" class="swyftly-field">
-                  <mat-label>Report range</mat-label>
-                  <mat-select formControlName="reportRange">
-                    <mat-option value="Last7Days">Last 7 days</mat-option>
-                    <mat-option value="Last30Days">Last 30 days</mat-option>
-                    <mat-option value="MonthToDate">Month to date</mat-option>
-                  </mat-select>
-                </mat-form-field>
+                <label class="ui-field swyftly-field">
+                  <span>Report range</span>
+                  <select formControlName="reportRange">
+                    <option value="Last7Days">Last 7 days</option>
+                    <option value="Last30Days">Last 30 days</option>
+                    <option value="MonthToDate">Month to date</option>
+                  </select>
+                </label>
 
                 @if (scheduleForm.controls.frequency.value === 'Weekly') {
-                  <mat-form-field appearance="outline" class="swyftly-field">
-                    <mat-label>Send day</mat-label>
-                    <mat-select formControlName="sendDayOfWeek">
+                  <label class="ui-field swyftly-field">
+                    <span>Send day</span>
+                    <select formControlName="sendDayOfWeek">
                       @for (day of daysOfWeek; track day) {
-                        <mat-option [value]="day">{{ day }}</mat-option>
+                        <option [value]="day">{{ day }}</option>
                       }
-                    </mat-select>
-                  </mat-form-field>
+                    </select>
+                  </label>
                 } @else {
-                  <mat-form-field appearance="outline" class="swyftly-field">
-                    <mat-label>Send day of month</mat-label>
-                    <input matInput type="number" min="1" max="28" formControlName="sendDayOfMonth">
-                  </mat-form-field>
+                  <label class="ui-field swyftly-field">
+                    <span>Send day of month</span>
+                    <input type="number" min="1" max="28" formControlName="sendDayOfMonth">
+                  </label>
                 }
 
-                <mat-form-field appearance="outline" class="swyftly-field">
-                  <mat-label>Send time</mat-label>
-                  <input matInput type="time" formControlName="sendTimeLocal">
-                </mat-form-field>
+                <label class="ui-field swyftly-field">
+                  <span>Send time</span>
+                  <input type="time" formControlName="sendTimeLocal">
+                </label>
 
-                <mat-form-field appearance="outline" class="swyftly-field">
-                  <mat-label>Time zone</mat-label>
-                  <input matInput formControlName="timeZoneId">
-                </mat-form-field>
+                <label class="ui-field swyftly-field">
+                  <span>Time zone</span>
+                  <input formControlName="timeZoneId">
+                </label>
 
                 @if (schedule(); as currentSchedule) {
                   <dl class="admin-facts">
@@ -385,8 +375,8 @@ import { SellerWorkspaceNavComponent } from '../seller/seller-workspace-nav.comp
                 }
 
                 <div class="form-actions">
-                  <button mat-flat-button type="submit" [disabled]="isScheduleSaving()">Save schedule</button>
-                  <button mat-stroked-button type="button" [disabled]="isScheduleSaving()" (click)="sendTestDigest()">Send test digest</button>
+                  <button data-ui-button="primary" type="submit" [disabled]="isScheduleSaving()">Save schedule</button>
+                  <button data-ui-button="secondary" type="button" [disabled]="isScheduleSaving()" (click)="sendTestDigest()">Send test digest</button>
                 </div>
               </form>
             </div>

@@ -2,9 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminRefundResponse } from '../admin/admin-refund.models';
 import { AdminRefundService } from '../admin/admin-refund.service';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
@@ -21,9 +18,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     CurrencyPipe,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     AdminWorkspaceNavComponent,
     PageHeaderComponent,
     ReactiveFormsModule,
@@ -35,7 +29,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     <section class="page admin-finance-page">
       <app-admin-workspace-nav />
 
-      <a class="admin-back-link" routerLink="/admin">Back to dashboard</a>
+      <a class="admin-back-link" routerLink="">Back to dashboard</a>
 
       <app-page-header
         eyebrow="Admin finance"
@@ -43,9 +37,9 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Create refund requests and approve provider refunds with finance role checks visible."
       >
         <div pageHeaderActions>
-          <a mat-stroked-button routerLink="/admin/payouts">Payouts</a>
-          <a mat-stroked-button routerLink="/admin/orders">Orders</a>
-          <a mat-stroked-button routerLink="/admin/audit-logs">Audit logs</a>
+          <a data-ui-button="secondary" routerLink="/payouts">Payouts</a>
+          <a data-ui-button="secondary" routerLink="/orders">Orders</a>
+          <a data-ui-button="secondary" routerLink="/audit-logs">Audit logs</a>
         </div>
       </app-page-header>
 
@@ -70,27 +64,27 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             <h2>Create refund</h2>
             <p>Use an order id or a return request id. The API validates ownership, payment state, and refund eligibility.</p>
             <form [formGroup]="createForm" (ngSubmit)="createRefund()" class="admin-finance-form" novalidate>
-              <mat-form-field appearance="outline">
-                <mat-label>Order ID</mat-label>
-                <input matInput formControlName="orderId" />
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Order ID</span>
+                <input formControlName="orderId" />
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Return request ID</mat-label>
-                <input matInput formControlName="returnRequestId" />
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Return request ID</span>
+                <input formControlName="returnRequestId" />
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Amount</mat-label>
-                <input matInput type="number" min="0.01" step="0.01" formControlName="amount" />
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Amount</span>
+                <input type="number" min="0.01" step="0.01" formControlName="amount" />
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Reason</mat-label>
-                <textarea matInput rows="4" formControlName="reason"></textarea>
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Reason</span>
+                <textarea rows="4" formControlName="reason"></textarea>
+              </label>
 
-              <button mat-flat-button type="submit" [disabled]="!canOperate() || isActing()">Create refund</button>
+              <button data-ui-button="primary" type="submit" [disabled]="!canOperate() || isActing()">Create refund</button>
             </form>
           </section>
 
@@ -104,11 +98,11 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               <small>{{ selectedRefund()!.refundId }}</small>
 
               <form [formGroup]="approveForm" (ngSubmit)="approveRefund()" class="admin-finance-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Approval reason</mat-label>
-                  <textarea matInput rows="4" formControlName="reason"></textarea>
-                </mat-form-field>
-                <button mat-flat-button type="submit" [disabled]="!canApprove() || isActing()">Approve refund</button>
+                <label class="ui-field">
+                  <span>Approval reason</span>
+                  <textarea rows="4" formControlName="reason"></textarea>
+                </label>
+                <button data-ui-button="primary" type="submit" [disabled]="!canApprove() || isActing()">Approve refund</button>
               </form>
 
               @if (selectedRefund()!.status === 'Processing') {
@@ -116,15 +110,15 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   PayFast refunds are completed in the provider dashboard for now. Confirm only after the dashboard refund is complete and a provider reference is available.
                 </app-ui-alert>
                 <form [formGroup]="manualConfirmForm" (ngSubmit)="confirmManualProviderRefund()" class="admin-finance-form" novalidate>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Provider refund reference</mat-label>
-                    <input matInput formControlName="providerRefundReference" />
-                  </mat-form-field>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Confirmation reason</mat-label>
-                    <textarea matInput rows="3" formControlName="reason"></textarea>
-                  </mat-form-field>
-                  <button mat-flat-button type="submit" [disabled]="!canApprove() || isActing()">Confirm manual provider refund</button>
+                  <label class="ui-field">
+                    <span>Provider refund reference</span>
+                    <input formControlName="providerRefundReference" />
+                  </label>
+                  <label class="ui-field">
+                    <span>Confirmation reason</span>
+                    <textarea rows="3" formControlName="reason"></textarea>
+                  </label>
+                  <button data-ui-button="primary" type="submit" [disabled]="!canApprove() || isActing()">Confirm manual provider refund</button>
                 </form>
               }
             }
@@ -171,7 +165,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   }
                 </span>
                 <span role="cell">
-                  <button mat-stroked-button type="button" (click)="selectRefund(refund)">Select</button>
+                  <button data-ui-button="secondary" type="button" (click)="selectRefund(refund)">Select</button>
                 </span>
               </div>
             }

@@ -2,9 +2,6 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
 import { SellerInventoryMovementResponse, SellerInventoryMovementType } from '../seller/seller-inventory.models';
 import { SellerInventoryService } from '../seller/seller-inventory.service';
@@ -24,9 +21,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   selector: 'app-seller-return-detail-page',
   imports: [
     DatePipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -38,7 +32,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     <section class="page seller-ops-page">
       <app-seller-workspace-nav />
 
-      <a class="admin-back-link" routerLink="/seller/returns">Back to returns</a>
+      <a class="admin-back-link" routerLink="/returns">Back to returns</a>
 
       <app-page-header
         eyebrow="Seller operations"
@@ -82,14 +76,14 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               <h2>Seller response</h2>
               <p>Approve or reject the return based on the policy context and item condition provided by the buyer.</p>
               <form [formGroup]="responseForm" class="seller-form-grid" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Response message</mat-label>
-                  <textarea matInput rows="4" formControlName="message"></textarea>
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Response message</span>
+                  <textarea rows="4" formControlName="message"></textarea>
+                </label>
 
                 <div class="seller-action-row">
-                  <button mat-flat-button type="button" [disabled]="isActing()" (click)="approveReturn()">Approve return</button>
-                  <button mat-stroked-button type="button" [disabled]="isActing()" (click)="rejectReturn()">Reject return</button>
+                  <button data-ui-button="primary" type="button" [disabled]="isActing()" (click)="approveReturn()">Approve return</button>
+                  <button data-ui-button="secondary" type="button" [disabled]="isActing()" (click)="rejectReturn()">Reject return</button>
                 </div>
               </form>
             </section>
@@ -159,42 +153,41 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 <app-ui-alert tone="success">Restock decisions have been recorded for every item on this return.</app-ui-alert>
               } @else {
                 <form [formGroup]="restockForm" class="seller-form-grid" novalidate (ngSubmit)="recordRestockDecision()">
-                  <mat-form-field appearance="outline">
-                    <mat-label>Return item</mat-label>
-                    <select matNativeControl formControlName="returnItemId">
+                  <label class="ui-field">
+                    <span>Return item</span>
+                    <select formControlName="returnItemId">
                       @for (item of pendingRestockItems(); track item.returnItemId) {
                         <option [value]="item.returnItemId">{{ item.quantity }} x {{ item.reason }} - {{ item.productVariantId }}</option>
                       }
                     </select>
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Quantity restocked</mat-label>
+                  <label class="ui-field">
+                    <span>Quantity restocked</span>
                     <input
-                      matInput
                       type="number"
                       min="0"
                       [attr.max]="selectedRestockItem()?.quantity ?? null"
                       formControlName="quantityRestocked"
                     />
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Inspection condition</mat-label>
-                    <select matNativeControl formControlName="condition">
+                  <label class="ui-field">
+                    <span>Inspection condition</span>
+                    <select formControlName="condition">
                       @for (condition of restockConditions; track condition.value) {
                         <option [value]="condition.value">{{ condition.label }}</option>
                       }
                     </select>
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Decision reason</mat-label>
-                    <textarea matInput rows="3" formControlName="reason"></textarea>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Decision reason</span>
+                    <textarea rows="3" formControlName="reason"></textarea>
+                  </label>
 
                   <div class="seller-action-row">
-                    <button mat-flat-button type="submit" [disabled]="isRestocking() || pendingRestockItems().length === 0">
+                    <button data-ui-button="primary" type="submit" [disabled]="isRestocking() || pendingRestockItems().length === 0">
                       Record restock decision
                     </button>
                   </div>
@@ -205,7 +198,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
           <section class="seller-panel">
             <h2>Stock ledger context</h2>
-            <p>Return and refund stock ledger events are informational. Returns and refunds do not automatically restock inventory.</p>
+            <p>Return and refund stock ledger events are inrenderional. Returns and refunds do not automatically restock inventory.</p>
             @if (isStockLedgerLoading()) {
               <p>Loading stock ledger...</p>
             } @else if (stockLedgerError()) {

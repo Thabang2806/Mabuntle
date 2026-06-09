@@ -2,10 +2,6 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerWishlistItemResponse } from '../buyer/buyer-engagement.models';
 import { BuyerEngagementService } from '../buyer/buyer-engagement.service';
@@ -23,10 +19,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     DatePipe,
     EmptyStateComponent,
     FormsModule,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     PageHeaderComponent,
     ProductCardComponent,
     RouterLink,
@@ -42,7 +34,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Keep track of published marketplace products you want to revisit."
       >
         <div pageHeaderActions>
-          <a mat-stroked-button routerLink="/shop">Find more products</a>
+          <a data-ui-button="secondary" routerLink="/shop">Find more products</a>
         </div>
       </app-page-header>
 
@@ -63,7 +55,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="No saved products yet"
             message="Save products from listing cards or product detail pages to compare them later."
           >
-            <a mat-flat-button routerLink="/shop">Browse marketplace</a>
+            <a data-ui-button="primary" routerLink="/shop">Browse marketplace</a>
           </app-empty-state>
         } @else {
           <div class="wishlist-grid">
@@ -74,37 +66,35 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   <small>Saved {{ item.createdAtUtc | date:'mediumDate' }}</small>
                   @if (item.availableVariants.length > 0) {
                     <div class="wishlist-move-controls">
-                      <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-                        <mat-label>Variant</mat-label>
-                        <mat-select
+                      <label class="ui-field">
+                        <span>Variant</span>
+                        <select
                           [ngModel]="selectedVariantId(item)"
                           (ngModelChange)="setSelectedVariant(item.product.productId, $event)"
                         >
                           @for (variant of item.availableVariants; track variant.productVariantId) {
-                            <mat-option [value]="variant.productVariantId" [disabled]="!variant.inStock">
+                            <option [ngValue]="variant.productVariantId" [disabled]="!variant.inStock">
                               {{ variant.size }} / {{ variant.colour }} - R{{ variant.price }}
-                            </mat-option>
+                            </option>
                           }
-                        </mat-select>
-                      </mat-form-field>
-                      <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-                        <mat-label>Qty</mat-label>
+                        </select>
+                      </label>
+                      <label class="ui-field">
+                        <span>Qty</span>
                         <input
-                          matInput
                           type="number"
                           min="1"
                           [max]="selectedVariant(item)?.availableQuantity ?? null"
                           [ngModel]="quantityFor(item.product.productId)"
                           (ngModelChange)="setQuantity(item.product.productId, $event)"
                         >
-                      </mat-form-field>
+                      </label>
                       @if (selectedVariant(item)) {
                         <span class="product-card-feedback">
                           {{ selectedVariant(item)!.availableQuantity }} available for the selected variant.
                         </span>
                       }
-                      <button
-                        mat-flat-button
+                      <button data-ui-button="primary"
                         type="button"
                         [disabled]="movingProductId() === item.product.productId || !selectedVariantId(item)"
                         (click)="moveToCart(item)"
@@ -115,8 +105,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   } @else {
                     <span class="product-card-feedback">No in-stock variants are available right now. Keep it saved or remove it from your wishlist.</span>
                   }
-                  <button
-                    mat-stroked-button
+                  <button data-ui-button="secondary"
                     type="button"
                     [disabled]="removingProductId() === item.product.productId"
                     (click)="remove(item)"

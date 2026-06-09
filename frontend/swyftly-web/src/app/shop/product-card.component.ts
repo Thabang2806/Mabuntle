@@ -1,7 +1,6 @@
 import { CurrencyPipe } from '@angular/common';
 import { Component, Injector, OnInit, computed, inject, input, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { getApiErrorMessage } from '../auth/api-error';
 import { AuthService } from '../auth/auth.service';
 import { BuyerWishlistStateService } from '../buyer/buyer-wishlist-state.service';
@@ -11,7 +10,7 @@ import { ProductSearchItemResponse } from './public-catalog.models';
 
 @Component({
   selector: 'app-product-card',
-  imports: [CurrencyPipe, MatButtonModule, ProductVisualFallbackComponent, RouterLink, StatusBadgeComponent],
+  imports: [CurrencyPipe, ProductVisualFallbackComponent, RouterLink, StatusBadgeComponent],
   template: `
     <article class="product-card">
       <a class="product-card-media" [routerLink]="['/product', product().slug]">
@@ -62,10 +61,9 @@ import { ProductSearchItemResponse } from './public-catalog.models';
         }
 
         <div class="product-card-actions">
-          <a mat-stroked-button [routerLink]="['/product', product().slug]">View details</a>
+          <a data-ui-button="secondary" [routerLink]="['/product', product().slug]">View details</a>
           @if (wishlistAction() !== 'hidden') {
-            <button
-              mat-button
+            <button data-ui-button="ghost"
               type="button"
               [disabled]="isSavingWishlist()"
               [attr.aria-label]="isWishlisted() ? 'Remove product from wishlist' : 'Save product to wishlist'"

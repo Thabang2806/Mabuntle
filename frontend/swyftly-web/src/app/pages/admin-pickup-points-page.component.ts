@@ -1,9 +1,5 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MatButtonModule } from '@angular/material/button';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminPickupPointRequest, AdminPickupPointResponse } from '../admin/admin-pickup-point.models';
 import { AdminPickupPointService } from '../admin/admin-pickup-point.service';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
@@ -18,10 +14,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     AdminWorkspaceNavComponent,
     EmptyStateComponent,
-    MatButtonModule,
-    MatCheckboxModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     StatusBadgeComponent,
@@ -69,11 +61,11 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   </span>
                   <app-status-badge [label]="point.isActive ? 'Active' : 'Inactive'" [tone]="point.isActive ? 'success' : 'warning'" />
                   <span class="seller-action-row">
-                    <button mat-stroked-button type="button" (click)="edit(point)">Edit</button>
+                    <button data-ui-button="secondary" type="button" (click)="edit(point)">Edit</button>
                     @if (point.isActive) {
-                      <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="setActive(point, false)">Deactivate</button>
+                      <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="setActive(point, false)">Deactivate</button>
                     } @else {
-                      <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="setActive(point, true)">Activate</button>
+                      <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="setActive(point, true)">Activate</button>
                     }
                   </span>
                 </article>
@@ -84,65 +76,65 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
         <form class="buyer-panel buyer-form-grid" [formGroup]="form" (ngSubmit)="save()" novalidate>
           <h2>{{ editingPickupPointId() ? 'Edit pickup point' : 'Create pickup point' }}</h2>
-          <mat-form-field appearance="outline">
-            <mat-label>Provider</mat-label>
-            <input matInput formControlName="providerName" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Code</mat-label>
-            <input matInput formControlName="code" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Name</mat-label>
-            <input matInput formControlName="name" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Address line 1</mat-label>
-            <input matInput formControlName="addressLine1" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Address line 2</mat-label>
-            <input matInput formControlName="addressLine2" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Suburb</mat-label>
-            <input matInput formControlName="suburb" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>City</mat-label>
-            <input matInput formControlName="city" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Province</mat-label>
-            <input matInput formControlName="province" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Postal code</mat-label>
-            <input matInput formControlName="postalCode" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Country code</mat-label>
-            <input matInput maxlength="2" formControlName="countryCode" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Latitude</mat-label>
-            <input matInput type="number" formControlName="latitude" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Longitude</mat-label>
-            <input matInput type="number" formControlName="longitude" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Opening hours</mat-label>
-            <textarea matInput rows="3" formControlName="openingHours"></textarea>
-          </mat-form-field>
-          <mat-checkbox formControlName="isActive">Active</mat-checkbox>
+          <label class="ui-field">
+            <span>Provider</span>
+            <input formControlName="providerName" />
+          </label>
+          <label class="ui-field">
+            <span>Code</span>
+            <input formControlName="code" />
+          </label>
+          <label class="ui-field">
+            <span>Name</span>
+            <input formControlName="name" />
+          </label>
+          <label class="ui-field">
+            <span>Address line 1</span>
+            <input formControlName="addressLine1" />
+          </label>
+          <label class="ui-field">
+            <span>Address line 2</span>
+            <input formControlName="addressLine2" />
+          </label>
+          <label class="ui-field">
+            <span>Suburb</span>
+            <input formControlName="suburb" />
+          </label>
+          <label class="ui-field">
+            <span>City</span>
+            <input formControlName="city" />
+          </label>
+          <label class="ui-field">
+            <span>Province</span>
+            <input formControlName="province" />
+          </label>
+          <label class="ui-field">
+            <span>Postal code</span>
+            <input formControlName="postalCode" />
+          </label>
+          <label class="ui-field">
+            <span>Country code</span>
+            <input maxlength="2" formControlName="countryCode" />
+          </label>
+          <label class="ui-field">
+            <span>Latitude</span>
+            <input type="number" formControlName="latitude" />
+          </label>
+          <label class="ui-field">
+            <span>Longitude</span>
+            <input type="number" formControlName="longitude" />
+          </label>
+          <label class="ui-field">
+            <span>Opening hours</span>
+            <textarea rows="3" formControlName="openingHours"></textarea>
+          </label>
+          <label class="ui-checkbox"><input type="checkbox" formControlName="isActive" /><span>Active</span></label>
           <div class="seller-action-row">
-            <button mat-flat-button type="submit" [disabled]="form.invalid || isSaving()">
+            <button data-ui-button="primary" type="submit" [disabled]="form.invalid || isSaving()">
               {{ isSaving() ? 'Saving...' : editingPickupPointId() ? 'Save pickup point' : 'Create pickup point' }}
             </button>
             @if (editingPickupPointId()) {
-              <button mat-stroked-button type="button" (click)="resetForm()">Cancel edit</button>
+              <button data-ui-button="secondary" type="button" (click)="resetForm()">Cancel edit</button>
             }
           </div>
         </form>

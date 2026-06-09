@@ -1,10 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, EventEmitter, Input, Output, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { getApiErrorMessage } from '../auth/api-error';
 import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 import { AdminQueueItemType, AdminQueuePriority, AdminQueueTriageFields, AdminQueueTriageResponse } from './admin-queue-triage.models';
@@ -15,10 +11,6 @@ import { AdminQueueTriageService } from './admin-queue-triage.service';
   imports: [
     DatePipe,
     FormsModule,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     UiAlertComponent
   ],
   template: `
@@ -42,21 +34,21 @@ import { AdminQueueTriageService } from './admin-queue-triage.service';
     }
 
     <div class="admin-audit-actions">
-      <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="claim()">Claim</button>
-      <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="unclaim()">Unclaim</button>
+      <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="claim()">Claim</button>
+      <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="unclaim()">Unclaim</button>
       @for (priority of priorities; track priority) {
-        <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="setPriority(priority)">
+        <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="setPriority(priority)">
           {{ priority }}
         </button>
       }
     </div>
 
     <div class="admin-moderation-filters compact">
-      <mat-form-field appearance="outline">
-        <mat-label>Internal note</mat-label>
-        <textarea matInput rows="3" [(ngModel)]="note" maxlength="1000"></textarea>
-      </mat-form-field>
-      <button mat-flat-button type="button" [disabled]="isSaving() || !note.trim()" (click)="addNote()">Add note</button>
+      <label class="ui-field">
+        <span>Internal note</span>
+        <textarea rows="3" [(ngModel)]="note" maxlength="1000"></textarea>
+      </label>
+      <button data-ui-button="primary" type="button" [disabled]="isSaving() || !note.trim()" (click)="addNote()">Add note</button>
     </div>
 
     @if (triage()?.notes?.length) {

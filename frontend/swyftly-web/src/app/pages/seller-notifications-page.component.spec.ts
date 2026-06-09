@@ -55,7 +55,7 @@ describe('SellerNotificationsPageComponent', () => {
 
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Product approved');
-    expect(compiled.querySelector('a[href="/seller/products/product-id/edit"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/products/product-id/edit"]')).not.toBeNull();
 
     const button = Array.from(compiled.querySelectorAll('button')).find(item => item.textContent?.includes('Mark read')) as HTMLButtonElement;
     button.click();
@@ -95,7 +95,7 @@ describe('SellerNotificationsPageComponent', () => {
 
     let liveCard = findNotificationCard(fixture, 'Ad approved');
     expect(liveCard).not.toBeNull();
-    expect(liveCard!.querySelector('a[href="/seller/ads/ad-id"]')).not.toBeNull();
+    expect(liveCard!.querySelector('a[href="/ads/ad-id"]')).not.toBeNull();
 
     notificationRealtime.latestReadEvent.set({
       notificationId: 'live-notification-id',

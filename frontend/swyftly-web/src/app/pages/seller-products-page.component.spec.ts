@@ -49,7 +49,7 @@ describe('SellerProductsPageComponent', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Summer Dress');
     expect(compiled.textContent).toContain('Draft');
-    expect(compiled.querySelector('a[href="/seller/products/new"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/products/new"]')).not.toBeNull();
   });
 
   it('filters products by search text', async () => {

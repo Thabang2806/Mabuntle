@@ -2,9 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
 import { AdminProductDetailResponse, AdminProductImageResponse } from '../admin/admin-product.models';
 import { AdminProductService } from '../admin/admin-product.service';
@@ -19,9 +16,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     AdminWorkspaceNavComponent,
     CurrencyPipe,
     DatePipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -31,7 +25,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   template: `
     <section class="page admin-review">
       <app-admin-workspace-nav />
-      <a class="admin-back-link" routerLink="/admin/products">Back to product queue</a>
+      <a class="admin-back-link" routerLink="/products">Back to product queue</a>
 
       @if (isLoading()) {
         <div class="route-card">Loading product review...</div>
@@ -188,35 +182,35 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
               <form [formGroup]="approveForm" (ngSubmit)="approve()" class="admin-reason-form" novalidate>
                 @if (hasHighRiskModeration()) {
-                  <mat-form-field appearance="outline">
-                    <mat-label>Override reason</mat-label>
-                    <textarea matInput rows="3" formControlName="overrideReason"></textarea>
-                    <mat-hint>Required for unresolved high-risk AI flags.</mat-hint>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Override reason</span>
+                    <textarea rows="3" formControlName="overrideReason"></textarea>
+                    <span class="ui-field-hint">Required for unresolved high-risk AI flags.</span>
+                  </label>
                 }
-                <button mat-flat-button type="submit" [disabled]="isSaving()">Approve product</button>
+                <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Approve product</button>
               </form>
 
               <form [formGroup]="changesForm" (ngSubmit)="requestChanges()" class="admin-reason-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Change request reason</mat-label>
-                  <textarea matInput rows="3" formControlName="reason"></textarea>
+                <label class="ui-field">
+                  <span>Change request reason</span>
+                  <textarea rows="3" formControlName="reason"></textarea>
                   @if (changesForm.controls.reason.hasError('required')) {
-                    <mat-error>Reason is required.</mat-error>
+                    <span class="ui-field-error">Reason is required.</span>
                   }
-                </mat-form-field>
-                <button mat-stroked-button type="submit" [disabled]="isSaving()">Request changes</button>
+                </label>
+                <button data-ui-button="secondary" type="submit" [disabled]="isSaving()">Request changes</button>
               </form>
 
               <form [formGroup]="rejectForm" (ngSubmit)="reject()" class="admin-reason-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Rejection reason</mat-label>
-                  <textarea matInput rows="3" formControlName="reason"></textarea>
+                <label class="ui-field">
+                  <span>Rejection reason</span>
+                  <textarea rows="3" formControlName="reason"></textarea>
                   @if (rejectForm.controls.reason.hasError('required')) {
-                    <mat-error>Reason is required.</mat-error>
+                    <span class="ui-field-error">Reason is required.</span>
                   }
-                </mat-form-field>
-                <button mat-stroked-button type="submit" [disabled]="isSaving()">Reject product</button>
+                </label>
+                <button data-ui-button="secondary" type="submit" [disabled]="isSaving()">Reject product</button>
               </form>
             </div>
 
@@ -262,7 +256,7 @@ export class AdminProductDetailPageComponent implements OnInit {
     const attributes = this.product()?.attributes ?? {};
     return Object.entries(attributes).map(([key, value]) => ({
       key,
-      value: this.formatAttributeValue(value)
+      value: this.renderAttributeValue(value)
     }));
   });
   protected readonly selectedImage = computed(() => {
@@ -431,7 +425,7 @@ export class AdminProductDetailPageComponent implements OnInit {
     }
   }
 
-  private formatAttributeValue(valueJson: string): string {
+  private renderAttributeValue(valueJson: string): string {
     try {
       const parsed = JSON.parse(valueJson) as unknown;
       if (Array.isArray(parsed)) {

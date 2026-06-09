@@ -2,9 +2,6 @@ import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
 import { AdminProductListingSnapshotResponse, AdminProductRevisionDetailResponse } from '../admin/admin-product.models';
 import { AdminProductService } from '../admin/admin-product.service';
@@ -18,9 +15,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     AdminWorkspaceNavComponent,
     DatePipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     NgTemplateOutlet,
     PageHeaderComponent,
     ReactiveFormsModule,
@@ -31,7 +25,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   template: `
     <section class="page admin-review">
       <app-admin-workspace-nav />
-      <a class="admin-back-link" routerLink="/admin/products">Back to product queue</a>
+      <a class="admin-back-link" routerLink="/products">Back to product queue</a>
 
       @if (isLoading()) {
         <div class="route-card">Loading listing revision...</div>
@@ -101,17 +95,17 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             <div class="route-card admin-action-card">
               <h2>Review actions</h2>
               <p>Approval applies the proposed listing content and images to the live product, then refreshes search and embeddings.</p>
-              <button mat-flat-button type="button" [disabled]="isSaving() || revision()!.status !== 'PendingReview'" (click)="approve()">Approve revision</button>
+              <button data-ui-button="primary" type="button" [disabled]="isSaving() || revision()!.status !== 'PendingReview'" (click)="approve()">Approve revision</button>
 
               <form [formGroup]="rejectForm" (ngSubmit)="reject()" class="admin-reason-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Rejection reason</mat-label>
-                  <textarea matInput rows="3" formControlName="reason"></textarea>
+                <label class="ui-field">
+                  <span>Rejection reason</span>
+                  <textarea rows="3" formControlName="reason"></textarea>
                   @if (rejectForm.controls.reason.hasError('required')) {
-                    <mat-error>Reason is required.</mat-error>
+                    <span class="ui-field-error">Reason is required.</span>
                   }
-                </mat-form-field>
-                <button mat-stroked-button type="submit" [disabled]="isSaving() || revision()!.status !== 'PendingReview'">Reject revision</button>
+                </label>
+                <button data-ui-button="secondary" type="submit" [disabled]="isSaving() || revision()!.status !== 'PendingReview'">Reject revision</button>
               </form>
             </div>
           </aside>
@@ -166,7 +160,7 @@ export class AdminProductRevisionDetailPageComponent implements OnInit {
   }
 
   protected attributeEntries(snapshot: AdminProductListingSnapshotResponse): readonly { key: string; value: string }[] {
-    return Object.entries(snapshot.attributes).map(([key, value]) => ({ key, value: formatAttributeValue(value) }));
+    return Object.entries(snapshot.attributes).map(([key, value]) => ({ key, value: renderAttributeValue(value) }));
   }
 
   protected async approve(): Promise<void> {
@@ -237,7 +231,7 @@ export class AdminProductRevisionDetailPageComponent implements OnInit {
   }
 }
 
-function formatAttributeValue(valueJson: string): string {
+function renderAttributeValue(valueJson: string): string {
   try {
     const parsed = JSON.parse(valueJson) as unknown;
     return Array.isArray(parsed) ? parsed.join(', ') : String(parsed ?? '');

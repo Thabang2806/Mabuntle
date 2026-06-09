@@ -14,9 +14,25 @@ permissions:
 
 jobs:
   deploy:
-    name: Cloudflare Pages
+    name: Cloudflare Pages (${{ matrix.app }})
     runs-on: ubuntu-latest
     environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: client
+            build_script: build:client:cloudflare
+            output_dir: dist/swyftly-client/browser
+            project_var: CLOUDFLARE_PAGES_PROJECT_CLIENT
+          - app: seller
+            build_script: build:seller:cloudflare
+            output_dir: dist/swyftly-seller/browser
+            project_var: CLOUDFLARE_PAGES_PROJECT_SELLER
+          - app: admin
+            build_script: build:admin:cloudflare
+            output_dir: dist/swyftly-admin/browser
+            project_var: CLOUDFLARE_PAGES_PROJECT_ADMIN
 
     defaults:
       run:
@@ -38,7 +54,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
+          CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars[matrix.project_var] }}
           SWYFTLY_API_BASE_URL: ${{ vars.SWYFTLY_API_BASE_URL }}
         run: |
           missing=0
@@ -70,11 +86,11 @@ jobs:
       - name: Build static Cloudflare output
         env:
           SWYFTLY_API_BASE_URL: ${{ vars.SWYFTLY_API_BASE_URL }}
-        run: npm run build:cloudflare
+        run: npm run ${{ matrix.build_script }}
 
       - name: Deploy to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
-        run: npx --yes wrangler pages deploy dist/swyftly-web/browser --project-name "$CLOUDFLARE_PAGES_PROJECT_NAME" --branch "$GITHUB_REF_NAME"
+          CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars[matrix.project_var] }}
+        run: npx --yes wrangler pages deploy "${{ matrix.output_dir }}" --project-name "$CLOUDFLARE_PAGES_PROJECT_NAME" --branch "$GITHUB_REF_NAME"
