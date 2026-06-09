@@ -2,9 +2,6 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminPayoutProfileChangeRequestResponse } from '../admin/admin-payout-profile-change.models';
 import { AdminPayoutProfileChangeService } from '../admin/admin-payout-profile-change.service';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
@@ -24,9 +21,6 @@ type ReviewAction = 'approve' | 'reject';
     AdminWorkspaceNavComponent,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -45,8 +39,8 @@ type ReviewAction = 'approve' | 'reject';
           description="Review seller-submitted payout provider reference changes before they become the live payout profile."
         >
           <div pageHeaderActions>
-            <a mat-stroked-button routerLink="/admin/payouts">Payouts</a>
-            <a mat-stroked-button routerLink="/admin/audit-logs">Audit logs</a>
+            <a data-ui-button="secondary" routerLink="/payouts">Payouts</a>
+            <a data-ui-button="secondary" routerLink="/audit-logs">Audit logs</a>
           </div>
         </app-page-header>
 
@@ -116,7 +110,7 @@ type ReviewAction = 'approve' | 'reject';
                         <small>{{ request.reason }}</small>
                       </span>
                       <span role="cell">
-                        <button mat-stroked-button type="button" (click)="selectRequest(request); $event.stopPropagation()">Review</button>
+                        <button data-ui-button="secondary" type="button" (click)="selectRequest(request); $event.stopPropagation()">Review</button>
                       </span>
                     </div>
                   }
@@ -156,14 +150,14 @@ type ReviewAction = 'approve' | 'reject';
                   <small>Requested by {{ selectedRequest()!.requestedByUserId }}</small>
 
                   <form [formGroup]="reviewForm" class="admin-finance-form" novalidate>
-                    <mat-form-field appearance="outline">
-                      <mat-label>Review reason</mat-label>
-                      <textarea matInput rows="4" formControlName="reason"></textarea>
-                    </mat-form-field>
+                    <label class="ui-field">
+                      <span>Review reason</span>
+                      <textarea rows="4" formControlName="reason"></textarea>
+                    </label>
 
                     <div class="admin-finance-actions">
-                      <button mat-flat-button type="button" [disabled]="!canApprove() || isActing()" (click)="review('approve')">Approve</button>
-                      <button mat-stroked-button type="button" [disabled]="!canApprove() || isActing()" (click)="review('reject')">Reject</button>
+                      <button data-ui-button="primary" type="button" [disabled]="!canApprove() || isActing()" (click)="review('approve')">Approve</button>
+                      <button data-ui-button="secondary" type="button" [disabled]="!canApprove() || isActing()" (click)="review('reject')">Reject</button>
                     </div>
                   </form>
 

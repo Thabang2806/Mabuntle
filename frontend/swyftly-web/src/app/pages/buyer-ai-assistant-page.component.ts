@@ -2,9 +2,6 @@ import { CurrencyPipe, isPlatformBrowser } from '@angular/common';
 import { Component, PLATFORM_ID, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { BuyerAiProductCardResponse, BuyerAiShoppingAssistantResponse } from '../buyer/buyer-ai-assistant.models';
 import { BuyerAiAssistantService } from '../buyer/buyer-ai-assistant.service';
 import { BuyerGrowthConfidenceBand, BuyerGrowthFeedbackReason } from '../buyer/buyer-growth-telemetry.models';
@@ -33,9 +30,6 @@ interface AssistantConfidenceSummary {
   selector: 'app-buyer-ai-assistant-page',
   imports: [
     CurrencyPipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     LuxuryBuyerStylesComponent,
     EmptyStateComponent,
     ProductVisualFallbackComponent,
@@ -106,23 +100,23 @@ interface AssistantConfidenceSummary {
           }
 
           <form [formGroup]="form" (ngSubmit)="search()" class="ai-discovery-form ai-refine-form" novalidate>
-            <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-              <mat-label>Ask to refine results</mat-label>
-              <textarea matInput rows="3" formControlName="message" placeholder="Find a wedding outfit under R1,500 in neutral colours"></textarea>
+            <label class="ui-field">
+              <span>Ask to refine results</span>
+              <textarea rows="3" formControlName="message" placeholder="Find a wedding outfit under R1,500 in neutral colours"></textarea>
               @if (form.controls.message.hasError('required')) {
-                <mat-error>Enter a shopping request.</mat-error>
+                <span class="ui-field-error">Enter a shopping request.</span>
               }
-            </mat-form-field>
+            </label>
 
             @if (recentPrompts().length > 0) {
               <div class="ai-recent-panel" aria-label="Recent assistant prompts">
                 <div>
                   <strong>Recent prompts</strong>
-                  <button mat-button type="button" (click)="clearRecentPrompts()">Clear</button>
+                  <button data-ui-button="ghost" type="button" (click)="clearRecentPrompts()">Clear</button>
                 </div>
                 <div class="ai-chip-row">
                   @for (recent of recentPrompts(); track recent.text) {
-                    <button mat-stroked-button type="button" (click)="useRecentPrompt(recent.text)">
+                    <button data-ui-button="secondary" type="button" (click)="useRecentPrompt(recent.text)">
                       {{ recent.text }}
                     </button>
                   }
@@ -133,13 +127,13 @@ interface AssistantConfidenceSummary {
 
             <div class="ai-example-row" aria-label="Example shopping requests">
               @for (example of examplePrompts; track example) {
-                <button mat-stroked-button type="button" (click)="useExamplePrompt(example)">
+                <button data-ui-button="secondary" type="button" (click)="useExamplePrompt(example)">
                   {{ example }}
                 </button>
               }
             </div>
 
-            <button mat-flat-button type="submit" [disabled]="form.invalid || isLoading()">
+            <button data-ui-button="primary" type="submit" [disabled]="form.invalid || isLoading()">
               {{ isLoading() ? 'Searching...' : (response() ? 'Update recommendations' : 'Find products') }}
             </button>
           </form>
@@ -152,7 +146,7 @@ interface AssistantConfidenceSummary {
               <h2>{{ response() ? 'Product matches from the catalog' : 'Recommendations appear here' }}</h2>
               <p>Only products returned by the backend are shown. The assistant does not reserve stock or create orders.</p>
             </div>
-            <a mat-stroked-button routerLink="/shop">Browse shop</a>
+            <a data-ui-button="secondary" routerLink="/shop">Browse shop</a>
           </div>
 
           @if (errorMessage()) {
@@ -234,7 +228,7 @@ interface AssistantConfidenceSummary {
                   <app-status-badge label="Backend matched" />
                   <app-status-badge label="No stock reservation" tone="accent" />
                 </div>
-                <a mat-stroked-button routerLink="/shop" [queryParams]="assistantShopQueryParams()" (click)="trackShopHandoff()">Refine in shop</a>
+                <a data-ui-button="secondary" routerLink="/shop" [queryParams]="assistantShopQueryParams()" (click)="trackShopHandoff()">Refine in shop</a>
               </div>
             } @else {
               <app-empty-state
@@ -242,8 +236,8 @@ interface AssistantConfidenceSummary {
                 heading="No product cards to show"
                 message="Try a broader category, colour, size, style, or budget."
               >
-                <button mat-stroked-button type="button" (click)="useExamplePrompt(examplePrompts[0])">Use an example</button>
-                <a mat-stroked-button routerLink="/shop" [queryParams]="assistantShopQueryParams()" (click)="trackShopHandoff()">Search shop</a>
+                <button data-ui-button="secondary" type="button" (click)="useExamplePrompt(examplePrompts[0])">Use an example</button>
+                <a data-ui-button="secondary" routerLink="/shop" [queryParams]="assistantShopQueryParams()" (click)="trackShopHandoff()">Search shop</a>
               </app-empty-state>
             }
 
@@ -254,7 +248,7 @@ interface AssistantConfidenceSummary {
               </div>
               <div class="ai-chip-row">
                 @for (reason of feedbackReasons; track reason.value) {
-                  <button mat-stroked-button type="button" (click)="submitFeedback(reason.value)">
+                  <button data-ui-button="secondary" type="button" (click)="submitFeedback(reason.value)">
                     {{ reason.label }}
                   </button>
                 }
@@ -269,7 +263,7 @@ interface AssistantConfidenceSummary {
               heading="Ask for a style, gift, product, or beauty need"
               message="Example prompts can fill the box, but the assistant only searches when you submit."
             >
-              <button mat-stroked-button type="button" (click)="useExamplePrompt(examplePrompts[0])">Start with an example</button>
+              <button data-ui-button="secondary" type="button" (click)="useExamplePrompt(examplePrompts[0])">Start with an example</button>
             </app-empty-state>
           }
         </section>
@@ -350,7 +344,7 @@ export class BuyerAiAssistantPageComponent {
       ['Style', intent.style],
       ['Material', intent.material],
       ['Brand', intent.brand],
-      ['Budget', this.formatBudget(intent.budgetMin, intent.budgetMax)],
+      ['Budget', this.renderBudget(intent.budgetMin, intent.budgetMax)],
       ['Beauty skin type', intent.beautySkinType],
       ['Beauty concern', intent.beautyConcern],
       ['Search text', intent.searchText]
@@ -512,7 +506,7 @@ export class BuyerAiAssistantPageComponent {
     };
   }
 
-  private formatBudget(min: number | null, max: number | null): string | null {
+  private renderBudget(min: number | null, max: number | null): string | null {
     if (min !== null && max !== null) {
       return `R${min.toLocaleString()} - R${max.toLocaleString()}`;
     }

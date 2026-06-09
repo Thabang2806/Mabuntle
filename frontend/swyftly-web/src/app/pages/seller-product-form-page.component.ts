@@ -10,11 +10,6 @@ import {
   Validators
 } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { getApiErrorMessage } from '../auth/api-error';
 import {
   ApplySellerAiSuggestionRequest,
@@ -45,12 +40,7 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
 @Component({
   selector: 'app-seller-product-form-page',
   imports: [
-    MatButtonModule,
-    MatCheckboxModule,
     DatePipe,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     FormsModule,
     ProductVisualFallbackComponent,
     ReactiveFormsModule,
@@ -61,7 +51,7 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
     <section class="page seller-ops-page product-editor">
       <app-seller-workspace-nav />
 
-      <a class="admin-back-link" routerLink="/seller/products">Back to products</a>
+      <a class="admin-back-link" routerLink="/products">Back to products</a>
 
       <div class="page-header product-editor-hero">
         <div>
@@ -72,7 +62,7 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
         <div class="product-editor-status">
           <span class="status-pill">{{ product()?.status ?? 'Draft' }}</span>
           @if (publicPreviewUrl()) {
-            <a mat-stroked-button [routerLink]="publicPreviewUrl()">Public preview</a>
+            <a data-ui-button="secondary" [routerLink]="publicPreviewUrl()">Public preview</a>
           }
         </div>
       </div>
@@ -160,15 +150,15 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
               </div>
 
               <form [formGroup]="aiForm" (ngSubmit)="generateAiSuggestion()" class="ai-form hf-ai-listing-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Seller notes</mat-label>
-                  <textarea matInput rows="3" formControlName="sellerNotes"></textarea>
-                </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Product type hint</mat-label>
-                  <input matInput formControlName="productTypeHint" />
-                </mat-form-field>
-                <button mat-flat-button type="submit" [disabled]="!isProductEditable() || isAiGenerating() || isSaving()">
+                <label class="ui-field">
+                  <span>Seller notes</span>
+                  <textarea rows="3" formControlName="sellerNotes"></textarea>
+                </label>
+                <label class="ui-field">
+                  <span>Product type hint</span>
+                  <input formControlName="productTypeHint" />
+                </label>
+                <button data-ui-button="primary" type="submit" [disabled]="!isProductEditable() || isAiGenerating() || isSaving()">
                   {{ isAiGenerating() ? 'Generating...' : 'Generate AI suggestion' }}
                 </button>
               </form>
@@ -239,49 +229,49 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
 
             <form [formGroup]="aiApplyForm" (ngSubmit)="applyAiSuggestion()" class="ai-apply-form" novalidate>
               <div class="ai-field-grid">
-                <mat-checkbox formControlName="title">Title</mat-checkbox>
-                <mat-checkbox formControlName="shortDescription">Short description</mat-checkbox>
-                <mat-checkbox formControlName="fullDescription">Full description</mat-checkbox>
-                <mat-checkbox formControlName="category">Category</mat-checkbox>
-                <mat-checkbox formControlName="attributes">Attributes</mat-checkbox>
-                <mat-checkbox formControlName="tags">Tags</mat-checkbox>
-                <mat-checkbox formControlName="imageAltText">Image alt text</mat-checkbox>
+                <label class="ui-checkbox"><input type="checkbox" formControlName="title"><span>Title</span></label>
+                <label class="ui-checkbox"><input type="checkbox" formControlName="shortDescription"><span>Short description</span></label>
+                <label class="ui-checkbox"><input type="checkbox" formControlName="fullDescription"><span>Full description</span></label>
+                <label class="ui-checkbox"><input type="checkbox" formControlName="category"><span>Category</span></label>
+                <label class="ui-checkbox"><input type="checkbox" formControlName="attributes"><span>Attributes</span></label>
+                <label class="ui-checkbox"><input type="checkbox" formControlName="tags"><span>Tags</span></label>
+                <label class="ui-checkbox"><input type="checkbox" formControlName="imageAltText"><span>Image alt text</span></label>
               </div>
 
               <div [formGroup]="aiEditForm" class="ai-edit-grid">
-                <mat-form-field appearance="outline">
-                  <mat-label>Reviewed title</mat-label>
-                  <input matInput formControlName="title" />
-                </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Reviewed short description</mat-label>
-                  <textarea matInput rows="2" formControlName="shortDescription"></textarea>
-                </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Reviewed full description</mat-label>
-                  <textarea matInput rows="4" formControlName="fullDescription"></textarea>
-                </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Reviewed category</mat-label>
-                  <mat-select formControlName="suggestedCategoryId">
+                <label class="ui-field">
+                  <span>Reviewed title</span>
+                  <input formControlName="title" />
+                </label>
+                <label class="ui-field">
+                  <span>Reviewed short description</span>
+                  <textarea rows="2" formControlName="shortDescription"></textarea>
+                </label>
+                <label class="ui-field">
+                  <span>Reviewed full description</span>
+                  <textarea rows="4" formControlName="fullDescription"></textarea>
+                </label>
+                <label class="ui-field">
+                  <span>Reviewed category</span>
+                  <select formControlName="suggestedCategoryId">
                     @for (category of categories(); track category.categoryId) {
-                      <mat-option [value]="category.categoryId">{{ categoryLabel(category) }}</mat-option>
+                      <option [value]="category.categoryId">{{ categoryLabel(category) }}</option>
                     }
-                  </mat-select>
-                </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Reviewed tags</mat-label>
-                  <input matInput formControlName="tags" />
-                </mat-form-field>
+                  </select>
+                </label>
+                <label class="ui-field">
+                  <span>Reviewed tags</span>
+                  <input formControlName="tags" />
+                </label>
               </div>
 
               @if (aiAttributeEntries().length > 0) {
                 <div [formGroup]="aiAttributeEditForm" class="dynamic-attributes">
                   @for (attribute of aiAttributeEntries(); track attribute.key) {
-                    <mat-form-field appearance="outline">
-                      <mat-label>{{ attribute.key }}</mat-label>
-                      <input matInput [formControlName]="attribute.key" />
-                    </mat-form-field>
+                    <label class="ui-field">
+                      <span>{{ attribute.key }}</span>
+                      <input [formControlName]="attribute.key" />
+                    </label>
                   }
                 </div>
               }
@@ -289,19 +279,19 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
               @if ((product()?.images?.length ?? 0) > 0) {
                 <div [formGroup]="aiImageAltTextForm" class="dynamic-attributes">
                   @for (image of product()?.images ?? []; track image.imageId) {
-                    <mat-form-field appearance="outline">
-                      <mat-label>Alt text for {{ image.storageKey }}</mat-label>
-                      <input matInput [formControlName]="image.imageId" />
-                    </mat-form-field>
+                    <label class="ui-field">
+                      <span>Alt text for {{ image.storageKey }}</span>
+                      <input [formControlName]="image.imageId" />
+                    </label>
                   }
                 </div>
               }
 
               @if (suggestion.riskFlags.length > 0) {
-                <mat-checkbox formControlName="confirmRiskFlags">Confirm risk flags</mat-checkbox>
+                <label class="ui-checkbox"><input type="checkbox" formControlName="confirmRiskFlags"><span>Confirm risk flags</span></label>
               }
 
-              <button mat-flat-button type="submit" [disabled]="!isProductEditable() || isAiApplying()">
+              <button data-ui-button="primary" type="submit" [disabled]="!isProductEditable() || isAiApplying()">
                 {{ isAiApplying() ? 'Applying...' : 'Apply selected suggestions' }}
               </button>
             </form>
@@ -329,73 +319,73 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                 <form [formGroup]="basicForm" (ngSubmit)="saveDraft()" class="wizard-form" novalidate>
                   <h2>Basic details</h2>
                   <p class="form-helper">These fields define how buyers see and find the listing. Save drafts before adding images, variants, or AI suggestions.</p>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Title</mat-label>
-                    <input matInput formControlName="title" />
+                  <label class="ui-field">
+                    <span>Title</span>
+                    <input formControlName="title" />
                     @if (basicForm.controls.title.hasError('required')) {
-                      <mat-error>Title is required.</mat-error>
+                      <span class="ui-field-error">Title is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Slug</mat-label>
-                    <input matInput formControlName="slug" />
-                    <mat-hint>Lowercase letters, numbers, and hyphens only. Example: black-evening-dress.</mat-hint>
+                  <label class="ui-field">
+                    <span>Slug</span>
+                    <input formControlName="slug" />
+                    <span class="ui-field-hint">Lowercase letters, numbers, and hyphens only. Example: black-evening-dress.</span>
                     @if (basicForm.controls.slug.hasError('required')) {
-                      <mat-error>Slug is required.</mat-error>
+                      <span class="ui-field-error">Slug is required.</span>
                     } @else if (basicForm.controls.slug.hasError('pattern')) {
-                      <mat-error>Use lowercase letters, numbers, and hyphens.</mat-error>
+                      <span class="ui-field-error">Use lowercase letters, numbers, and hyphens.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Short description</mat-label>
-                    <textarea matInput rows="3" formControlName="shortDescription"></textarea>
+                  <label class="ui-field">
+                    <span>Short description</span>
+                    <textarea rows="3" formControlName="shortDescription"></textarea>
                     @if (basicForm.controls.shortDescription.hasError('required')) {
-                      <mat-error>Short description is required.</mat-error>
+                      <span class="ui-field-error">Short description is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Full description</mat-label>
-                    <textarea matInput rows="5" formControlName="fullDescription"></textarea>
+                  <label class="ui-field">
+                    <span>Full description</span>
+                    <textarea rows="5" formControlName="fullDescription"></textarea>
                     @if (basicForm.controls.fullDescription.hasError('required')) {
-                      <mat-error>Full description is required.</mat-error>
+                      <span class="ui-field-error">Full description is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
                   <div class="product-editor-context">
                     <strong>Merchandising and SEO</strong>
                     <span>These buyer-facing fields support presentation and metadata. They do not guarantee search ranking.</span>
                   </div>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Merchandising label</mat-label>
-                    <input matInput formControlName="merchandisingLabel" maxlength="60" />
-                    <mat-hint>Optional short badge such as New season, Limited edit, or Seller pick.</mat-hint>
+                  <label class="ui-field">
+                    <span>Merchandising label</span>
+                    <input formControlName="merchandisingLabel" maxlength="60" />
+                    <span class="ui-field-hint">Optional short badge such as New season, Limited edit, or Seller pick.</span>
                     @if (basicForm.controls.merchandisingLabel.hasError('maxlength')) {
-                      <mat-error>Use 60 characters or fewer.</mat-error>
+                      <span class="ui-field-error">Use 60 characters or fewer.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
                   <div class="form-grid">
-                    <mat-form-field appearance="outline">
-                      <mat-label>SEO title</mat-label>
-                      <input matInput formControlName="seoTitle" maxlength="70" />
-                      <mat-hint>{{ basicForm.controls.seoTitle.value.length }}/70</mat-hint>
+                    <label class="ui-field">
+                      <span>SEO title</span>
+                      <input formControlName="seoTitle" maxlength="70" />
+                      <span class="ui-field-hint">{{ basicForm.controls.seoTitle.value.length }}/70</span>
                       @if (basicForm.controls.seoTitle.hasError('maxlength')) {
-                        <mat-error>Use 70 characters or fewer.</mat-error>
+                        <span class="ui-field-error">Use 70 characters or fewer.</span>
                       }
-                    </mat-form-field>
+                    </label>
 
-                    <mat-form-field appearance="outline">
-                      <mat-label>SEO description</mat-label>
-                      <textarea matInput rows="3" formControlName="seoDescription" maxlength="170"></textarea>
-                      <mat-hint>{{ basicForm.controls.seoDescription.value.length }}/170</mat-hint>
+                    <label class="ui-field">
+                      <span>SEO description</span>
+                      <textarea rows="3" formControlName="seoDescription" maxlength="170"></textarea>
+                      <span class="ui-field-hint">{{ basicForm.controls.seoDescription.value.length }}/170</span>
                       @if (basicForm.controls.seoDescription.hasError('maxlength')) {
-                        <mat-error>Use 170 characters or fewer.</mat-error>
+                        <span class="ui-field-error">Use 170 characters or fewer.</span>
                       }
-                    </mat-form-field>
+                    </label>
                   </div>
 
                   <div class="product-editor-preview-card product-editor-search-preview">
@@ -407,43 +397,43 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                   </div>
 
                   <div class="form-grid">
-                    <mat-form-field appearance="outline">
-                      <mat-label>Product care instructions</mat-label>
-                      <textarea matInput rows="3" formControlName="careInstructions" maxlength="1000"></textarea>
-                      <mat-hint>Optional product-specific care. Store policies remain in Store settings.</mat-hint>
+                    <label class="ui-field">
+                      <span>Product care instructions</span>
+                      <textarea rows="3" formControlName="careInstructions" maxlength="1000"></textarea>
+                      <span class="ui-field-hint">Optional product-specific care. Store policies remain in Store settings.</span>
                       @if (basicForm.controls.careInstructions.hasError('maxlength')) {
-                        <mat-error>Use 1000 characters or fewer.</mat-error>
+                        <span class="ui-field-error">Use 1000 characters or fewer.</span>
                       }
-                    </mat-form-field>
+                    </label>
 
-                    <mat-form-field appearance="outline">
-                      <mat-label>Product disclaimer</mat-label>
-                      <textarea matInput rows="3" formControlName="productDisclaimer" maxlength="1000"></textarea>
-                      <mat-hint>Optional buyer-facing context such as colour, sizing, or material variation.</mat-hint>
+                    <label class="ui-field">
+                      <span>Product disclaimer</span>
+                      <textarea rows="3" formControlName="productDisclaimer" maxlength="1000"></textarea>
+                      <span class="ui-field-hint">Optional buyer-facing context such as colour, sizing, or material variation.</span>
                       @if (basicForm.controls.productDisclaimer.hasError('maxlength')) {
-                        <mat-error>Use 1000 characters or fewer.</mat-error>
+                        <span class="ui-field-error">Use 1000 characters or fewer.</span>
                       }
-                    </mat-form-field>
+                    </label>
                   </div>
 
-                  <button mat-flat-button type="submit" [disabled]="!isListingEditable() || isSaving()">{{ isRevisionMode() ? 'Save revision' : 'Save draft' }}</button>
+                  <button data-ui-button="primary" type="submit" [disabled]="!isListingEditable() || isSaving()">{{ isRevisionMode() ? 'Save revision' : 'Save draft' }}</button>
                 </form>
               }
               @case (1) {
                 <form [formGroup]="basicForm" (ngSubmit)="saveDraft()" class="wizard-form" novalidate>
                   <h2>Category</h2>
                   <p class="form-helper">Choose the closest active catalog category. Required attributes are marked and must be completed before review submission.</p>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Category</mat-label>
-                    <mat-select formControlName="categoryId" (selectionChange)="onCategoryChanged($event.value)">
+                  <label class="ui-field">
+                    <span>Category</span>
+                    <select formControlName="categoryId" (change)="onCategoryChanged($any($event.target).value)">
                       @for (category of categories(); track category.categoryId) {
-                        <mat-option [value]="category.categoryId">{{ categoryLabel(category) }}</mat-option>
+                        <option [value]="category.categoryId">{{ categoryLabel(category) }}</option>
                       }
-                    </mat-select>
+                    </select>
                     @if (basicForm.controls.categoryId.hasError('required')) {
-                      <mat-error>Category is required.</mat-error>
+                      <span class="ui-field-error">Category is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
                   @if (selectedCategory(); as category) {
                     <div class="product-editor-context">
@@ -459,47 +449,47 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
 
                   <div [formGroup]="attributeForm" class="dynamic-attributes">
                     @for (attribute of selectedCategory()?.attributes ?? []; track attribute.attributeId) {
-                      <mat-form-field appearance="outline">
-                        <mat-label>{{ attribute.name }}{{ attribute.isRequired ? ' *' : '' }}</mat-label>
+                      <label class="ui-field">
+                        <span>{{ attribute.name }}{{ attribute.isRequired ? ' *' : '' }}</span>
                         @switch (attribute.dataType) {
                           @case ('Select') {
-                            <mat-select [formControlName]="attribute.key">
+                            <select [formControlName]="attribute.key">
                               @for (value of attribute.allowedValues; track value) {
-                                <mat-option [value]="value">{{ value }}</mat-option>
+                                <option [value]="value">{{ value }}</option>
                               }
-                            </mat-select>
+                            </select>
                           }
                           @case ('MultiSelect') {
-                            <mat-select multiple [formControlName]="attribute.key">
+                            <select multiple [formControlName]="attribute.key">
                               @for (value of attribute.allowedValues; track value) {
-                                <mat-option [value]="value">{{ value }}</mat-option>
+                                <option [value]="value">{{ value }}</option>
                               }
-                            </mat-select>
+                            </select>
                           }
                           @case ('Boolean') {
-                            <mat-select [formControlName]="attribute.key">
-                              <mat-option [value]="true">Yes</mat-option>
-                              <mat-option [value]="false">No</mat-option>
-                            </mat-select>
+                            <select [formControlName]="attribute.key">
+                              <option [ngValue]="true">Yes</option>
+                              <option [ngValue]="false">No</option>
+                            </select>
                           }
                           @case ('Number') {
-                            <input matInput type="number" step="1" [formControlName]="attribute.key" />
+                            <input type="number" step="1" [formControlName]="attribute.key" />
                           }
                           @case ('Decimal') {
-                            <input matInput type="number" step="0.01" [formControlName]="attribute.key" />
+                            <input type="number" step="0.01" [formControlName]="attribute.key" />
                           }
                           @case ('Date') {
-                            <input matInput type="date" [formControlName]="attribute.key" />
+                            <input type="date" [formControlName]="attribute.key" />
                           }
                           @default {
-                            <input matInput [formControlName]="attribute.key" />
+                            <input [formControlName]="attribute.key" />
                           }
                         }
                         @if (attributeForm.controls[attribute.key].hasError('required')) {
-                          <mat-error>{{ attribute.name }} is required.</mat-error>
+                          <span class="ui-field-error">{{ attribute.name }} is required.</span>
                         }
-                        <mat-hint>{{ attribute.isRequired ? 'Required' : 'Optional' }} - {{ attribute.dataType }}</mat-hint>
-                      </mat-form-field>
+                        <span class="ui-field-hint">{{ attribute.isRequired ? 'Required' : 'Optional' }} - {{ attribute.dataType }}</span>
+                      </label>
                     } @empty {
                       <p class="form-helper">This category does not currently require additional attributes.</p>
                     }
@@ -521,7 +511,7 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                     }
                   </div>
 
-                  <button mat-flat-button type="submit" [disabled]="!isListingEditable() || isSaving()">{{ isRevisionMode() ? 'Save revision category' : 'Save category' }}</button>
+                  <button data-ui-button="primary" type="submit" [disabled]="!isListingEditable() || isSaving()">{{ isRevisionMode() ? 'Save revision category' : 'Save category' }}</button>
                 </form>
               }
               @case (2) {
@@ -533,24 +523,24 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                     <small>Maximum 5 MB. Local development storage is served by the API.</small>
                     <input type="file" accept="image/jpeg,image/png,image/webp" (change)="onImageFileSelected($event)" />
                   </label>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Alt text</mat-label>
-                    <input matInput formControlName="altText" />
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Alt text</span>
+                    <input formControlName="altText" />
+                  </label>
                   <div class="form-grid">
-                    <mat-form-field appearance="outline">
-                      <mat-label>Sort order</mat-label>
-                      <input matInput type="number" min="0" formControlName="sortOrder" />
-                    </mat-form-field>
-                    <mat-form-field appearance="outline">
-                      <mat-label>Primary image</mat-label>
-                      <mat-select formControlName="isPrimary">
-                        <mat-option [value]="true">Yes</mat-option>
-                        <mat-option [value]="false">No</mat-option>
-                      </mat-select>
-                    </mat-form-field>
+                    <label class="ui-field">
+                      <span>Sort order</span>
+                      <input type="number" min="0" formControlName="sortOrder" />
+                    </label>
+                    <label class="ui-field">
+                      <span>Primary image</span>
+                      <select formControlName="isPrimary">
+                        <option [ngValue]="true">Yes</option>
+                        <option [ngValue]="false">No</option>
+                      </select>
+                    </label>
                   </div>
-                  <button mat-flat-button type="submit" [disabled]="!isListingEditable() || !selectedImageFile() || isSaving()">Upload image</button>
+                  <button data-ui-button="primary" type="submit" [disabled]="!isListingEditable() || !selectedImageFile() || isSaving()">Upload image</button>
                 </form>
 
                 <div class="product-image-gallery">
@@ -570,11 +560,11 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                         <small>{{ image.url }}</small>
                       </div>
                       <div class="buyer-action-row">
-                        <button mat-stroked-button type="button" [disabled]="!isListingEditable()" (click)="editImage(image)">Edit</button>
+                        <button data-ui-button="secondary" type="button" [disabled]="!isListingEditable()" (click)="editImage(image)">Edit</button>
                         @if (!image.isPrimary) {
-                          <button mat-stroked-button type="button" [disabled]="!isListingEditable()" (click)="makeImagePrimary(image)">Make primary</button>
+                          <button data-ui-button="secondary" type="button" [disabled]="!isListingEditable()" (click)="makeImagePrimary(image)">Make primary</button>
                         }
-                        <button mat-stroked-button type="button" [disabled]="!isListingEditable()" (click)="removeImage(imageKey(image))">Remove</button>
+                        <button data-ui-button="secondary" type="button" [disabled]="!isListingEditable()" (click)="removeImage(imageKey(image))">Remove</button>
                       </div>
                     </article>
                   } @empty {
@@ -589,26 +579,26 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                   <form [formGroup]="imageEditForm" (ngSubmit)="saveImageMetadata()" class="wizard-form product-editor-edit-panel" novalidate>
                     <h3>Edit image metadata</h3>
                     <p class="form-helper">{{ image.storageKey }} - URL and storage key are managed outside this editor.</p>
-                    <mat-form-field appearance="outline">
-                      <mat-label>Alt text</mat-label>
-                      <input matInput formControlName="altText" />
-                    </mat-form-field>
+                    <label class="ui-field">
+                      <span>Alt text</span>
+                      <input formControlName="altText" />
+                    </label>
                     <div class="form-grid">
-                      <mat-form-field appearance="outline">
-                        <mat-label>Sort order</mat-label>
-                        <input matInput type="number" min="0" formControlName="sortOrder" />
-                      </mat-form-field>
-                      <mat-form-field appearance="outline">
-                        <mat-label>Primary image</mat-label>
-                        <mat-select formControlName="isPrimary">
-                          <mat-option [value]="true">Yes</mat-option>
-                          <mat-option [value]="false">No</mat-option>
-                        </mat-select>
-                      </mat-form-field>
+                      <label class="ui-field">
+                        <span>Sort order</span>
+                        <input type="number" min="0" formControlName="sortOrder" />
+                      </label>
+                      <label class="ui-field">
+                        <span>Primary image</span>
+                        <select formControlName="isPrimary">
+                          <option [ngValue]="true">Yes</option>
+                          <option [ngValue]="false">No</option>
+                        </select>
+                      </label>
                     </div>
                     <div class="buyer-action-row">
-                      <button mat-flat-button type="submit" [disabled]="!isListingEditable() || isSaving()">Save image</button>
-                      <button mat-stroked-button type="button" (click)="clearImageEdit()">Cancel</button>
+                      <button data-ui-button="primary" type="submit" [disabled]="!isListingEditable() || isSaving()">Save image</button>
+                      <button data-ui-button="secondary" type="button" (click)="clearImageEdit()">Cancel</button>
                     </div>
                   </form>
                 }
@@ -621,59 +611,59 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                       <p class="form-helper">Use variants for sellable size, colour, price, and stock combinations. Published stock changes belong in Inventory.</p>
                     </div>
                     @if (editingVariantId()) {
-                      <button mat-stroked-button type="button" (click)="startNewVariant()">New variant</button>
+                      <button data-ui-button="secondary" type="button" (click)="startNewVariant()">New variant</button>
                     }
                   </div>
                   <div class="form-grid">
-                    <mat-form-field appearance="outline">
-                      <mat-label>SKU</mat-label>
-                      <input matInput formControlName="sku" />
-                    </mat-form-field>
-                    <mat-form-field appearance="outline">
-                      <mat-label>Status</mat-label>
-                      <mat-select formControlName="status">
-                        <mat-option value="Active">Active</mat-option>
-                        <mat-option value="Inactive">Inactive</mat-option>
-                        <mat-option value="OutOfStock">Out of stock</mat-option>
-                      </mat-select>
-                    </mat-form-field>
+                    <label class="ui-field">
+                      <span>SKU</span>
+                      <input formControlName="sku" />
+                    </label>
+                    <label class="ui-field">
+                      <span>Status</span>
+                      <select formControlName="status">
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                        <option value="OutOfStock">Out of stock</option>
+                      </select>
+                    </label>
                   </div>
                   <div class="form-grid">
-                    <mat-form-field appearance="outline">
-                      <mat-label>Size</mat-label>
-                      <input matInput formControlName="size" />
-                    </mat-form-field>
-                    <mat-form-field appearance="outline">
-                      <mat-label>Colour</mat-label>
-                      <input matInput formControlName="colour" />
-                    </mat-form-field>
+                    <label class="ui-field">
+                      <span>Size</span>
+                      <input formControlName="size" />
+                    </label>
+                    <label class="ui-field">
+                      <span>Colour</span>
+                      <input formControlName="colour" />
+                    </label>
                   </div>
                   <div class="form-grid">
-                    <mat-form-field appearance="outline">
-                      <mat-label>Price</mat-label>
-                      <input matInput type="number" step="0.01" formControlName="price" />
-                    </mat-form-field>
-                    <mat-form-field appearance="outline">
-                      <mat-label>Compare-at price</mat-label>
-                      <input matInput type="number" step="0.01" formControlName="compareAtPrice" />
-                    </mat-form-field>
+                    <label class="ui-field">
+                      <span>Price</span>
+                      <input type="number" step="0.01" formControlName="price" />
+                    </label>
+                    <label class="ui-field">
+                      <span>Compare-at price</span>
+                      <input type="number" step="0.01" formControlName="compareAtPrice" />
+                    </label>
                   </div>
                   <div class="form-grid">
-                    <mat-form-field appearance="outline">
-                      <mat-label>Stock quantity</mat-label>
-                      <input matInput type="number" min="0" formControlName="stockQuantity" />
-                    </mat-form-field>
-                    <mat-form-field appearance="outline">
-                      <mat-label>Reserved quantity</mat-label>
-                      <input matInput type="number" min="0" formControlName="reservedQuantity" />
-                    </mat-form-field>
+                    <label class="ui-field">
+                      <span>Stock quantity</span>
+                      <input type="number" min="0" formControlName="stockQuantity" />
+                    </label>
+                    <label class="ui-field">
+                      <span>Reserved quantity</span>
+                      <input type="number" min="0" formControlName="reservedQuantity" />
+                    </label>
                   </div>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Barcode</mat-label>
-                    <input matInput formControlName="barcode" />
-                    <mat-hint>Optional. Use the printed barcode value sellers scan in Inventory.</mat-hint>
-                  </mat-form-field>
-                  <button mat-flat-button type="submit" [disabled]="!isProductEditable() || isSaving()">
+                  <label class="ui-field">
+                    <span>Barcode</span>
+                    <input formControlName="barcode" />
+                    <span class="ui-field-hint">Optional. Use the printed barcode value sellers scan in Inventory.</span>
+                  </label>
+                  <button data-ui-button="primary" type="submit" [disabled]="!isProductEditable() || isSaving()">
                     {{ editingVariantId() ? 'Save variant' : 'Add variant' }}
                   </button>
                 </form>
@@ -686,7 +676,7 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                           <span class="status-pill">{{ variant.status }}</span>
                           <h2>{{ variant.sku }}</h2>
                         </div>
-                        <strong>{{ formatCurrency(variant.price) }}</strong>
+                        <strong>{{ renderCurrency(variant.price) }}</strong>
                       </div>
                       <dl class="seller-facts">
                         <div><dt>Size</dt><dd>{{ variant.size }}</dd></div>
@@ -701,11 +691,11 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                         <p class="auth-alert">Low stock. Check inventory before promoting this listing.</p>
                       }
                       <div class="buyer-action-row">
-                        <button mat-stroked-button type="button" [disabled]="!isProductEditable()" (click)="editVariant(variant)">Edit</button>
-                        <button mat-stroked-button type="button" [disabled]="!isProductEditable()" (click)="removeVariant(variant.variantId)">Remove</button>
+                        <button data-ui-button="secondary" type="button" [disabled]="!isProductEditable()" (click)="editVariant(variant)">Edit</button>
+                        <button data-ui-button="secondary" type="button" [disabled]="!isProductEditable()" (click)="removeVariant(variant.variantId)">Remove</button>
                         @if (isRevisionMode()) {
-                          <button mat-stroked-button type="button" [disabled]="!variantRevision()?.canEdit" (click)="stageVariantRevisionUpdate(variant)">Stage update</button>
-                          <button mat-stroked-button type="button" [disabled]="!variantRevision()?.canEdit" (click)="stageVariantRevisionDeactivation(variant)">Stage deactivation</button>
+                          <button data-ui-button="secondary" type="button" [disabled]="!variantRevision()?.canEdit" (click)="stageVariantRevisionUpdate(variant)">Stage update</button>
+                          <button data-ui-button="secondary" type="button" [disabled]="!variantRevision()?.canEdit" (click)="stageVariantRevisionDeactivation(variant)">Stage deactivation</button>
                         }
                       </div>
                     </article>
@@ -741,8 +731,8 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                         </div>
                       </div>
                       <div class="buyer-action-row">
-                        <button mat-stroked-button type="button" [disabled]="isVariantRevisionDownloading()" (click)="downloadVariantRevisionExport()">Export current variants</button>
-                        <button mat-stroked-button type="button" [disabled]="isVariantRevisionDownloading()" (click)="downloadVariantRevisionTemplate()">Download template</button>
+                        <button data-ui-button="secondary" type="button" [disabled]="isVariantRevisionDownloading()" (click)="downloadVariantRevisionExport()">Export current variants</button>
+                        <button data-ui-button="secondary" type="button" [disabled]="isVariantRevisionDownloading()" (click)="downloadVariantRevisionTemplate()">Download template</button>
                       </div>
                       <div class="form-grid">
                         <label class="support-upload-control">
@@ -755,8 +745,8 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                         </div>
                       </div>
                       <div class="buyer-action-row">
-                        <button mat-flat-button type="button" [disabled]="!variantRevision()!.canEdit || !selectedVariantRevisionImportFile() || isVariantRevisionImporting()" (click)="previewVariantRevisionImport()">Preview CSV</button>
-                        <button mat-stroked-button type="button" [disabled]="!variantRevision()!.canEdit || !variantRevisionImportPreview() || variantRevisionImportPreview()!.errorRows > 0 || variantRevisionImportPreview()!.changedRows === 0 || isVariantRevisionImporting()" (click)="bulkStageVariantRevisionImport()">Bulk-stage changed rows</button>
+                        <button data-ui-button="primary" type="button" [disabled]="!variantRevision()!.canEdit || !selectedVariantRevisionImportFile() || isVariantRevisionImporting()" (click)="previewVariantRevisionImport()">Preview CSV</button>
+                        <button data-ui-button="secondary" type="button" [disabled]="!variantRevision()!.canEdit || !variantRevisionImportPreview() || variantRevisionImportPreview()!.errorRows > 0 || variantRevisionImportPreview()!.changedRows === 0 || isVariantRevisionImporting()" (click)="bulkStageVariantRevisionImport()">Bulk-stage changed rows</button>
                       </div>
 
                       @if (variantRevisionImportPreview(); as preview) {
@@ -781,11 +771,11 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                               <span role="cell"><strong>{{ row.operation }}</strong><small>{{ row.sourceVariantId || 'New variant' }}</small></span>
                               <span role="cell">
                                 <strong>{{ row.currentSku || 'No current variant' }}</strong>
-                                <small>{{ row.currentSize || '-' }} / {{ row.currentColour || '-' }} / {{ row.currentPrice !== null ? formatCurrency(row.currentPrice) : '-' }}</small>
+                                <small>{{ row.currentSize || '-' }} / {{ row.currentColour || '-' }} / {{ row.currentPrice !== null ? renderCurrency(row.currentPrice) : '-' }}</small>
                               </span>
                               <span role="cell">
                                 <strong>{{ row.proposedSku || '-' }}</strong>
-                                <small>{{ row.proposedSize || '-' }} / {{ row.proposedColour || '-' }} / {{ row.proposedPrice !== null ? formatCurrency(row.proposedPrice) : '-' }}</small>
+                                <small>{{ row.proposedSize || '-' }} / {{ row.proposedColour || '-' }} / {{ row.proposedPrice !== null ? renderCurrency(row.proposedPrice) : '-' }}</small>
                               </span>
                               <span role="cell">
                                 <span class="status-pill">{{ row.rowStatus }}</span>
@@ -810,7 +800,7 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                             @for (variant of preview.proposedFinalVariants; track variant.sourceVariantId || variant.sku) {
                               <div class="admin-table-row" role="row">
                                 <span role="cell"><strong>{{ variant.sku }}</strong><small>{{ variant.size }} / {{ variant.colour }}</small></span>
-                                <span role="cell"><strong>{{ formatCurrency(variant.price) }}</strong><small>{{ variant.compareAtPrice ? 'Was ' + formatCurrency(variant.compareAtPrice) : 'No compare price' }}</small></span>
+                                <span role="cell"><strong>{{ renderCurrency(variant.price) }}</strong><small>{{ variant.compareAtPrice ? 'Was ' + renderCurrency(variant.compareAtPrice) : 'No compare price' }}</small></span>
                                 <span role="cell"><strong>{{ variant.status }}</strong><small>{{ variant.availableQuantity }} available, {{ variant.reservedQuantity }} reserved</small></span>
                                 <span role="cell"><span class="status-pill">{{ variant.changeType }}</span></span>
                               </div>
@@ -821,71 +811,71 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                     </div>
 
                     <form [formGroup]="variantRevisionForm" (ngSubmit)="addVariantRevisionItem()" class="wizard-form" novalidate>
-                      <mat-form-field appearance="outline">
-                        <mat-label>Seller reason</mat-label>
-                        <textarea matInput rows="2" formControlName="sellerReason" placeholder="Explain why this variant or pricing change is needed."></textarea>
-                      </mat-form-field>
+                      <label class="ui-field">
+                        <span>Seller reason</span>
+                        <textarea rows="2" formControlName="sellerReason" placeholder="Explain why this variant or pricing change is needed."></textarea>
+                      </label>
 
                       <div class="form-grid">
-                        <mat-form-field appearance="outline">
-                          <mat-label>Revision action</mat-label>
-                          <mat-select formControlName="operation">
-                            <mat-option value="Add">Add new variant</mat-option>
-                            <mat-option value="Update">Update live variant</mat-option>
-                          </mat-select>
-                        </mat-form-field>
-                        <mat-form-field appearance="outline">
-                          <mat-label>Source variant</mat-label>
-                          <mat-select formControlName="sourceVariantId">
-                            <mat-option [value]="null">New variant</mat-option>
+                        <label class="ui-field">
+                          <span>Revision action</span>
+                          <select formControlName="operation">
+                            <option value="Add">Add new variant</option>
+                            <option value="Update">Update live variant</option>
+                          </select>
+                        </label>
+                        <label class="ui-field">
+                          <span>Source variant</span>
+                          <select formControlName="sourceVariantId">
+                            <option [ngValue]="null">New variant</option>
                             @for (variant of product()?.variants ?? []; track variant.variantId) {
-                              <mat-option [value]="variant.variantId">{{ variant.sku }} / {{ variant.size }} / {{ variant.colour }}</mat-option>
+                              <option [value]="variant.variantId">{{ variant.sku }} / {{ variant.size }} / {{ variant.colour }}</option>
                             }
-                          </mat-select>
-                        </mat-form-field>
+                          </select>
+                        </label>
                       </div>
 
                       <div class="form-grid">
-                        <mat-form-field appearance="outline">
-                          <mat-label>SKU</mat-label>
-                          <input matInput formControlName="sku" />
-                        </mat-form-field>
-                        <mat-form-field appearance="outline">
-                          <mat-label>Barcode</mat-label>
-                          <input matInput formControlName="barcode" />
-                          <mat-hint>Optional scanner value for SKU/barcode lookup after approval.</mat-hint>
-                        </mat-form-field>
+                        <label class="ui-field">
+                          <span>SKU</span>
+                          <input formControlName="sku" />
+                        </label>
+                        <label class="ui-field">
+                          <span>Barcode</span>
+                          <input formControlName="barcode" />
+                          <span class="ui-field-hint">Optional scanner value for SKU/barcode lookup after approval.</span>
+                        </label>
                       </div>
                       <div class="form-grid">
-                        <mat-form-field appearance="outline">
-                          <mat-label>Size</mat-label>
-                          <input matInput formControlName="size" />
-                        </mat-form-field>
-                        <mat-form-field appearance="outline">
-                          <mat-label>Colour</mat-label>
-                          <input matInput formControlName="colour" />
-                        </mat-form-field>
+                        <label class="ui-field">
+                          <span>Size</span>
+                          <input formControlName="size" />
+                        </label>
+                        <label class="ui-field">
+                          <span>Colour</span>
+                          <input formControlName="colour" />
+                        </label>
                       </div>
                       <div class="form-grid">
-                        <mat-form-field appearance="outline">
-                          <mat-label>Price</mat-label>
-                          <input matInput type="number" step="0.01" formControlName="price" />
-                        </mat-form-field>
-                        <mat-form-field appearance="outline">
-                          <mat-label>Compare-at price</mat-label>
-                          <input matInput type="number" step="0.01" formControlName="compareAtPrice" />
-                        </mat-form-field>
+                        <label class="ui-field">
+                          <span>Price</span>
+                          <input type="number" step="0.01" formControlName="price" />
+                        </label>
+                        <label class="ui-field">
+                          <span>Compare-at price</span>
+                          <input type="number" step="0.01" formControlName="compareAtPrice" />
+                        </label>
                       </div>
-                      <mat-form-field appearance="outline">
-                        <mat-label>Initial stock for new variant</mat-label>
-                        <input matInput type="number" min="0" formControlName="initialStockQuantity" />
-                      </mat-form-field>
+                      <label class="ui-field">
+                        <span>Initial stock for new variant</span>
+                        <input type="number" min="0" formControlName="initialStockQuantity" />
+                      </label>
 
                       <div class="buyer-action-row">
-                        <button mat-flat-button type="submit" [disabled]="!variantRevision()!.canEdit || isSaving()">Stage change</button>
-                        <button mat-stroked-button type="button" (click)="startVariantRevisionAdd()">New variant</button>
-                        <button mat-stroked-button type="button" [disabled]="!variantRevision()!.canEdit || variantRevision()!.items.length === 0 || isSaving()" (click)="submitVariantRevision()">Submit variant revision</button>
-                        <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="cancelVariantRevision()">Cancel revision</button>
+                        <button data-ui-button="primary" type="submit" [disabled]="!variantRevision()!.canEdit || isSaving()">Stage change</button>
+                        <button data-ui-button="secondary" type="button" (click)="startVariantRevisionAdd()">New variant</button>
+                        <button data-ui-button="secondary" type="button" [disabled]="!variantRevision()!.canEdit || variantRevision()!.items.length === 0 || isSaving()" (click)="submitVariantRevision()">Submit variant revision</button>
+                        <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="cancelVariantRevision()">Cancel revision</button>
                       </div>
                     </form>
 
@@ -900,8 +890,8 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                         <div class="admin-table-row" role="row">
                           <span role="cell"><strong>{{ item.operation }}</strong><small>{{ item.proposedStatus }}</small></span>
                           <span role="cell"><strong>{{ item.sku }}</strong><small>{{ item.size }} / {{ item.colour }}</small></span>
-                          <span role="cell"><strong>{{ formatCurrency(item.price) }}</strong><small>{{ item.compareAtPrice ? 'Was ' + formatCurrency(item.compareAtPrice) : 'No compare price' }}</small></span>
-                          <span role="cell"><button mat-stroked-button type="button" [disabled]="!variantRevision()!.canEdit || isSaving()" (click)="removeVariantRevisionItem(item)">Remove</button></span>
+                          <span role="cell"><strong>{{ renderCurrency(item.price) }}</strong><small>{{ item.compareAtPrice ? 'Was ' + renderCurrency(item.compareAtPrice) : 'No compare price' }}</small></span>
+                          <span role="cell"><button data-ui-button="secondary" type="button" [disabled]="!variantRevision()!.canEdit || isSaving()" (click)="removeVariantRevisionItem(item)">Remove</button></span>
                         </div>
                       } @empty {
                         <div class="product-editor-context">
@@ -917,14 +907,14 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                 <form [formGroup]="shippingForm" class="wizard-form" novalidate>
                   <h2>Shipping and returns</h2>
                   <p class="form-helper">Product-level shipping notes remain internal planning context. Buyer-facing return, exchange, fulfilment, support, care, and disclaimer policies are managed in Store settings.</p>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Shipping notes</mat-label>
-                    <textarea matInput rows="4" formControlName="shippingNotes" placeholder="Internal planning notes only"></textarea>
-                  </mat-form-field>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Return notes</mat-label>
-                    <textarea matInput rows="4" formControlName="returnNotes" placeholder="Internal planning notes only"></textarea>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Shipping notes</span>
+                    <textarea rows="4" formControlName="shippingNotes" placeholder="Internal planning notes only"></textarea>
+                  </label>
+                  <label class="ui-field">
+                    <span>Return notes</span>
+                    <textarea rows="4" formControlName="returnNotes" placeholder="Internal planning notes only"></textarea>
+                  </label>
                 </form>
               }
               @case (5) {
@@ -960,7 +950,7 @@ type ProductEditorImage = (SellerProductImageResponse | SellerProductRevisionIma
                   @if (!canSubmitReview()) {
                     <p class="auth-alert">Complete details, category attributes, one image, and one active in-stock variant before review submission.</p>
                   }
-                  <button mat-flat-button type="button" [disabled]="!isListingEditable() || !canSubmitReview() || isSaving()" (click)="submitForReview()">
+                  <button data-ui-button="primary" type="button" [disabled]="!isListingEditable() || !canSubmitReview() || isSaving()" (click)="submitForReview()">
                     {{ isRevisionMode() ? 'Submit revision for review' : 'Submit for review' }}
                   </button>
                 </div>
@@ -1164,7 +1154,7 @@ export class SellerProductFormPageComponent implements OnInit {
       this.successMessage.set('Product draft saved.');
 
       if (!existing) {
-        await this.router.navigate(['/seller/products', saved.productId, 'edit'], { replaceUrl: true });
+        await this.router.navigate(['/products', saved.productId, 'edit'], { replaceUrl: true });
       }
 
       return saved;
@@ -1685,7 +1675,7 @@ export class SellerProductFormPageComponent implements OnInit {
     }
 
     return Object.entries(suggestion.attributes)
-      .map(([key, value]) => ({ key, value: formatAiValue(value) }));
+      .map(([key, value]) => ({ key, value: renderAiValue(value) }));
   }
 
   protected categoryName(categoryId: string | null): string | null {
@@ -1772,7 +1762,7 @@ export class SellerProductFormPageComponent implements OnInit {
       .replace('Product Listing Revision', 'Revision');
   }
 
-  protected formatCurrency(amount: number): string {
+  protected renderCurrency(amount: number): string {
     return `R${amount.toFixed(2)}`;
   }
 
@@ -1784,7 +1774,7 @@ export class SellerProductFormPageComponent implements OnInit {
       return 'Add an active variant to show buyer pricing.';
     }
 
-    return this.formatCurrency(Math.min(...prices));
+    return this.renderCurrency(Math.min(...prices));
   }
 
   protected seoPreviewTitle(): string {
@@ -1803,9 +1793,9 @@ export class SellerProductFormPageComponent implements OnInit {
     return (this.selectedCategory()?.attributes ?? [])
       .map(attribute => {
         const value = this.attributeForm.controls[attribute.key]?.value;
-        const formatted = formatPreviewValue(value);
-        return formatted
-          ? { label: `${attribute.name}${attribute.isRequired ? ' (required)' : ''}`, value: formatted }
+        const renderted = renderPreviewValue(value);
+        return renderted
+          ? { label: `${attribute.name}${attribute.isRequired ? ' (required)' : ''}`, value: renderted }
           : null;
       })
       .filter((entry): entry is { label: string; value: string } => entry !== null);
@@ -2038,7 +2028,7 @@ export class SellerProductFormPageComponent implements OnInit {
     }
 
     for (const [key, value] of Object.entries(attributes)) {
-      this.aiAttributeEditForm.addControl(key, new FormControl(formatAiValue(value), { nonNullable: true }));
+      this.aiAttributeEditForm.addControl(key, new FormControl(renderAiValue(value), { nonNullable: true }));
     }
   }
 
@@ -2267,7 +2257,7 @@ function parseRawAttributeValue(
   }
 }
 
-function formatPreviewValue(value: unknown): string | null {
+function renderPreviewValue(value: unknown): string | null {
   if (value === null || value === undefined || value === '') {
     return null;
   }
@@ -2302,7 +2292,7 @@ function parseEditedAttributeValue(
   return trimmed;
 }
 
-function formatAiValue(value: unknown): string {
+function renderAiValue(value: unknown): string {
   if (Array.isArray(value)) {
     return value.join(', ');
   }

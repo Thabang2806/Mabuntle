@@ -2,10 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import {
   AdminPaymentReconciliationCandidateResponse,
   AdminPaymentSummaryResponse,
@@ -27,10 +23,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     CurrencyPipe,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -47,8 +39,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Read-only payment records for provider status, webhook, refund, and ledger investigation."
       >
         <div pageHeaderActions>
-          <a mat-stroked-button routerLink="/admin/orders">Orders</a>
-          <a mat-stroked-button routerLink="/admin/refunds">Refunds</a>
+          <a data-ui-button="secondary" routerLink="/orders">Orders</a>
+          <a data-ui-button="secondary" routerLink="/refunds">Refunds</a>
         </div>
       </app-page-header>
 
@@ -61,7 +53,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             </div>
             <div class="buyer-action-row">
               <app-status-badge [label]="reconciliationCandidates().length + ' open'" tone="warning" />
-              <button mat-stroked-button type="button" (click)="toggleSnoozed()">
+              <button data-ui-button="secondary" type="button" (click)="toggleSnoozed()">
                 {{ includeSnoozed() ? 'Hide snoozed' : 'Include snoozed' }}
               </button>
             </div>
@@ -95,8 +87,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   }
                 </span>
                 <span role="cell">
-                  <a mat-stroked-button [routerLink]="['/admin/payments', candidate.paymentId]">Review</a>
-                  <button mat-stroked-button type="button" (click)="selectCandidate(candidate)">Record evidence</button>
+                  <a data-ui-button="secondary" [routerLink]="['/payments', candidate.paymentId]">Review</a>
+                  <button data-ui-button="secondary" type="button" (click)="selectCandidate(candidate)">Record evidence</button>
                 </span>
               </div>
             }
@@ -112,29 +104,29 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 }
               </div>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Observed provider status</mat-label>
-                <input matInput formControlName="observedProviderStatus" placeholder="COMPLETE, PENDING, FAILED" />
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Observed provider status</span>
+                <input formControlName="observedProviderStatus" placeholder="COMPLETE, PENDING, FAILED" />
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Observed amount</mat-label>
-                <input matInput type="number" min="0" step="0.01" formControlName="observedAmount" />
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Observed amount</span>
+                <input type="number" min="0" step="0.01" formControlName="observedAmount" />
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Observed currency</mat-label>
-                <input matInput formControlName="observedCurrency" maxlength="3" />
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Observed currency</span>
+                <input formControlName="observedCurrency" maxlength="3" />
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Outcome</mat-label>
-                <mat-select formControlName="outcome">
+              <label class="ui-field">
+                <span>Outcome</span>
+                <select formControlName="outcome">
                   @for (outcome of reconciliationOutcomes; track outcome) {
-                    <mat-option [value]="outcome">{{ outcome }}</mat-option>
+                    <option [value]="outcome">{{ outcome }}</option>
                   }
-                </mat-select>
-              </mat-form-field>
+                </select>
+              </label>
 
               @if (reviewForm.controls.outcome.value === 'ProviderPaidMissingWebhook') {
                 <app-ui-alert tone="warning">
@@ -142,19 +134,19 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </app-ui-alert>
               }
 
-              <mat-form-field appearance="outline">
-                <mat-label>Reason</mat-label>
-                <textarea matInput rows="3" formControlName="reason"></textarea>
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Reason</span>
+                <textarea rows="3" formControlName="reason"></textarea>
+              </label>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Next review after</mat-label>
-                <input matInput type="datetime-local" formControlName="nextReviewAfterUtc" />
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Next review after</span>
+                <input type="datetime-local" formControlName="nextReviewAfterUtc" />
+              </label>
 
               <div class="buyer-action-row">
-                <button mat-flat-button type="submit" [disabled]="!canApprove() || isActing()">Save review</button>
-                <button mat-stroked-button type="button" (click)="clearSelectedCandidate()">Cancel</button>
+                <button data-ui-button="primary" type="submit" [disabled]="!canApprove() || isActing()">Save review</button>
+                <button data-ui-button="secondary" type="button" (click)="clearSelectedCandidate()">Cancel</button>
               </div>
               @if (!canApprove()) {
                 <p class="admin-finance-note">You can view reconciliation evidence, but FinanceApprove is required to record a review.</p>
@@ -165,24 +157,24 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
       }
 
       <form [formGroup]="filtersForm" (ngSubmit)="applyFilters()" class="route-card admin-support-filters" novalidate>
-        <mat-form-field appearance="outline">
-          <mat-label>Search</mat-label>
-          <input matInput formControlName="search" placeholder="Payment, order, reference" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Search</span>
+          <input formControlName="search" placeholder="Payment, order, reference" />
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Status</mat-label>
-          <input matInput formControlName="status" placeholder="Paid, Pending, Failed" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Status</span>
+          <input formControlName="status" placeholder="Paid, Pending, Failed" />
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Order ID</mat-label>
-          <input matInput formControlName="orderId" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Order ID</span>
+          <input formControlName="orderId" />
+        </label>
 
         <div class="buyer-action-row">
-          <button mat-flat-button type="submit">Apply filters</button>
-          <button mat-stroked-button type="button" (click)="clearFilters()">Clear</button>
+          <button data-ui-button="primary" type="submit">Apply filters</button>
+          <button data-ui-button="secondary" type="button" (click)="clearFilters()">Clear</button>
         </div>
       </form>
 
@@ -238,7 +230,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   }
                 </span>
                 <span role="cell">
-                  <a mat-stroked-button [routerLink]="['/admin/payments', payment.paymentId]">Open</a>
+                  <a data-ui-button="secondary" [routerLink]="['/payments', payment.paymentId]">Open</a>
                 </span>
               </div>
             }

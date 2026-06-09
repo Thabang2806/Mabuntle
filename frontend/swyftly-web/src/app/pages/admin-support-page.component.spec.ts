@@ -56,7 +56,7 @@ describe('AdminSupportPageComponent', () => {
     expect(compiled.querySelector('app-admin-workspace-nav')).not.toBeNull();
     expect(compiled.textContent).toContain('Damaged order');
     expect(compiled.textContent).toContain('OrderIssue');
-    expect(compiled.querySelector('a[href="/admin/support/ticket-id"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/support/ticket-id"]')).not.toBeNull();
   });
 
   it('sends filters to the support queue', async () => {

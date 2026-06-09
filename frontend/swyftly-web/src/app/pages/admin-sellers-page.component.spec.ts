@@ -46,7 +46,7 @@ describe('AdminSellersPageComponent', () => {
     expect(compiled.querySelector('.hf-admin-review-layout')).toBeTruthy();
     expect(compiled.textContent).toContain('Selected seller');
     const reviewLink = Array.from(compiled.querySelectorAll('a'))
-      .find(link => link.getAttribute('href') === '/admin/sellers/seller-id');
+      .find(link => link.getAttribute('href') === '/sellers/seller-id');
     expect(reviewLink).toBeTruthy();
   });
 
@@ -130,7 +130,7 @@ function createSellerSummary(overrides: Partial<AdminSellerOperationalSummaryRes
     verificationStatus: 'UnderReview',
     submittedAtUtc: '2026-05-18T12:00:00Z',
     updatedAtUtc: '2026-05-18T13:00:00Z',
-    detailRoute: '/admin/sellers/seller-id',
+    detailRoute: '/sellers/seller-id',
     ...overrides
   };
 }

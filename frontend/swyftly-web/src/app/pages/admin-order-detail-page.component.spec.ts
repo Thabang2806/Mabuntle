@@ -40,7 +40,7 @@ describe('AdminOrderDetailPageComponent', () => {
     expect(compiled.textContent).toContain('PaymentCaptured');
     expect(compiled.textContent).toContain('ShipmentInTransit');
     expect(compiled.textContent).toContain('Leave at reception.');
-    expect(compiled.querySelector('a[href="/admin/payments/payment-id"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/payments/payment-id"]')).not.toBeNull();
   });
 });
 

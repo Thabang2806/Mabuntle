@@ -1,10 +1,6 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { SellerAdCampaignResponse, UpsertSellerAdCampaignRequest } from '../seller/seller-ad-campaign.models';
 import { SellerAdCampaignService } from '../seller/seller-ad-campaign.service';
 import { SellerProductSummaryResponse } from '../seller/seller-product.models';
@@ -15,10 +11,6 @@ import { getApiErrorMessage } from '../auth/api-error';
 @Component({
   selector: 'app-seller-ad-campaign-form-page',
   imports: [
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     ReactiveFormsModule,
     RouterLink,
     SellerWorkspaceNavComponent
@@ -27,7 +19,7 @@ import { getApiErrorMessage } from '../auth/api-error';
     <section class="page seller-ops-page seller-products hf-seller-ad-form-page">
       <app-seller-workspace-nav />
 
-      <a class="admin-back-link" routerLink="/seller/ads">Back to campaigns</a>
+      <a class="admin-back-link" routerLink="/ads">Back to campaigns</a>
 
       <div class="page-header">
         <span class="eyebrow">Seller advertising</span>
@@ -55,36 +47,36 @@ import { getApiErrorMessage } from '../auth/api-error';
         <form [formGroup]="campaignForm" (ngSubmit)="saveDraft()" class="wizard-form route-card" novalidate>
           <h2>Campaign setup</h2>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Name</mat-label>
-            <input matInput formControlName="name" />
+          <label class="ui-field">
+            <span>Name</span>
+            <input formControlName="name" />
             @if (campaignForm.controls.name.hasError('required')) {
-              <mat-error>Name is required.</mat-error>
+              <span class="ui-field-error">Name is required.</span>
             }
-          </mat-form-field>
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Campaign type</mat-label>
-            <mat-select formControlName="campaignType">
+          <label class="ui-field">
+            <span>Campaign type</span>
+            <select formControlName="campaignType">
               @for (type of campaignTypes; track type) {
-                <mat-option [value]="type">{{ type }}</mat-option>
+                <option [value]="type">{{ type }}</option>
               }
-            </mat-select>
-          </mat-form-field>
+            </select>
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Products to promote</mat-label>
-            <mat-select formControlName="productIds" multiple>
+          <label class="ui-field">
+            <span>Products to promote</span>
+            <select formControlName="productIds" multiple>
               @for (product of products(); track product.productId) {
-                <mat-option [value]="product.productId">
+                <option [value]="product.productId">
                   {{ product.title ?? 'Untitled product' }} / {{ product.status }}
-                </mat-option>
+                </option>
               }
-            </mat-select>
+            </select>
             @if (campaignForm.controls.productIds.hasError('required')) {
-              <mat-error>Select at least one product.</mat-error>
+              <span class="ui-field-error">Select at least one product.</span>
             }
-          </mat-form-field>
+          </label>
 
           @if (selectionWarnings().length > 0) {
             <div class="auth-alert error" role="alert">
@@ -95,46 +87,46 @@ import { getApiErrorMessage } from '../auth/api-error';
           }
 
           <div class="form-grid">
-            <mat-form-field appearance="outline">
-              <mat-label>Start date</mat-label>
-              <input matInput type="datetime-local" formControlName="startsAtLocal" />
-            </mat-form-field>
+            <label class="ui-field">
+              <span>Start date</span>
+              <input type="datetime-local" formControlName="startsAtLocal" />
+            </label>
 
-            <mat-form-field appearance="outline">
-              <mat-label>End date</mat-label>
-              <input matInput type="datetime-local" formControlName="endsAtLocal" />
-            </mat-form-field>
+            <label class="ui-field">
+              <span>End date</span>
+              <input type="datetime-local" formControlName="endsAtLocal" />
+            </label>
           </div>
 
           <div class="form-grid">
-            <mat-form-field appearance="outline">
-              <mat-label>Currency</mat-label>
-              <input matInput maxlength="3" formControlName="currency" />
-            </mat-form-field>
+            <label class="ui-field">
+              <span>Currency</span>
+              <input maxlength="3" formControlName="currency" />
+            </label>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Daily budget</mat-label>
-              <input matInput type="number" min="1" formControlName="dailyBudget" />
-            </mat-form-field>
+            <label class="ui-field">
+              <span>Daily budget</span>
+              <input type="number" min="1" formControlName="dailyBudget" />
+            </label>
           </div>
 
           <div class="form-grid">
-            <mat-form-field appearance="outline">
-              <mat-label>Total budget</mat-label>
-              <input matInput type="number" min="1" formControlName="totalBudget" />
-            </mat-form-field>
+            <label class="ui-field">
+              <span>Total budget</span>
+              <input type="number" min="1" formControlName="totalBudget" />
+            </label>
 
-            <mat-form-field appearance="outline">
-              <mat-label>Max CPC</mat-label>
-              <input matInput type="number" min="1" formControlName="maxCostPerClick" />
-            </mat-form-field>
+            <label class="ui-field">
+              <span>Max CPC</span>
+              <input type="number" min="1" formControlName="maxCostPerClick" />
+            </label>
           </div>
 
           <div class="auth-actions">
-            <button mat-flat-button type="submit" [disabled]="isSaving()">Save draft</button>
+            <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Save draft</button>
             @if (createdCampaign()) {
-              <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="submitForReview()">Submit for review</button>
-              <a mat-stroked-button [routerLink]="['/seller/ads', createdCampaign()?.adCampaignId]">Open campaign</a>
+              <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="submitForReview()">Submit for review</button>
+              <a data-ui-button="secondary" [routerLink]="['/ads', createdCampaign()?.adCampaignId]">Open campaign</a>
             }
           </div>
         </form>
@@ -233,7 +225,7 @@ export class SellerAdCampaignFormPageComponent implements OnInit {
     await this.runAction(async () => {
       const submitted = await this.adCampaignService.submitForReview(campaign.adCampaignId);
       this.createdCampaign.set(submitted);
-      await this.router.navigate(['/seller/ads', submitted.adCampaignId]);
+      await this.router.navigate(['/ads', submitted.adCampaignId]);
     });
   }
 

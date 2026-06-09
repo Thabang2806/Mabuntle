@@ -1,7 +1,6 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { getApiErrorMessage } from '../auth/api-error';
 import { SellerOrderResult } from '../seller/seller-order.models';
 import { SellerOrderService } from '../seller/seller-order.service';
@@ -17,7 +16,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     CurrencyPipe,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
     PageHeaderComponent,
     RouterLink,
     SellerWorkspaceNavComponent,
@@ -76,7 +74,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   <small>{{ shipmentSummary(order) }}</small>
                 </span>
                 <span role="cell">
-                  <a mat-stroked-button [routerLink]="['/seller/orders', order.orderId]">Open</a>
+                  <a data-ui-button="secondary" [routerLink]="['/orders', order.orderId]">Open</a>
                 </span>
               </div>
             }

@@ -1,10 +1,6 @@
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { Subscription } from 'rxjs';
 import { getApiErrorMessage } from '../auth/api-error';
 import { ProductCardComponent } from '../shop/product-card.component';
@@ -22,10 +18,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     EmptyStateComponent,
     LuxuryPublicStylesComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     PageHeaderComponent,
     ProductCardComponent,
     ProductVisualFallbackComponent,
@@ -65,40 +57,40 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           <span>Explore within {{ category()?.name }}</span>
           <div>
             @for (child of childCategories(); track child.categoryId) {
-              <a mat-stroked-button [routerLink]="['/category', child.slug]">{{ child.name }}</a>
+              <a data-ui-button="secondary" [routerLink]="['/category', child.slug]">{{ child.name }}</a>
             }
           </div>
         </section>
       }
 
       <form [formGroup]="filtersForm" (ngSubmit)="search(1)" class="category-filter-bar" novalidate>
-        <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-          <mat-label>Search in category</mat-label>
-          <input matInput formControlName="query">
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Search in category</span>
+          <input formControlName="query">
+        </label>
 
-        <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-          <mat-label>Availability</mat-label>
-          <mat-select formControlName="availability">
-            <mat-option value="">All products</mat-option>
-            <mat-option value="in_stock">In stock</mat-option>
-            <mat-option value="out_of_stock">Out of stock</mat-option>
-          </mat-select>
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Availability</span>
+          <select formControlName="availability">
+            <option value="">All products</option>
+            <option value="in_stock">In stock</option>
+            <option value="out_of_stock">Out of stock</option>
+          </select>
+        </label>
 
-        <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-          <mat-label>Sort</mat-label>
-          <mat-select formControlName="sort">
-            <mat-option value="newest">Newest</mat-option>
-            <mat-option value="price_asc">Price low to high</mat-option>
-            <mat-option value="price_desc">Price high to low</mat-option>
-            <mat-option value="relevance">Relevance</mat-option>
-          </mat-select>
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Sort</span>
+          <select formControlName="sort">
+            <option value="newest">Newest</option>
+            <option value="price_asc">Price low to high</option>
+            <option value="price_desc">Price high to low</option>
+            <option value="relevance">Relevance</option>
+          </select>
+        </label>
 
         <div class="category-filter-actions">
-          <button mat-flat-button type="submit" [disabled]="isLoading()">Apply</button>
-          <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="clearFilters()">Clear</button>
+          <button data-ui-button="primary" type="submit" [disabled]="isLoading()">Apply</button>
+          <button data-ui-button="secondary" type="button" [disabled]="isLoading()" (click)="clearFilters()">Clear</button>
         </div>
       </form>
 
@@ -115,7 +107,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="No products in this category"
             message="Published products will appear here when verified sellers list items in this edit."
           >
-            <a mat-flat-button routerLink="/shop">Browse all products</a>
+            <a data-ui-button="primary" routerLink="/shop">Browse all products</a>
           </app-empty-state>
         } @else {
           <div class="category-product-header">
@@ -123,7 +115,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               <h2>Products in this edit</h2>
               <p>{{ totalCount() }} matching published product{{ totalCount() === 1 ? '' : 's' }} shown with seller, stock, and price context.</p>
             </div>
-            <a mat-stroked-button routerLink="/shop">Adjust filters</a>
+            <a data-ui-button="secondary" routerLink="/shop">Adjust filters</a>
           </div>
 
           <div class="product-grid">
@@ -133,8 +125,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           </div>
 
           <div class="shop-pagination">
-            <button mat-stroked-button type="button" [disabled]="page() <= 1 || isLoading()" (click)="search(page() - 1)">Previous</button>
-            <button mat-stroked-button type="button" [disabled]="page() * pageSize() >= totalCount() || isLoading()" (click)="search(page() + 1)">Next</button>
+            <button data-ui-button="secondary" type="button" [disabled]="page() <= 1 || isLoading()" (click)="search(page() - 1)">Previous</button>
+            <button data-ui-button="secondary" type="button" [disabled]="page() * pageSize() >= totalCount() || isLoading()" (click)="search(page() + 1)">Next</button>
           </div>
         }
       }

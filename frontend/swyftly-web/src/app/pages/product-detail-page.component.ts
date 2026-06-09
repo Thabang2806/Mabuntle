@@ -3,9 +3,6 @@ import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Meta, Title } from '@angular/platform-browser';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
 import { StorefrontAnalyticsService } from '../analytics/storefront-analytics.service';
 import { AuthService } from '../auth/auth.service';
@@ -31,9 +28,6 @@ import { Subscription } from 'rxjs';
     EmptyStateComponent,
     FormsModule,
     LuxuryPublicStylesComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     ProductCardComponent,
     ProductVisualFallbackComponent,
     RouterLink,
@@ -196,15 +190,15 @@ import { Subscription } from 'rxjs';
             </section>
 
             <div class="product-detail-actions product-purchase-actions">
-              <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-                <mat-label>Qty</mat-label>
-                <input matInput type="number" min="1" [(ngModel)]="quantity">
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Qty</span>
+                <input type="number" min="1" [(ngModel)]="quantity">
+              </label>
 
-              <button mat-flat-button type="button" [disabled]="isAddingToCart() || !selectedVariantId()" (click)="addToCart()">
+              <button data-ui-button="primary" type="button" [disabled]="isAddingToCart() || !selectedVariantId()" (click)="addToCart()">
                 {{ addToCartButtonLabel() }}
               </button>
-              <button mat-stroked-button type="button" [disabled]="isSavingWishlist()" (click)="toggleWishlist()">
+              <button data-ui-button="secondary" type="button" [disabled]="isSavingWishlist()" (click)="toggleWishlist()">
                 {{ isSavingWishlist() ? 'Saving...' : isWishlisted() ? 'Remove from wishlist' : 'Save to wishlist' }}
               </button>
             </div>
@@ -311,7 +305,7 @@ import { Subscription } from 'rxjs';
                   <h2>More from this edit</h2>
                   <p>Related published products from the same category. Open each listing to choose variants and review seller context.</p>
                 </span>
-                <a mat-stroked-button routerLink="/shop">Browse catalog</a>
+                <a data-ui-button="secondary" routerLink="/shop">Browse catalog</a>
               </div>
 
               @if (isLoadingSimilarProducts()) {
@@ -334,7 +328,7 @@ import { Subscription } from 'rxjs';
           heading="Product was not found"
           [message]="errorMessage() ?? 'This product may no longer be available.'"
         >
-          <a mat-flat-button routerLink="/shop">Back to shop</a>
+          <a data-ui-button="primary" routerLink="/shop">Back to shop</a>
         </app-empty-state>
       }
     </section>
@@ -398,7 +392,7 @@ export class ProductDetailPageComponent implements OnInit, OnDestroy {
     const attributes = this.productDetail()?.attributes ?? {};
     return Object.entries(attributes).map(([key, value]) => ({
       key,
-      value: this.formatAttributeValue(value)
+      value: this.renderAttributeValue(value)
     }));
   });
   protected readonly sellerPolicyEntries = computed(() => {
@@ -668,7 +662,7 @@ export class ProductDetailPageComponent implements OnInit, OnDestroy {
     }
   }
 
-  private formatAttributeValue(valueJson: string): string {
+  private renderAttributeValue(valueJson: string): string {
     try {
       const parsed = JSON.parse(valueJson) as unknown;
       if (Array.isArray(parsed)) {

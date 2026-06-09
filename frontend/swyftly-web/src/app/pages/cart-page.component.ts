@@ -2,9 +2,6 @@ import { CurrencyPipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerWishlistStateService } from '../buyer/buyer-wishlist-state.service';
 import { CartItemResponse, CartResponse } from '../cart/cart.models';
@@ -23,9 +20,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     EmptyStateComponent,
     FormsModule,
     LuxuryPublicStylesComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ProductVisualFallbackComponent,
     RouterLink,
@@ -40,7 +34,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         heading="Review your selected pieces"
         description="Confirm quantities, seller details, and subtotal before moving into delivery and payment."
       >
-        <a pageHeaderActions mat-stroked-button routerLink="/shop">Continue shopping</a>
+        <a pageHeaderActions data-ui-button="secondary" routerLink="/shop">Continue shopping</a>
       </app-page-header>
 
       @if (isLoading()) {
@@ -56,7 +50,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="Your cart is empty"
             message="Products you add from the shop will appear here."
           >
-            <a mat-flat-button routerLink="/shop">Shop products</a>
+            <a data-ui-button="primary" routerLink="/shop">Shop products</a>
           </app-empty-state>
         } @else {
           <div class="cart-trust-strip" aria-label="Cart trust signals">
@@ -101,17 +95,16 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                     <small>SKU {{ item.sku }} - {{ item.unitPrice | currency:'ZAR':'symbol-narrow' }} each</small>
                   </div>
 
-                  <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-                    <mat-label>Qty</mat-label>
+                  <label class="ui-field">
+                    <span>Qty</span>
                     <input
-                      matInput
                       type="number"
                       min="1"
                       [ngModel]="item.quantity"
                       (ngModelChange)="setLocalQuantity(item.cartItemId, $event)"
                       [disabled]="updatingItemId() === item.cartItemId"
                     >
-                  </mat-form-field>
+                  </label>
 
                   <div class="cart-item-total">
                     <span>Line total</span>
@@ -119,24 +112,21 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   </div>
 
                   <div class="cart-item-actions">
-                    <button
-                      mat-stroked-button
+                    <button data-ui-button="secondary"
                       type="button"
                       [disabled]="updatingItemId() === item.cartItemId"
                       (click)="updateQuantity(item.cartItemId)"
                     >
                       Update
                     </button>
-                    <button
-                      mat-button
+                    <button data-ui-button="ghost"
                       type="button"
                       [disabled]="updatingItemId() === item.cartItemId"
                       (click)="removeItem(item.cartItemId)"
                     >
                       Remove
                     </button>
-                    <button
-                      mat-button
+                    <button data-ui-button="ghost"
                       type="button"
                       [disabled]="savingItemId() === item.cartItemId || updatingItemId() === item.cartItemId"
                       (click)="saveForLater(item)"
@@ -172,7 +162,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 <strong>{{ cart()?.subtotal | currency:'ZAR':'symbol-narrow' }}</strong>
               </div>
               <p>Delivery is quoted after you choose an address. The order becomes paid only after Swyftly receives the signed provider webhook.</p>
-              <a mat-flat-button routerLink="/checkout" [class.disabled-link]="!cart()?.items?.length">Checkout</a>
+              <a data-ui-button="primary" routerLink="/checkout" [class.disabled-link]="!cart()?.items?.length">Checkout</a>
             </aside>
           </div>
         }

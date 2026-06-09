@@ -34,7 +34,7 @@ describe('SellerReturnsPageComponent', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.textContent).toContain('Changed mind');
     expect(compiled.textContent).toContain('AwaitingSellerResponse');
-    expect(compiled.querySelector('a[href="/seller/returns/return-id"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/returns/return-id"]')).not.toBeNull();
   });
 });
 

@@ -43,6 +43,8 @@ jobs:
         env:
           API_DOMAIN: ${{ vars.API_DOMAIN }}
           FRONTEND_ORIGIN: ${{ vars.FRONTEND_ORIGIN }}
+          SELLER_FRONTEND_ORIGIN: ${{ vars.SELLER_FRONTEND_ORIGIN }}
+          ADMIN_FRONTEND_ORIGIN: ${{ vars.ADMIN_FRONTEND_ORIGIN }}
           AUTH_COOKIE_DOMAIN: ${{ vars.AUTH_COOKIE_DOMAIN }}
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
           LIGHTSAIL_DEPLOY_PATH: ${{ vars.LIGHTSAIL_DEPLOY_PATH }}
@@ -70,6 +72,8 @@ jobs:
 
           require API_DOMAIN
           require FRONTEND_ORIGIN
+          require SELLER_FRONTEND_ORIGIN
+          require ADMIN_FRONTEND_ORIGIN
           require AUTH_COOKIE_DOMAIN
           require ACME_EMAIL
           require LIGHTSAIL_HOST
@@ -86,6 +90,16 @@ jobs:
 
           if ! [[ "$FRONTEND_ORIGIN" =~ ^https:// ]]; then
             echo "::error::FRONTEND_ORIGIN must be an HTTPS origin"
+            missing=1
+          fi
+
+          if ! [[ "$SELLER_FRONTEND_ORIGIN" =~ ^https:// ]]; then
+            echo "::error::SELLER_FRONTEND_ORIGIN must be an HTTPS origin"
+            missing=1
+          fi
+
+          if ! [[ "$ADMIN_FRONTEND_ORIGIN" =~ ^https:// ]]; then
+            echo "::error::ADMIN_FRONTEND_ORIGIN must be an HTTPS origin"
             missing=1
           fi
 
@@ -174,6 +188,8 @@ jobs:
           ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
           AllowedHosts=${{ vars.API_DOMAIN }}
           Cors__AllowedOrigins__0=${{ vars.FRONTEND_ORIGIN }}
+          Cors__AllowedOrigins__1=${{ vars.SELLER_FRONTEND_ORIGIN }}
+          Cors__AllowedOrigins__2=${{ vars.ADMIN_FRONTEND_ORIGIN }}
           ConnectionStrings__DefaultConnection=${{ secrets.PROD_DB_CONNECTION_STRING }}
           Jwt__Issuer=Swyftly.Api
           Jwt__Audience=Swyftly.Web

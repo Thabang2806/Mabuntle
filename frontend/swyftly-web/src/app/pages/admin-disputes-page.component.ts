@@ -2,10 +2,6 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { AdminDisputeResponse } from '../admin/admin-dispute.models';
 import { AdminDisputeService } from '../admin/admin-dispute.service';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
@@ -20,10 +16,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     AdminWorkspaceNavComponent,
     PageHeaderComponent,
     ReactiveFormsModule,
@@ -35,7 +27,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     <section class="page admin-finance-page">
       <app-admin-workspace-nav />
 
-      <a class="admin-back-link" routerLink="/admin">Back to dashboard</a>
+      <a class="admin-back-link" routerLink="">Back to dashboard</a>
 
       <app-page-header
         eyebrow="Admin operations"
@@ -43,9 +35,9 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Review buyer and seller evidence, then resolve the dispute with an auditable outcome."
       >
         <div pageHeaderActions>
-          <a mat-stroked-button routerLink="/admin/refunds">Refunds</a>
-          <a mat-stroked-button routerLink="/admin/payouts">Payouts</a>
-          <a mat-stroked-button routerLink="/admin/audit-logs">Audit logs</a>
+          <a data-ui-button="secondary" routerLink="/refunds">Refunds</a>
+          <a data-ui-button="secondary" routerLink="/payouts">Payouts</a>
+          <a data-ui-button="secondary" routerLink="/audit-logs">Audit logs</a>
         </div>
       </app-page-header>
 
@@ -98,7 +90,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                     }
                   </span>
                   <span role="cell">
-                    <button mat-stroked-button type="button" (click)="selectDispute(dispute)">Review</button>
+                    <button data-ui-button="secondary" type="button" (click)="selectDispute(dispute)">Review</button>
                   </span>
                 </div>
               }
@@ -147,20 +139,20 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </section>
 
                 <form [formGroup]="resolveForm" (ngSubmit)="resolveDispute()" class="admin-finance-form" novalidate>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Outcome</mat-label>
-                    <mat-select formControlName="outcome">
-                      <mat-option value="BuyerFavoured">Buyer favoured</mat-option>
-                      <mat-option value="SellerFavoured">Seller favoured</mat-option>
-                    </mat-select>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Outcome</span>
+                    <select formControlName="outcome">
+                      <option value="BuyerFavoured">Buyer favoured</option>
+                      <option value="SellerFavoured">Seller favoured</option>
+                    </select>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Resolution reason</mat-label>
-                    <textarea matInput rows="4" formControlName="reason"></textarea>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Resolution reason</span>
+                    <textarea rows="4" formControlName="reason"></textarea>
+                  </label>
 
-                  <button mat-flat-button type="submit" [disabled]="isActing()">Resolve dispute</button>
+                  <button data-ui-button="primary" type="submit" [disabled]="isActing()">Resolve dispute</button>
                 </form>
               }
             </aside>

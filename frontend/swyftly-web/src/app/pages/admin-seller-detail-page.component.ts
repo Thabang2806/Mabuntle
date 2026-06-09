@@ -2,9 +2,6 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
 import { AdminSellerDetailResponse } from '../admin/admin-seller.models';
 import { AdminSellerService } from '../admin/admin-seller.service';
@@ -19,9 +16,6 @@ import { SellerVerificationEvidenceType } from '../seller/seller-verification-ev
   imports: [
     AdminWorkspaceNavComponent,
     DatePipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -31,7 +25,7 @@ import { SellerVerificationEvidenceType } from '../seller/seller-verification-ev
   template: `
     <section class="page admin-review">
       <app-admin-workspace-nav />
-      <a class="admin-back-link" routerLink="/admin/sellers">Back to seller approvals</a>
+      <a class="admin-back-link" routerLink="/sellers">Back to seller approvals</a>
 
       @if (isLoading()) {
         <div class="route-card">Loading seller review...</div>
@@ -144,9 +138,9 @@ import { SellerVerificationEvidenceType } from '../seller/seller-verification-ev
                         <app-status-badge [label]="evidenceTypeLabel(item.evidenceType)" tone="neutral" />
                         <h3>{{ item.originalFileName }}</h3>
                         <p>{{ item.note ?? 'No reviewer note provided.' }}</p>
-                        <small>{{ formatFileSize(item.byteSize) }} - uploaded {{ item.uploadedAtUtc | date:'medium' }}</small>
+                        <small>{{ renderFileSize(item.byteSize) }} - uploaded {{ item.uploadedAtUtc | date:'medium' }}</small>
                       </div>
-                      <button mat-stroked-button type="button" (click)="downloadEvidence(item.evidenceId, item.originalFileName)">Download</button>
+                      <button data-ui-button="secondary" type="button" (click)="downloadEvidence(item.evidenceId, item.originalFileName)">Download</button>
                     </div>
                   }
                 </div>
@@ -157,28 +151,28 @@ import { SellerVerificationEvidenceType } from '../seller/seller-verification-ev
           <aside class="admin-actions">
             <div class="route-card admin-action-card">
               <h2>Review actions</h2>
-              <button mat-flat-button type="button" [disabled]="isSaving()" (click)="approve()">Approve seller</button>
+              <button data-ui-button="primary" type="button" [disabled]="isSaving()" (click)="approve()">Approve seller</button>
 
               <form [formGroup]="rejectForm" (ngSubmit)="reject()" class="admin-reason-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Rejection reason</mat-label>
-                  <textarea matInput rows="3" formControlName="reason"></textarea>
+                <label class="ui-field">
+                  <span>Rejection reason</span>
+                  <textarea rows="3" formControlName="reason"></textarea>
                   @if (rejectForm.controls.reason.hasError('required')) {
-                    <mat-error>Reason is required.</mat-error>
+                    <span class="ui-field-error">Reason is required.</span>
                   }
-                </mat-form-field>
-                <button mat-stroked-button type="submit" [disabled]="isSaving()">Reject seller</button>
+                </label>
+                <button data-ui-button="secondary" type="submit" [disabled]="isSaving()">Reject seller</button>
               </form>
 
               <form [formGroup]="suspendForm" (ngSubmit)="suspend()" class="admin-reason-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Suspension reason</mat-label>
-                  <textarea matInput rows="3" formControlName="reason"></textarea>
+                <label class="ui-field">
+                  <span>Suspension reason</span>
+                  <textarea rows="3" formControlName="reason"></textarea>
                   @if (suspendForm.controls.reason.hasError('required')) {
-                    <mat-error>Reason is required.</mat-error>
+                    <span class="ui-field-error">Reason is required.</span>
                   }
-                </mat-form-field>
-                <button mat-stroked-button type="submit" [disabled]="isSaving()">Suspend seller</button>
+                </label>
+                <button data-ui-button="secondary" type="submit" [disabled]="isSaving()">Suspend seller</button>
               </form>
             </div>
 
@@ -361,7 +355,7 @@ export class AdminSellerDetailPageComponent implements OnInit {
     return labels[type] ?? type;
   }
 
-  protected formatFileSize(bytes: number): string {
+  protected renderFileSize(bytes: number): string {
     if (bytes < 1024) {
       return `${bytes} B`;
     }

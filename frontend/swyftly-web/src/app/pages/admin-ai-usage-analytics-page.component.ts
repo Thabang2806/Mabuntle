@@ -2,9 +2,6 @@ import { CurrencyPipe, DatePipe, PercentPipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminAiUsageAnalyticsResponse } from '../admin/admin-ai-usage-analytics.models';
 import { AdminAiUsageAnalyticsService } from '../admin/admin-ai-usage-analytics.service';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
@@ -15,9 +12,6 @@ import { getApiErrorMessage } from '../auth/api-error';
   imports: [
     CurrencyPipe,
     DatePipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     AdminWorkspaceNavComponent,
     PercentPipe,
     ReactiveFormsModule,
@@ -27,7 +21,7 @@ import { getApiErrorMessage } from '../auth/api-error';
     <section class="page admin-review">
       <app-admin-workspace-nav />
 
-      <a class="admin-back-link" routerLink="/admin">Back to admin</a>
+      <a class="admin-back-link" routerLink="">Back to admin</a>
 
       <div class="page-header">
         <span class="eyebrow">Admin analytics</span>
@@ -36,28 +30,28 @@ import { getApiErrorMessage } from '../auth/api-error';
       </div>
 
       <form [formGroup]="filtersForm" (ngSubmit)="loadAnalytics()" class="route-card admin-audit-filters" novalidate>
-        <mat-form-field appearance="outline">
-          <mat-label>From</mat-label>
-          <input matInput type="datetime-local" formControlName="from">
-        </mat-form-field>
+        <label class="ui-field">
+          <span>From</span>
+          <input type="datetime-local" formControlName="from">
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>To</mat-label>
-          <input matInput type="datetime-local" formControlName="to">
-        </mat-form-field>
+        <label class="ui-field">
+          <span>To</span>
+          <input type="datetime-local" formControlName="to">
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Feature</mat-label>
-          <input matInput formControlName="featureName" placeholder="ListingAssistant">
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Feature</span>
+          <input formControlName="featureName" placeholder="ListingAssistant">
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Seller ID</mat-label>
-          <input matInput formControlName="sellerId" placeholder="Optional seller GUID">
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Seller ID</span>
+          <input formControlName="sellerId" placeholder="Optional seller GUID">
+        </label>
 
         <div class="admin-audit-actions">
-          <button mat-flat-button type="submit" [disabled]="isLoading()">Apply filters</button>
+          <button data-ui-button="primary" type="submit" [disabled]="isLoading()">Apply filters</button>
         </div>
       </form>
 

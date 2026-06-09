@@ -46,7 +46,7 @@ describe('AdminAdCampaignsPageComponent', () => {
     expect(compiled.textContent).toContain('Seller Store');
     expect(compiled.textContent).toContain('FeaturedProduct');
     const reviewLink = Array.from(compiled.querySelectorAll('a'))
-      .find(link => link.getAttribute('href') === '/admin/ads/campaign-id');
+      .find(link => link.getAttribute('href') === '/ads/campaign-id');
     expect(reviewLink).toBeTruthy();
   });
 
@@ -136,7 +136,7 @@ function createCampaignSummary(overrides: Partial<AdminAdCampaignOperationalSumm
     productCount: 1,
     totalBudget: 1000,
     currency: 'ZAR',
-    detailRoute: '/admin/ads/campaign-id',
+    detailRoute: '/ads/campaign-id',
     ...overrides
   };
 }

@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
+import { FRONTEND_HOSTS } from '../frontend-experience';
 import { DashboardCardComponent } from '../shared/ui/dashboard-card.component';
 import { LuxuryPublicStylesComponent } from '../shared/ui/luxury-public-styles.component';
 import { PageHeaderComponent } from '../shared/ui/page-header.component';
@@ -12,7 +12,6 @@ import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
   imports: [
     DashboardCardComponent,
     LuxuryPublicStylesComponent,
-    MatButtonModule,
     PageHeaderComponent,
     ProductVisualFallbackComponent,
     RouterLink,
@@ -31,8 +30,8 @@ import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
           </p>
 
           <div class="market-home-actions">
-            <a mat-flat-button routerLink="/register/seller">Create seller account</a>
-            <a mat-stroked-button routerLink="/login">Seller sign in</a>
+            <a class="ui-button ui-button--primary" [href]="sellerRegisterUrl">Create seller account</a>
+            <a class="ui-button" [href]="sellerLoginUrl">Seller sign in</a>
           </div>
 
           <div class="market-home-trust-strip" aria-label="Seller trust signals">
@@ -91,7 +90,7 @@ import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
               Sellers can prepare drafts before verification, but storefront eligibility, product publishing, and ad
               campaign activation depend on marketplace review outcomes.
             </p>
-            <a mat-stroked-button routerLink="/register/seller">Start registration</a>
+            <a class="ui-button" [href]="sellerRegisterUrl">Start registration</a>
           </aside>
         </div>
       </section>
@@ -124,8 +123,8 @@ import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
             </p>
           </div>
           <div class="market-home-actions">
-            <a mat-flat-button routerLink="/register/seller">Create seller account</a>
-            <a mat-stroked-button routerLink="/shop">Browse marketplace</a>
+            <a class="ui-button ui-button--primary" [href]="sellerRegisterUrl">Create seller account</a>
+            <a class="ui-button" routerLink="/shop">Browse marketplace</a>
           </div>
         </div>
       </section>
@@ -133,6 +132,9 @@ import { StatusBadgeComponent } from '../shared/ui/status-badge.component';
   `
 })
 export class SellOnSwyftlyPageComponent {
+  protected readonly sellerRegisterUrl = `${FRONTEND_HOSTS.seller}/register/seller`;
+  protected readonly sellerLoginUrl = `${FRONTEND_HOSTS.seller}/login`;
+
   protected readonly sellingSteps = [
     {
       title: 'Create a seller account',

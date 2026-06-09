@@ -1,7 +1,6 @@
 import { CurrencyPipe, DatePipe, PercentPipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import {
   SellerAdCampaignMetricsResponse,
   SellerAdCampaignResponse
@@ -14,12 +13,12 @@ import { getApiErrorMessage } from '../auth/api-error';
 
 @Component({
   selector: 'app-seller-ad-campaign-detail-page',
-  imports: [CurrencyPipe, DatePipe, MatButtonModule, PercentPipe, RouterLink, SellerWorkspaceNavComponent],
+  imports: [CurrencyPipe, DatePipe, PercentPipe, RouterLink, SellerWorkspaceNavComponent],
   template: `
     <section class="page seller-ops-page seller-products hf-seller-ad-detail-page">
       <app-seller-workspace-nav />
 
-      <a class="admin-back-link" routerLink="/seller/ads">Back to campaigns</a>
+      <a class="admin-back-link" routerLink="/ads">Back to campaigns</a>
 
       @if (isLoading()) {
         <div class="route-card">Loading campaign...</div>
@@ -130,16 +129,16 @@ import { getApiErrorMessage } from '../auth/api-error';
             <div class="route-card admin-action-card">
               <h2>Campaign actions</h2>
               @if (campaign()?.status === 'Draft' || campaign()?.status === 'Rejected') {
-                <button mat-flat-button type="button" [disabled]="isSaving()" (click)="submitForReview()">Submit for review</button>
+                <button data-ui-button="primary" type="button" [disabled]="isSaving()" (click)="submitForReview()">Submit for review</button>
               }
               @if (campaign()?.status === 'Active') {
-                <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="pause()">Pause</button>
+                <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="pause()">Pause</button>
               }
               @if (campaign()?.status === 'Paused') {
-                <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="resume()">Resume</button>
+                <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="resume()">Resume</button>
               }
               @if (campaign()?.status !== 'Cancelled' && campaign()?.status !== 'Completed') {
-                <button mat-stroked-button type="button" [disabled]="isSaving()" (click)="cancel()">Cancel</button>
+                <button data-ui-button="secondary" type="button" [disabled]="isSaving()" (click)="cancel()">Cancel</button>
               }
             </div>
           </aside>

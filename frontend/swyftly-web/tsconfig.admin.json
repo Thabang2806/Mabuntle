@@ -1,0 +1,16 @@
+/* Admin console Cloudflare build entrypoint. */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/admin",
+    "types": [
+      "node"
+    ]
+  },
+  "files": [
+    "src/main.admin.ts"
+  ],
+  "include": [
+    "src/**/*.d.ts"
+  ]
+}

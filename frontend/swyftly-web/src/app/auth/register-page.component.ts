@@ -8,9 +8,7 @@ import {
   Validators
 } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
+import { FRONTEND_HOSTS } from '../frontend-experience';
 import { LuxuryPublicStylesComponent } from '../shared/ui/luxury-public-styles.component';
 import { getApiErrorMessage } from './api-error';
 import { AuthService } from './auth.service';
@@ -20,9 +18,6 @@ type PublicRegistrationRole = 'Buyer' | 'Seller';
 @Component({
   selector: 'app-register-page',
   imports: [
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     LuxuryPublicStylesComponent,
     ReactiveFormsModule,
     RouterLink
@@ -35,56 +30,56 @@ type PublicRegistrationRole = 'Buyer' | 'Seller';
         <h1>{{ heading() }}</h1>
         <p>{{ summary() }}</p>
         @if (role === 'Seller') {
-          <a class="auth-context-link" routerLink="/sell">Review seller requirements before applying</a>
+          <a class="auth-context-link" [href]="sellGuideUrl">Review seller requirements before applying</a>
         }
 
         @if (successMessage()) {
           <p class="auth-alert success" role="status">{{ successMessage() }}</p>
-          <a mat-flat-button routerLink="/login">Sign in</a>
+          <a class="ui-button ui-button--primary" routerLink="/login">Sign in</a>
         } @else {
           @if (errorMessage()) {
             <p class="auth-alert error" role="alert">{{ errorMessage() }}</p>
           }
 
-          <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-            <mat-label>Email</mat-label>
-            <input matInput type="email" formControlName="email" autocomplete="email" />
+          <label class="ui-field">
+            <span>Email</span>
+            <input type="email" formControlName="email" autocomplete="email" />
             @if (form.controls.email.hasError('required')) {
-              <mat-error>Email is required.</mat-error>
+              <small class="ui-field-error">Email is required.</small>
             } @else if (form.controls.email.hasError('email')) {
-              <mat-error>Enter a valid email address.</mat-error>
+              <small class="ui-field-error">Enter a valid email address.</small>
             }
-          </mat-form-field>
+          </label>
 
-          <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-            <mat-label>Password</mat-label>
-            <input matInput type="password" formControlName="password" autocomplete="new-password" />
+          <label class="ui-field">
+            <span>Password</span>
+            <input type="password" formControlName="password" autocomplete="new-password" />
             @if (form.controls.password.hasError('required')) {
-              <mat-error>Password is required.</mat-error>
+              <small class="ui-field-error">Password is required.</small>
             } @else if (form.controls.password.hasError('minlength')) {
-              <mat-error>Use at least 8 characters.</mat-error>
+              <small class="ui-field-error">Use at least 8 characters.</small>
             } @else if (form.controls.password.hasError('pattern')) {
-              <mat-error>Use uppercase, lowercase, and a number.</mat-error>
+              <small class="ui-field-error">Use uppercase, lowercase, and a number.</small>
             }
-          </mat-form-field>
+          </label>
 
-          <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-            <mat-label>Confirm password</mat-label>
-            <input matInput type="password" formControlName="confirmPassword" autocomplete="new-password" />
+          <label class="ui-field">
+            <span>Confirm password</span>
+            <input type="password" formControlName="confirmPassword" autocomplete="new-password" />
             @if (form.controls.confirmPassword.hasError('required')) {
-              <mat-error>Confirm your password.</mat-error>
+              <small class="ui-field-error">Confirm your password.</small>
             } @else if (form.hasError('passwordMismatch')) {
-              <mat-error>Passwords must match.</mat-error>
+              <small class="ui-field-error">Passwords must match.</small>
             }
-          </mat-form-field>
+          </label>
 
-          <button mat-flat-button type="submit" [disabled]="isSubmitting()">
+          <button class="ui-button ui-button--primary" type="submit" [disabled]="isSubmitting()">
             {{ isSubmitting() ? 'Creating account...' : 'Create account' }}
           </button>
 
           <div class="auth-secondary">
             <a routerLink="/login">Already have an account?</a>
-            <a [routerLink]="alternateRoute()">{{ alternateLabel() }}</a>
+            <a [href]="alternateRoute()">{{ alternateLabel() }}</a>
           </div>
         }
       </form>
@@ -100,6 +95,7 @@ export class RegisterPageComponent {
   protected readonly isSubmitting = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly successMessage = signal<string | null>(null);
+  protected readonly sellGuideUrl = `${FRONTEND_HOSTS.client}/sell`;
 
   protected readonly form = this.formBuilder.group({
     email: ['', [Validators.required, Validators.email]],
@@ -126,7 +122,9 @@ export class RegisterPageComponent {
   }
 
   protected alternateRoute(): string {
-    return this.role === 'Seller' ? '/register/buyer' : '/register/seller';
+    return this.role === 'Seller'
+      ? `${FRONTEND_HOSTS.client}/register/buyer`
+      : `${FRONTEND_HOSTS.seller}/register/seller`;
   }
 
   protected alternateLabel(): string {

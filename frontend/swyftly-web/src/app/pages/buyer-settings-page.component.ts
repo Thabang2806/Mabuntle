@@ -1,10 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerAiDiscoveryService } from '../buyer/buyer-ai-discovery.service';
 import { BuyerSettingsService } from '../buyer/buyer-settings.service';
@@ -24,10 +20,6 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
   selector: 'app-buyer-settings-page',
   imports: [
     BuyerWorkspaceNavComponent,
-    MatButtonModule,
-    MatCheckboxModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -43,8 +35,8 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
         description="Manage lightweight account details and the account updates you want to receive."
       >
         <div pageHeaderActions>
-          <a mat-stroked-button routerLink="/account">Account dashboard</a>
-          <a mat-stroked-button routerLink="/account/notifications">Notifications</a>
+          <a data-ui-button="secondary" routerLink="/account">Account dashboard</a>
+          <a data-ui-button="secondary" routerLink="/account/notifications">Notifications</a>
         </div>
       </app-page-header>
 
@@ -74,24 +66,24 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
             </dl>
 
             <div class="form-grid">
-              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                <mat-label>Display name</mat-label>
-                <input matInput formControlName="displayName" maxlength="160">
+              <label class="ui-field">
+                <span>Display name</span>
+                <input formControlName="displayName" maxlength="160">
                 @if (profileForm.controls.displayName.hasError('maxlength')) {
-                  <mat-error>Display name must be 160 characters or fewer.</mat-error>
+                  <span class="ui-field-error">Display name must be 160 characters or fewer.</span>
                 }
-              </mat-form-field>
+              </label>
 
-              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                <mat-label>Phone number</mat-label>
-                <input matInput formControlName="phoneNumber" maxlength="64">
+              <label class="ui-field">
+                <span>Phone number</span>
+                <input formControlName="phoneNumber" maxlength="64">
                 @if (profileForm.controls.phoneNumber.hasError('maxlength')) {
-                  <mat-error>Phone number must be 64 characters or fewer.</mat-error>
+                  <span class="ui-field-error">Phone number must be 64 characters or fewer.</span>
                 }
-              </mat-form-field>
+              </label>
             </div>
 
-            <button mat-flat-button type="submit" [disabled]="profileForm.invalid || isSavingProfile()">
+            <button data-ui-button="primary" type="submit" [disabled]="profileForm.invalid || isSavingProfile()">
               {{ isSavingProfile() ? 'Saving...' : 'Save profile' }}
             </button>
           </form>
@@ -110,14 +102,14 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
                     <span>{{ item.description }}</span>
                   </div>
                   <div class="buyer-preference-channels">
-                    <mat-checkbox [formControl]="notificationForm.controls[item.category]">In-app</mat-checkbox>
-                    <mat-checkbox [formControl]="emailNotificationForm.controls[item.category]">Email</mat-checkbox>
+                    <label class="ui-checkbox"><input type="checkbox" [formControl]="notificationForm.controls[item.category]"><span>In-app</span></label>
+                    <label class="ui-checkbox"><input type="checkbox" [formControl]="emailNotificationForm.controls[item.category]"><span>Email</span></label>
                   </div>
                 </div>
               }
             </div>
 
-            <button mat-flat-button type="submit" [disabled]="isSavingPreferences()">
+            <button data-ui-button="primary" type="submit" [disabled]="isSavingPreferences()">
               {{ isSavingPreferences() ? 'Saving...' : 'Save notification preferences' }}
             </button>
           </form>
@@ -141,7 +133,7 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
                       }
                     </div>
                     <p>{{ address.recipientName }} - {{ address.phoneNumber }}</p>
-                    <p>{{ formatAddress(address) }}</p>
+                    <p>{{ renderAddress(address) }}</p>
                     @if (address.deliveryInstructions) {
                       <p>Instructions: {{ address.deliveryInstructions }}</p>
                     }
@@ -152,9 +144,9 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
                       <p>Review notes: {{ address.verificationWarnings!.join(' ') }}</p>
                     }
                     <div class="buyer-action-row">
-                      <button mat-stroked-button type="button" (click)="editDeliveryAddress(address)">Edit</button>
-                      <button mat-stroked-button type="button" [disabled]="address.isDefault || isSavingAddress()" (click)="makeDefaultDeliveryAddress(address.deliveryAddressId)">Make default</button>
-                      <button mat-stroked-button type="button" [disabled]="isSavingAddress()" (click)="deleteDeliveryAddress(address.deliveryAddressId)">Delete</button>
+                      <button data-ui-button="secondary" type="button" (click)="editDeliveryAddress(address)">Edit</button>
+                      <button data-ui-button="secondary" type="button" [disabled]="address.isDefault || isSavingAddress()" (click)="makeDefaultDeliveryAddress(address.deliveryAddressId)">Make default</button>
+                      <button data-ui-button="secondary" type="button" [disabled]="isSavingAddress()" (click)="deleteDeliveryAddress(address.deliveryAddressId)">Delete</button>
                     </div>
                   </article>
                 }
@@ -162,65 +154,65 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
             }
 
             <form [formGroup]="addressForm" (ngSubmit)="saveDeliveryAddress()" class="buyer-form-grid" novalidate>
-              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                <mat-label>Label</mat-label>
-                <input matInput formControlName="label" maxlength="80">
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Label</span>
+                <input formControlName="label" maxlength="80">
+              </label>
 
-              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                <mat-label>Recipient name</mat-label>
-                <input matInput formControlName="recipientName" maxlength="160">
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Recipient name</span>
+                <input formControlName="recipientName" maxlength="160">
+              </label>
 
-              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                <mat-label>Phone number</mat-label>
-                <input matInput formControlName="phoneNumber" maxlength="64">
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Phone number</span>
+                <input formControlName="phoneNumber" maxlength="64">
+              </label>
 
-              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                <mat-label>Address line 1</mat-label>
-                <input matInput formControlName="addressLine1" maxlength="240">
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Address line 1</span>
+                <input formControlName="addressLine1" maxlength="240">
+              </label>
 
-              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                <mat-label>Address line 2</mat-label>
-                <input matInput formControlName="addressLine2" maxlength="240">
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Address line 2</span>
+                <input formControlName="addressLine2" maxlength="240">
+              </label>
 
-              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                <mat-label>Suburb</mat-label>
-                <input matInput formControlName="suburb" maxlength="120">
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Suburb</span>
+                <input formControlName="suburb" maxlength="120">
+              </label>
 
-              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                <mat-label>City</mat-label>
-                <input matInput formControlName="city" maxlength="120">
-              </mat-form-field>
+              <label class="ui-field">
+                <span>City</span>
+                <input formControlName="city" maxlength="120">
+              </label>
 
-              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                <mat-label>Province</mat-label>
-                <input matInput formControlName="province" maxlength="120">
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Province</span>
+                <input formControlName="province" maxlength="120">
+              </label>
 
-              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                <mat-label>Postal code</mat-label>
-                <input matInput formControlName="postalCode" maxlength="32">
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Postal code</span>
+                <input formControlName="postalCode" maxlength="32">
+              </label>
 
-              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                <mat-label>Country code</mat-label>
-                <input matInput formControlName="countryCode" maxlength="2">
-              </mat-form-field>
+              <label class="ui-field">
+                <span>Country code</span>
+                <input formControlName="countryCode" maxlength="2">
+              </label>
 
-              <mat-form-field class="swyftly-field" appearance="outline" hideRequiredMarker>
-                <mat-label>Delivery instructions</mat-label>
-                <textarea matInput rows="3" formControlName="deliveryInstructions" maxlength="500"></textarea>
+              <label class="ui-field">
+                <span>Delivery instructions</span>
+                <textarea rows="3" formControlName="deliveryInstructions" maxlength="500"></textarea>
                 @if (addressForm.controls.deliveryInstructions.hasError('maxlength')) {
-                  <mat-error>Delivery instructions must be 500 characters or fewer.</mat-error>
+                  <span class="ui-field-error">Delivery instructions must be 500 characters or fewer.</span>
                 }
-              </mat-form-field>
+              </label>
 
-              <mat-checkbox formControlName="isDefault">Use as default delivery address</mat-checkbox>
+              <label class="ui-checkbox"><input type="checkbox" formControlName="isDefault"><span>Use as default delivery address</span></label>
 
               @if (addressVerificationPreview(); as verification) {
                 <app-ui-alert [tone]="verification.verificationStatus === 'Verified' ? 'success' : 'warning'">
@@ -234,14 +226,14 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
               }
 
               <div class="buyer-action-row">
-                <button mat-stroked-button type="button" [disabled]="addressForm.invalid || isVerifyingAddress()" (click)="verifyDeliveryAddress()">
+                <button data-ui-button="secondary" type="button" [disabled]="addressForm.invalid || isVerifyingAddress()" (click)="verifyDeliveryAddress()">
                   {{ isVerifyingAddress() ? 'Checking...' : 'Verify address' }}
                 </button>
-                <button mat-flat-button type="submit" [disabled]="addressForm.invalid || isSavingAddress()">
+                <button data-ui-button="primary" type="submit" [disabled]="addressForm.invalid || isSavingAddress()">
                   {{ isSavingAddress() ? 'Saving...' : editingAddressId() ? 'Save address' : 'Add address' }}
                 </button>
                 @if (editingAddressId()) {
-                  <button mat-stroked-button type="button" (click)="resetDeliveryAddressForm()">Cancel edit</button>
+                  <button data-ui-button="secondary" type="button" (click)="resetDeliveryAddressForm()">Cancel edit</button>
                 }
               </div>
             </form>
@@ -260,26 +252,28 @@ type PreferenceControlGroup = Record<BuyerNotificationPreferenceCategory, FormCo
               </p>
             </div>
 
-            <mat-checkbox [formControl]="aiHistoryForm.controls.historyEnabled">
-              Save AI discovery summaries across devices
-            </mat-checkbox>
+            <label class="ui-checkbox">
+              <input type="checkbox" [formControl]="aiHistoryForm.controls.historyEnabled">
+              <span>Save AI discovery summaries across devices</span>
+            </label>
 
-            <mat-checkbox [formControl]="aiHistoryForm.controls.personalizationEnabled">
-              Personalize assistant and visual-search results
-            </mat-checkbox>
+            <label class="ui-checkbox">
+              <input type="checkbox" [formControl]="aiHistoryForm.controls.personalizationEnabled">
+              <span>Personalize assistant and visual-search results</span>
+            </label>
             <p>
               Personalized AI discovery is optional. When enabled, Swyftly can use saved items, recent cart/order interest,
               and enabled AI history summaries to reorder matching products and explain why they were suggested.
             </p>
 
             <div class="buyer-action-row">
-              <button mat-flat-button type="button" [disabled]="isSavingAiHistory()" (click)="saveAiHistoryPreference()">
+              <button data-ui-button="primary" type="button" [disabled]="isSavingAiHistory()" (click)="saveAiHistoryPreference()">
                 {{ isSavingAiHistory() ? 'Saving...' : 'Save AI discovery preferences' }}
               </button>
-              <button mat-stroked-button type="button" [disabled]="isClearingAiHistory()" (click)="clearAiHistory()">
+              <button data-ui-button="secondary" type="button" [disabled]="isClearingAiHistory()" (click)="clearAiHistory()">
                 {{ isClearingAiHistory() ? 'Clearing...' : 'Clear server history' }}
               </button>
-              <a mat-stroked-button routerLink="/account/ai-history">View AI history</a>
+              <a data-ui-button="secondary" routerLink="/account/ai-history">View AI history</a>
             </div>
           </section>
 
@@ -626,7 +620,7 @@ export class BuyerSettingsPageComponent implements OnInit {
     this.addressVerificationPreview.set(null);
   }
 
-  protected formatAddress(address: BuyerDeliveryAddressResponse): string {
+  protected renderAddress(address: BuyerDeliveryAddressResponse): string {
     return [
       address.addressLine1,
       address.addressLine2,

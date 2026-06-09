@@ -2,9 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminAdCampaignDetailResponse } from '../admin/admin-ad-campaign.models';
 import { AdminAdCampaignService } from '../admin/admin-ad-campaign.service';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
@@ -15,9 +12,6 @@ import { getApiErrorMessage } from '../auth/api-error';
   imports: [
     CurrencyPipe,
     DatePipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     AdminWorkspaceNavComponent,
     ReactiveFormsModule,
     RouterLink
@@ -26,7 +20,7 @@ import { getApiErrorMessage } from '../auth/api-error';
     <section class="page admin-review">
       <app-admin-workspace-nav />
 
-      <a class="admin-back-link" routerLink="/admin/ads">Back to ad queue</a>
+      <a class="admin-back-link" routerLink="/ads">Back to ad queue</a>
 
       @if (isLoading()) {
         <div class="route-card">Loading campaign review...</div>
@@ -133,17 +127,17 @@ import { getApiErrorMessage } from '../auth/api-error';
           <aside class="admin-actions">
             <div class="route-card admin-action-card">
               <h2>Review actions</h2>
-              <button mat-flat-button type="button" [disabled]="isSaving()" (click)="approve()">Approve campaign</button>
+              <button data-ui-button="primary" type="button" [disabled]="isSaving()" (click)="approve()">Approve campaign</button>
 
               <form [formGroup]="rejectForm" (ngSubmit)="reject()" class="admin-reason-form" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Rejection reason</mat-label>
-                  <textarea matInput rows="4" formControlName="reason"></textarea>
+                <label class="ui-field">
+                  <span>Rejection reason</span>
+                  <textarea rows="4" formControlName="reason"></textarea>
                   @if (rejectForm.controls.reason.hasError('required')) {
-                    <mat-error>Reason is required.</mat-error>
+                    <span class="ui-field-error">Reason is required.</span>
                   }
-                </mat-form-field>
-                <button mat-stroked-button type="submit" [disabled]="isSaving()">Reject campaign</button>
+                </label>
+                <button data-ui-button="secondary" type="submit" [disabled]="isSaving()">Reject campaign</button>
               </form>
             </div>
 

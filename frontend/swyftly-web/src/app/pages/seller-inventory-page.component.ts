@@ -2,10 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectChange, MatSelectModule } from '@angular/material/select';
 import { getApiErrorMessage } from '../auth/api-error';
 import {
   SellerInventoryBulkAdjustmentResponse,
@@ -32,10 +28,6 @@ type InventoryHistoryTypeFilter = 'All' | SellerInventoryMovementType;
     CurrencyPipe,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     MetricTileComponent,
     PageHeaderComponent,
     ReactiveFormsModule,
@@ -73,44 +65,43 @@ type InventoryHistoryTypeFilter = 'All' | SellerInventoryMovementType;
         </section>
 
         <section class="seller-filter-bar" aria-label="Inventory filters">
-          <mat-form-field appearance="outline">
-            <mat-label>Search inventory</mat-label>
-            <input matInput [value]="searchTerm()" (input)="updateSearch($event)" placeholder="Product, SKU, or barcode" />
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Search inventory</span>
+            <input [value]="searchTerm()" (input)="updateSearch($event)" placeholder="Product, SKU, or barcode" />
+          </label>
 
-          <mat-form-field appearance="outline" class="seller-scanner-field">
-            <mat-label>Scanner quick search</mat-label>
+          <label class="ui-field seller-scanner-field">
+            <span>Scanner quick search</span>
             <input
-              matInput
               [value]="scannerTerm()"
               (input)="updateScannerTerm($event)"
               (keydown.enter)="submitScannerSearch($event)"
               placeholder="Scan SKU or barcode"
             />
-          </mat-form-field>
+          </label>
 
-          <button mat-stroked-button type="button" class="seller-scanner-action" (click)="submitScannerSearch()">
+          <button data-ui-button="secondary" type="button" class="seller-scanner-action" (click)="submitScannerSearch()">
             Find scanned item
           </button>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Stock state</mat-label>
-            <mat-select [value]="stockFilter()" (selectionChange)="updateStockFilter($event)">
-              <mat-option value="All">All inventory</mat-option>
-              <mat-option value="LowStock">Low stock</mat-option>
-              <mat-option value="OutOfStock">Out of stock</mat-option>
-              <mat-option value="Reserved">Reserved stock</mat-option>
-            </mat-select>
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Stock state</span>
+            <select [value]="stockFilter()" (change)="updateStockFilter($event)">
+              <option value="All">All inventory</option>
+              <option value="LowStock">Low stock</option>
+              <option value="OutOfStock">Out of stock</option>
+              <option value="Reserved">Reserved stock</option>
+            </select>
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>History type</mat-label>
-            <mat-select [value]="historyTypeFilter()" (selectionChange)="updateHistoryTypeFilter($event)">
+          <label class="ui-field">
+            <span>History type</span>
+            <select [value]="historyTypeFilter()" (change)="updateHistoryTypeFilter($event)">
               @for (option of historyTypeOptions; track option.value) {
-                <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                <option [value]="option.value">{{ option.label }}</option>
               }
-            </mat-select>
-          </mat-form-field>
+            </select>
+          </label>
         </section>
 
         @if (scannerMessage()) {
@@ -123,7 +114,7 @@ type InventoryHistoryTypeFilter = 'All' | SellerInventoryMovementType;
             <h2>Search stock changes</h2>
             <p>Use product, SKU, or barcode search, or scan into the quick search field and press Enter to open an exact variant match.</p>
           </div>
-          <button mat-stroked-button type="button" [disabled]="isHistoryLoading()" (click)="loadFilteredHistory()">
+          <button data-ui-button="secondary" type="button" [disabled]="isHistoryLoading()" (click)="loadFilteredHistory()">
             {{ isHistoryLoading() ? 'Loading history...' : 'Load matching history' }}
           </button>
         </section>
@@ -181,10 +172,10 @@ type InventoryHistoryTypeFilter = 'All' | SellerInventoryMovementType;
           </div>
 
           <div class="auth-actions">
-            <button mat-stroked-button type="button" [disabled]="isDownloading()" (click)="downloadExport()">
+            <button data-ui-button="secondary" type="button" [disabled]="isDownloading()" (click)="downloadExport()">
               Export inventory CSV
             </button>
-            <button mat-button type="button" [disabled]="isDownloading()" (click)="downloadTemplate()">
+            <button data-ui-button="ghost" type="button" [disabled]="isDownloading()" (click)="downloadTemplate()">
               Download template
             </button>
           </div>
@@ -196,21 +187,21 @@ type InventoryHistoryTypeFilter = 'All' | SellerInventoryMovementType;
               <strong>{{ selectedImportFile()?.name ?? 'Choose inventory CSV' }}</strong>
             </label>
 
-            <button mat-stroked-button type="button" [disabled]="!selectedImportFile() || isPreviewing()" (click)="previewImport()">
+            <button data-ui-button="secondary" type="button" [disabled]="!selectedImportFile() || isPreviewing()" (click)="previewImport()">
               {{ isPreviewing() ? 'Previewing...' : 'Preview import' }}
             </button>
 
             @if (importPreview()) {
-              <mat-form-field appearance="outline">
-                <mat-label>Batch reason</mat-label>
-                <textarea matInput rows="3" formControlName="reason"></textarea>
+              <label class="ui-field">
+                <span>Batch reason</span>
+                <textarea rows="3" formControlName="reason"></textarea>
                 @if (bulkForm.controls.reason.hasError('required')) {
-                  <mat-error>A batch reason is required for audit.</mat-error>
+                  <span class="ui-field-error">A batch reason is required for audit.</span>
                 }
-              </mat-form-field>
+              </label>
 
               <button
-                mat-flat-button
+                data-ui-button="primary"
                 type="submit"
                 [disabled]="isApplyingBulk() || bulkForm.invalid || importPreview()!.errorRows > 0 || importPreview()!.changedRows === 0"
               >
@@ -278,7 +269,7 @@ type InventoryHistoryTypeFilter = 'All' | SellerInventoryMovementType;
             heading="No variants yet"
             message="Create product variants before managing operational stock."
           >
-            <a mat-flat-button routerLink="/seller/products">Open products</a>
+            <a data-ui-button="primary" routerLink="/products">Open products</a>
           </app-empty-state>
         } @else if (filteredItems().length === 0 && !errorMessage()) {
           <app-empty-state
@@ -330,9 +321,9 @@ type InventoryHistoryTypeFilter = 'All' | SellerInventoryMovementType;
                     <small>{{ item.productStatus }} product, updated {{ item.updatedAtUtc | date:'mediumDate' }}</small>
                   </span>
                   <span role="cell" class="auth-actions">
-                    <button mat-stroked-button type="button" (click)="selectItem(item)">Adjust</button>
-                    <button mat-button type="button" (click)="selectItem(item)">History</button>
-                    <a mat-button [routerLink]="['/seller/products', item.productId, 'edit']">Product</a>
+                    <button data-ui-button="secondary" type="button" (click)="selectItem(item)">Adjust</button>
+                    <button data-ui-button="ghost" type="button" (click)="selectItem(item)">History</button>
+                    <a data-ui-button="ghost" [routerLink]="['/products', item.productId, 'edit']">Product</a>
                   </span>
                 </div>
               }
@@ -348,32 +339,32 @@ type InventoryHistoryTypeFilter = 'All' | SellerInventoryMovementType;
                 }
 
                 <form [formGroup]="adjustmentForm" (ngSubmit)="submitAdjustment()" class="wizard-form" novalidate>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Stock quantity</mat-label>
-                    <input matInput type="number" min="0" formControlName="stockQuantity" />
+                  <label class="ui-field">
+                    <span>Stock quantity</span>
+                    <input type="number" min="0" formControlName="stockQuantity" />
                     @if (adjustmentForm.controls.stockQuantity.hasError('required')) {
-                      <mat-error>Stock quantity is required.</mat-error>
+                      <span class="ui-field-error">Stock quantity is required.</span>
                     } @else if (adjustmentForm.controls.stockQuantity.hasError('min')) {
-                      <mat-error>Stock cannot be negative.</mat-error>
+                      <span class="ui-field-error">Stock cannot be negative.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Variant status</mat-label>
-                    <mat-select formControlName="status">
+                  <label class="ui-field">
+                    <span>Variant status</span>
+                    <select formControlName="status">
                       @for (status of variantStatuses; track status) {
-                        <mat-option [value]="status">{{ status }}</mat-option>
+                        <option [value]="status">{{ status }}</option>
                       }
-                    </mat-select>
-                  </mat-form-field>
+                    </select>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Reason</mat-label>
-                    <textarea matInput rows="4" formControlName="reason"></textarea>
+                  <label class="ui-field">
+                    <span>Reason</span>
+                    <textarea rows="4" formControlName="reason"></textarea>
                     @if (adjustmentForm.controls.reason.hasError('required')) {
-                      <mat-error>A reason is required for audit.</mat-error>
+                      <span class="ui-field-error">A reason is required for audit.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
                   @if (stockBelowReserved()) {
                     <app-ui-alert tone="warning">
@@ -381,7 +372,7 @@ type InventoryHistoryTypeFilter = 'All' | SellerInventoryMovementType;
                     </app-ui-alert>
                   }
 
-                  <button mat-flat-button type="submit" [disabled]="isSaving() || adjustmentForm.invalid || stockBelowReserved()">
+                  <button data-ui-button="primary" type="submit" [disabled]="isSaving() || adjustmentForm.invalid || stockBelowReserved()">
                     {{ isSaving() ? 'Saving...' : 'Save adjustment' }}
                   </button>
                 </form>
@@ -538,12 +529,12 @@ export class SellerInventoryPageComponent implements OnInit {
     this.scannerMessage.set(`Scanner matched ${match.sku}. The variant is selected and its stock history is loading.`);
   }
 
-  protected updateStockFilter(event: MatSelectChange): void {
-    this.stockFilter.set(event.value as InventoryFilter);
+  protected updateStockFilter(event: Event): void {
+    this.stockFilter.set((event.target as HTMLSelectElement).value as InventoryFilter);
   }
 
-  protected updateHistoryTypeFilter(event: MatSelectChange): void {
-    this.historyTypeFilter.set(event.value as InventoryHistoryTypeFilter);
+  protected updateHistoryTypeFilter(event: Event): void {
+    this.historyTypeFilter.set((event.target as HTMLSelectElement).value as InventoryHistoryTypeFilter);
   }
 
   protected onImportFileSelected(event: Event): void {

@@ -7,10 +7,6 @@ import {
   ValidatorFn,
   Validators
 } from '@angular/forms';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { RouterLink } from '@angular/router';
 import { getApiErrorMessage } from '../auth/api-error';
 import { SellerDashboardSummaryResponse } from '../seller/seller-dashboard.models';
@@ -40,10 +36,6 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
   selector: 'app-seller-page',
   imports: [
     DashboardCardComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     MetricTileComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -64,11 +56,11 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
           </div>
           <div class="auth-actions">
             @if (isVerified()) {
-              <a mat-flat-button routerLink="/seller/products/new">Create product</a>
-              <a mat-stroked-button routerLink="/seller/orders">Orders</a>
+              <a data-ui-button="primary" routerLink="/products/new">Create product</a>
+              <a data-ui-button="secondary" routerLink="/orders">Orders</a>
             } @else {
-              <a mat-flat-button routerLink="/seller/products">Prepare drafts</a>
-              <a mat-stroked-button routerLink="/sell">Seller guide</a>
+              <a data-ui-button="primary" routerLink="/products">Prepare drafts</a>
+              <a data-ui-button="secondary" routerLink="/sell">Seller guide</a>
             }
           </div>
         </div>
@@ -97,7 +89,7 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
               <div class="seller-dashboard-status hf-seller-quality-panel">
                 <strong>{{ setupPercent() }}%</strong>
                 <span>{{ onboarding()?.storefront?.isPublished ? 'Storefront published' : 'Storefront not published' }}</span>
-                <a mat-stroked-button routerLink="/seller/products">Improve listings</a>
+                <a data-ui-button="secondary" routerLink="/products">Improve listings</a>
               </div>
             </section>
 
@@ -123,7 +115,7 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
                     <span class="eyebrow">Operational queues</span>
                     <h2>What to check next</h2>
                   </div>
-                  <a mat-stroked-button routerLink="/seller/orders">View orders</a>
+                  <a data-ui-button="secondary" routerLink="/orders">View orders</a>
                 </div>
 
                 @for (item of operationHighlights(); track item.route) {
@@ -161,7 +153,7 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
                     <span class="eyebrow">Recent activity</span>
                     <h2>Latest seller events</h2>
                   </div>
-                  <a mat-stroked-button routerLink="/seller/notifications">Notifications</a>
+                  <a data-ui-button="secondary" routerLink="/notifications">Notifications</a>
                 </div>
 
                 @if (dashboardSummary()?.recentActivity?.length) {
@@ -169,7 +161,7 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
                     <a class="hf-seller-queue-row" [routerLink]="activity.route">
                       <span>{{ activity.type }}</span>
                       <strong>{{ activity.title }}</strong>
-                      <small>{{ activity.status }} - {{ formatDate(activity.occurredAtUtc) }}</small>
+                      <small>{{ activity.status }} - {{ renderDate(activity.occurredAtUtc) }}</small>
                     </a>
                   }
                 } @else {
@@ -182,14 +174,14 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
                 <h2>Improve product quality before spending on ads</h2>
                 <p>Use the AI listing assistant to tighten titles, attributes, missing fields, and image alt text before submitting products or campaigns.</p>
                 <div class="hf-progress-ring" aria-label="Listing quality emphasis"><strong>AI</strong></div>
-                <a mat-flat-button routerLink="/seller/products/new">Open listing assistant</a>
+                <a data-ui-button="primary" routerLink="/products/new">Open listing assistant</a>
               </aside>
             </section>
 
             <div class="seller-dashboard-grid hf-seller-dashboard-grid">
               @for (card of dashboardCards; track card.route) {
                 <app-dashboard-card [eyebrow]="card.eyebrow" [heading]="card.heading" [description]="card.description">
-                  <a mat-stroked-button [routerLink]="card.route">{{ card.action }}</a>
+                  <a data-ui-button="secondary" [routerLink]="card.route">{{ card.action }}</a>
                 </app-dashboard-card>
               }
             </div>
@@ -217,10 +209,10 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
             </div>
             <div class="seller-verification-actions">
               @if (canPrepareDrafts()) {
-                <a mat-flat-button routerLink="/seller/products">Prepare product drafts</a>
+                <a data-ui-button="primary" routerLink="/products">Prepare product drafts</a>
               }
-              <a mat-stroked-button routerLink="/seller/support">Contact support</a>
-              <a mat-stroked-button routerLink="/seller/notifications">Notifications</a>
+              <a data-ui-button="secondary" routerLink="/support">Contact support</a>
+              <a data-ui-button="secondary" routerLink="/notifications">Notifications</a>
             </div>
           </section>
 
@@ -257,22 +249,22 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
             @if (canMutateEvidence()) {
               <form [formGroup]="evidenceForm" (ngSubmit)="uploadEvidence()" class="wizard-form evidence-upload-form" novalidate>
                 <div class="form-grid">
-                  <mat-form-field appearance="outline">
-                    <mat-label>Evidence type</mat-label>
-                    <mat-select formControlName="evidenceType">
+                  <label class="ui-field">
+                    <span>Evidence type</span>
+                    <select formControlName="evidenceType">
                       @for (type of evidenceTypes; track type.value) {
-                        <mat-option [value]="type.value">{{ type.label }}</mat-option>
+                        <option [value]="type.value">{{ type.label }}</option>
                       }
-                    </mat-select>
-                  </mat-form-field>
+                    </select>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Note for reviewer</mat-label>
-                    <input matInput formControlName="note" maxlength="500" />
+                  <label class="ui-field">
+                    <span>Note for reviewer</span>
+                    <input formControlName="note" maxlength="500" />
                     @if (evidenceForm.controls.note.hasError('maxlength')) {
-                      <mat-error>Note cannot exceed 500 characters.</mat-error>
+                      <span class="ui-field-error">Note cannot exceed 500 characters.</span>
                     }
-                  </mat-form-field>
+                  </label>
                 </div>
 
                 <label class="seller-evidence-file-control">
@@ -280,7 +272,7 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
                   <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" (change)="onEvidenceFileSelected($event)" />
                 </label>
 
-                <button mat-flat-button type="submit" [disabled]="isEvidenceSaving() || !selectedEvidenceFile()">Upload evidence</button>
+                <button data-ui-button="primary" type="submit" [disabled]="isEvidenceSaving() || !selectedEvidenceFile()">Upload evidence</button>
               </form>
             } @else {
               <p class="supporting-copy">Evidence is read-only for {{ onboarding()?.verificationStatus }} seller accounts.</p>
@@ -298,12 +290,12 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
                       <span>{{ evidenceTypeLabel(item.evidenceType) }}</span>
                       <h3>{{ item.originalFileName }}</h3>
                       <p>{{ item.note ?? 'No reviewer note provided.' }}</p>
-                      <small>{{ formatFileSize(item.byteSize) }} - uploaded {{ formatDate(item.uploadedAtUtc) }}</small>
+                      <small>{{ renderFileSize(item.byteSize) }} - uploaded {{ renderDate(item.uploadedAtUtc) }}</small>
                     </div>
                     <div class="auth-actions">
-                      <button mat-stroked-button type="button" (click)="downloadEvidence(item)">Download</button>
+                      <button data-ui-button="secondary" type="button" (click)="downloadEvidence(item)">Download</button>
                       @if (canMutateEvidence()) {
-                        <button mat-stroked-button type="button" [disabled]="isEvidenceSaving()" (click)="removeEvidence(item)">Remove</button>
+                        <button data-ui-button="secondary" type="button" [disabled]="isEvidenceSaving()" (click)="removeEvidence(item)">Remove</button>
                       }
                     </div>
                   </article>
@@ -333,160 +325,160 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
                 @case (0) {
                   <form [formGroup]="profileForm" (ngSubmit)="saveProfile()" class="wizard-form" novalidate>
                   <h2>Basic seller details</h2>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Display name</mat-label>
-                    <input matInput formControlName="displayName" />
+                  <label class="ui-field">
+                    <span>Display name</span>
+                    <input formControlName="displayName" />
                     @if (profileForm.controls.displayName.hasError('required')) {
-                      <mat-error>Display name is required.</mat-error>
+                      <span class="ui-field-error">Display name is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Contact email</mat-label>
-                    <input matInput type="email" formControlName="contactEmail" />
+                  <label class="ui-field">
+                    <span>Contact email</span>
+                    <input type="email" formControlName="contactEmail" />
                     @if (profileForm.controls.contactEmail.hasError('required')) {
-                      <mat-error>Contact email is required.</mat-error>
+                      <span class="ui-field-error">Contact email is required.</span>
                     } @else if (profileForm.controls.contactEmail.hasError('email')) {
-                      <mat-error>Enter a valid email address.</mat-error>
+                      <span class="ui-field-error">Enter a valid email address.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Phone number</mat-label>
-                    <input matInput formControlName="phoneNumber" />
+                  <label class="ui-field">
+                    <span>Phone number</span>
+                    <input formControlName="phoneNumber" />
                     @if (profileForm.controls.phoneNumber.hasError('required')) {
-                      <mat-error>Phone number is required.</mat-error>
+                      <span class="ui-field-error">Phone number is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Business type</mat-label>
-                    <mat-select formControlName="businessType">
-                      <mat-option value="Individual">Individual</mat-option>
-                      <mat-option value="RegisteredBusiness">Registered business</mat-option>
-                    </mat-select>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Business type</span>
+                    <select formControlName="businessType">
+                      <option value="Individual">Individual</option>
+                      <option value="RegisteredBusiness">Registered business</option>
+                    </select>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Business name</mat-label>
-                    <input matInput formControlName="businessName" />
+                  <label class="ui-field">
+                    <span>Business name</span>
+                    <input formControlName="businessName" />
                     @if (profileForm.hasError('businessNameRequired')) {
-                      <mat-error>Business name is required for registered businesses.</mat-error>
+                      <span class="ui-field-error">Business name is required for registered businesses.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <button mat-flat-button type="submit" [disabled]="isSaving()">Save and continue</button>
+                  <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Save and continue</button>
                   </form>
                 }
                 @case (1) {
                   <form [formGroup]="storefrontForm" (ngSubmit)="saveStorefront()" class="wizard-form" novalidate>
                   <h2>Storefront details</h2>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Store name</mat-label>
-                    <input matInput formControlName="storeName" />
+                  <label class="ui-field">
+                    <span>Store name</span>
+                    <input formControlName="storeName" />
                     @if (storefrontForm.controls.storeName.hasError('required')) {
-                      <mat-error>Store name is required.</mat-error>
+                      <span class="ui-field-error">Store name is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Store slug</mat-label>
-                    <input matInput formControlName="slug" />
+                  <label class="ui-field">
+                    <span>Store slug</span>
+                    <input formControlName="slug" />
                     @if (storefrontForm.controls.slug.hasError('required')) {
-                      <mat-error>Store slug is required.</mat-error>
+                      <span class="ui-field-error">Store slug is required.</span>
                     } @else if (storefrontForm.controls.slug.hasError('pattern')) {
-                      <mat-error>Use lowercase letters, numbers, and hyphens.</mat-error>
+                      <span class="ui-field-error">Use lowercase letters, numbers, and hyphens.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Description</mat-label>
-                    <textarea matInput rows="4" formControlName="description"></textarea>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Description</span>
+                    <textarea rows="4" formControlName="description"></textarea>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Logo URL</mat-label>
-                    <input matInput formControlName="logoUrl" />
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Logo URL</span>
+                    <input formControlName="logoUrl" />
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Banner URL</mat-label>
-                    <input matInput formControlName="bannerUrl" />
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Banner URL</span>
+                    <input formControlName="bannerUrl" />
+                  </label>
 
-                  <button mat-flat-button type="submit" [disabled]="isSaving()">Save and continue</button>
+                  <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Save and continue</button>
                   </form>
                 }
                 @case (2) {
                   <form [formGroup]="addressForm" (ngSubmit)="saveAddress()" class="wizard-form" novalidate>
                   <h2>Address and fulfilment</h2>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Address line 1</mat-label>
-                    <input matInput formControlName="addressLine1" />
+                  <label class="ui-field">
+                    <span>Address line 1</span>
+                    <input formControlName="addressLine1" />
                     @if (addressForm.controls.addressLine1.hasError('required')) {
-                      <mat-error>Address line 1 is required.</mat-error>
+                      <span class="ui-field-error">Address line 1 is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Address line 2</mat-label>
-                    <input matInput formControlName="addressLine2" />
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Address line 2</span>
+                    <input formControlName="addressLine2" />
+                  </label>
 
                   <div class="form-grid">
-                    <mat-form-field appearance="outline">
-                      <mat-label>City</mat-label>
-                      <input matInput formControlName="city" />
+                    <label class="ui-field">
+                      <span>City</span>
+                      <input formControlName="city" />
                       @if (addressForm.controls.city.hasError('required')) {
-                        <mat-error>City is required.</mat-error>
+                        <span class="ui-field-error">City is required.</span>
                       }
-                    </mat-form-field>
+                    </label>
 
-                    <mat-form-field appearance="outline">
-                      <mat-label>Province</mat-label>
-                      <input matInput formControlName="province" />
+                    <label class="ui-field">
+                      <span>Province</span>
+                      <input formControlName="province" />
                       @if (addressForm.controls.province.hasError('required')) {
-                        <mat-error>Province is required.</mat-error>
+                        <span class="ui-field-error">Province is required.</span>
                       }
-                    </mat-form-field>
+                    </label>
                   </div>
 
                   <div class="form-grid">
-                    <mat-form-field appearance="outline">
-                      <mat-label>Postal code</mat-label>
-                      <input matInput formControlName="postalCode" />
+                    <label class="ui-field">
+                      <span>Postal code</span>
+                      <input formControlName="postalCode" />
                       @if (addressForm.controls.postalCode.hasError('required')) {
-                        <mat-error>Postal code is required.</mat-error>
+                        <span class="ui-field-error">Postal code is required.</span>
                       }
-                    </mat-form-field>
+                    </label>
 
-                    <mat-form-field appearance="outline">
-                      <mat-label>Country code</mat-label>
-                      <input matInput maxlength="2" formControlName="countryCode" />
+                    <label class="ui-field">
+                      <span>Country code</span>
+                      <input maxlength="2" formControlName="countryCode" />
                       @if (addressForm.controls.countryCode.hasError('required')) {
-                        <mat-error>Country code is required.</mat-error>
+                        <span class="ui-field-error">Country code is required.</span>
                       } @else if (addressForm.controls.countryCode.hasError('pattern')) {
-                        <mat-error>Use a 2-letter country code.</mat-error>
+                        <span class="ui-field-error">Use a 2-letter country code.</span>
                       }
-                    </mat-form-field>
+                    </label>
                   </div>
 
-                  <button mat-flat-button type="submit" [disabled]="isSaving()">Save and continue</button>
+                  <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Save and continue</button>
                   </form>
                 }
                 @case (3) {
                   <form [formGroup]="payoutForm" (ngSubmit)="savePayout()" class="wizard-form" novalidate>
                   <h2>Payout setup</h2>
                   <p>No bank details are stored here. Use a provider reference or setup token for now.</p>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Payout provider reference</mat-label>
-                    <input matInput formControlName="payoutProviderReference" />
+                  <label class="ui-field">
+                    <span>Payout provider reference</span>
+                    <input formControlName="payoutProviderReference" />
                     @if (payoutForm.controls.payoutProviderReference.hasError('required')) {
-                      <mat-error>Payout provider reference is required.</mat-error>
+                      <span class="ui-field-error">Payout provider reference is required.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <button mat-flat-button type="submit" [disabled]="isSaving()">Save and continue</button>
+                  <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Save and continue</button>
                   </form>
                 }
                 @case (4) {
@@ -503,7 +495,7 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
                   </div>
 
                   <button
-                    mat-flat-button
+                    data-ui-button="primary"
                     type="button"
                     [disabled]="!onboarding()?.canSubmitForVerification || isSaving()"
                     (click)="submitVerification()"
@@ -526,9 +518,9 @@ type WizardStep = 0 | 1 | 2 | 3 | 4;
               <p>{{ lockedStatusDescription() }}</p>
               <div class="auth-secondary">
                 @if (canPrepareDrafts()) {
-                  <a routerLink="/seller/products">Prepare drafts</a>
+                  <a routerLink="/products">Prepare drafts</a>
                 }
-                <a routerLink="/seller/support">Open seller support</a>
+                <a routerLink="/support">Open seller support</a>
                 <a routerLink="/sell">Review seller requirements</a>
               </div>
             </div>
@@ -588,56 +580,56 @@ export class SellerPageComponent implements OnInit {
       eyebrow: 'Catalog',
       heading: 'Products',
       description: 'Manage drafts, review submissions, images, variants, stock, and listing quality.',
-      route: '/seller/products',
+      route: '/products',
       action: 'Manage products'
     },
     {
       eyebrow: 'Stock',
       heading: 'Inventory',
       description: 'Adjust live variant stock, reserved-stock visibility, and sellable inventory status.',
-      route: '/seller/inventory',
+      route: '/inventory',
       action: 'Manage inventory'
     },
     {
       eyebrow: 'Fulfilment',
       heading: 'Orders',
       description: 'Review seller orders, add tracking, and move orders through manual fulfilment.',
-      route: '/seller/orders',
+      route: '/orders',
       action: 'View orders'
     },
     {
       eyebrow: 'After-sales',
       heading: 'Returns',
       description: 'Respond to return requests and keep buyer-facing return decisions clear.',
-      route: '/seller/returns',
+      route: '/returns',
       action: 'Review returns'
     },
     {
       eyebrow: 'Finance',
       heading: 'Payouts',
       description: 'Read seller balances and payout history without exposing admin finance controls.',
-      route: '/seller/payouts',
+      route: '/payouts',
       action: 'View payouts'
     },
     {
       eyebrow: 'Support',
       heading: 'Support',
       description: 'Create and follow seller support tickets linked to orders, products, or operations.',
-      route: '/seller/support',
+      route: '/support',
       action: 'Open support'
     },
     {
       eyebrow: 'Growth',
       heading: 'Ads and analytics',
       description: 'Access existing advertising and aggregate analytics tools after core operations.',
-      route: '/seller/analytics',
+      route: '/analytics',
       action: 'View analytics'
     },
     {
       eyebrow: 'Settings',
       heading: 'Store profile',
       description: 'Maintain storefront presentation and fulfilment address details after verification.',
-      route: '/seller/settings/store',
+      route: '/settings/store',
       action: 'Open settings'
     }
   ];
@@ -693,7 +685,7 @@ export class SellerPageComponent implements OnInit {
       return [
         {
           label: 'Sales 30d',
-          value: this.formatCurrency(summary.salesLast30Days),
+          value: this.renderCurrency(summary.salesLast30Days),
           badge: `${summary.ordersLast30Days} orders`,
           tone: 'success'
         },
@@ -759,25 +751,25 @@ export class SellerPageComponent implements OnInit {
           label: 'Orders',
           heading: 'Fulfil paid orders',
           description: 'Add tracking, mark shipped, and confirm delivery from the order workspace.',
-          route: '/seller/orders'
+          route: '/orders'
         },
         {
           label: 'Inventory',
           heading: 'Check low-stock variants',
           description: 'Keep published products sellable without reopening listing review.',
-          route: '/seller/inventory'
+          route: '/inventory'
         },
         {
           label: 'Returns',
           heading: 'Review buyer requests',
           description: 'Respond clearly so refunds and disputes do not drift.',
-          route: '/seller/returns'
+          route: '/returns'
         },
         {
           label: 'Support',
           heading: 'Keep tickets moving',
           description: 'Use support threads for operational issues and buyer follow-up.',
-          route: '/seller/support'
+          route: '/support'
         }
       ];
     }
@@ -787,31 +779,31 @@ export class SellerPageComponent implements OnInit {
         label: 'Orders',
         heading: `${summary.pendingFulfilmentOrders} orders need fulfilment`,
         description: `${summary.paidOrderCount} paid, ${summary.processingOrderCount} processing, ${summary.readyToShipOrderCount} ready to ship, ${summary.deliveryExceptionOrderCount} exceptions.`,
-        route: '/seller/orders'
+        route: '/orders'
       },
       {
         label: 'Inventory',
         heading: `${summary.lowStockProductCount} low-stock products`,
         description: `${summary.outOfStockVariantCount} variants are out of stock and ${summary.reservedStockCount} units are reserved.`,
-        route: '/seller/inventory'
+        route: '/inventory'
       },
       {
         label: 'Returns',
         heading: `${summary.returnsAwaitingSellerResponseCount} returns await response`,
         description: `${summary.openReturnCount} open returns and ${summary.activeDisputeCount} active disputes across the seller account.`,
-        route: '/seller/returns'
+        route: '/returns'
       },
       {
         label: 'Support',
         heading: `${summary.openSupportTicketCount} support tickets open`,
         description: 'Keep buyer and operational support threads moving from the support queue.',
-        route: '/seller/support'
+        route: '/support'
       },
       {
         label: 'Updates',
         heading: `${summary.unreadNotificationCount} unread seller updates`,
         description: `${summary.pendingAdReviewCount} ad campaigns are in review. Use updates to catch moderation and approval outcomes.`,
-        route: summary.unreadNotificationCount > 0 ? '/seller/notifications' : '/seller/ads'
+        route: summary.unreadNotificationCount > 0 ? '/notifications' : '/ads'
       }
     ];
   });
@@ -902,11 +894,11 @@ export class SellerPageComponent implements OnInit {
     }
 
     if (status === 'UnderReview' && review.submittedAtUtc) {
-      return `Submitted for review on ${this.formatDate(review.submittedAtUtc)}.`;
+      return `Submitted for review on ${this.renderDate(review.submittedAtUtc)}.`;
     }
 
     if ((status === 'Rejected' || status === 'Verified') && review.reviewedAtUtc) {
-      return `Reviewed on ${this.formatDate(review.reviewedAtUtc)}.`;
+      return `Reviewed on ${this.renderDate(review.reviewedAtUtc)}.`;
     }
 
     return null;
@@ -1034,7 +1026,7 @@ export class SellerPageComponent implements OnInit {
       'Seller profile submitted for verification.');
   }
 
-  protected formatCurrency(amount: number): string {
+  protected renderCurrency(amount: number): string {
     return new Intl.NumberFormat('en-ZA', {
       style: 'currency',
       currency: 'ZAR',
@@ -1042,7 +1034,7 @@ export class SellerPageComponent implements OnInit {
     }).format(amount);
   }
 
-  protected formatDate(value: string): string {
+  protected renderDate(value: string): string {
     return new Intl.DateTimeFormat('en-ZA', {
       day: '2-digit',
       month: 'short',
@@ -1051,7 +1043,7 @@ export class SellerPageComponent implements OnInit {
     }).format(new Date(value));
   }
 
-  protected formatFileSize(bytes: number): string {
+  protected renderFileSize(bytes: number): string {
     if (bytes < 1024) {
       return `${bytes} B`;
     }

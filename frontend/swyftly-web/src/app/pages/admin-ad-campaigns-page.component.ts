@@ -2,11 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { AdminAdCampaignOperationalSummaryResponse } from '../admin/admin-ad-campaign.models';
 import { AdminAdCampaignService } from '../admin/admin-ad-campaign.service';
 import { AdminModerationQueueService } from '../admin/admin-moderation-queue.service';
@@ -31,11 +26,6 @@ import { WorkspaceShellComponent } from '../shared/ui/workspace-shell.component'
     CurrencyPipe,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatCheckboxModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     MetricTileComponent,
     PageHeaderComponent,
     ReactiveFormsModule,
@@ -55,8 +45,8 @@ import { WorkspaceShellComponent } from '../shared/ui/workspace-shell.component'
           description="Review pending campaigns and inspect active, paused, rejected, completed, or cancelled seller ads from one console."
         >
           <div pageHeaderActions>
-            <a mat-stroked-button routerLink="/admin/products">Product queue</a>
-            <a mat-stroked-button routerLink="/admin/reports">Reports</a>
+            <a data-ui-button="secondary" routerLink="/products">Product queue</a>
+            <a data-ui-button="secondary" routerLink="/reports">Reports</a>
           </div>
         </app-page-header>
 
@@ -80,93 +70,93 @@ import { WorkspaceShellComponent } from '../shared/ui/workspace-shell.component'
         }
 
         <div class="admin-audit-actions">
-          <button mat-flat-button type="button" [disabled]="view() === 'NeedsAttention'" (click)="setView('NeedsAttention')">Needs attention</button>
-          <button mat-stroked-button type="button" [disabled]="view() === 'All'" (click)="setView('All')">All campaigns</button>
+          <button data-ui-button="primary" type="button" [disabled]="view() === 'NeedsAttention'" (click)="setView('NeedsAttention')">Needs attention</button>
+          <button data-ui-button="secondary" type="button" [disabled]="view() === 'All'" (click)="setView('All')">All campaigns</button>
         </div>
 
         <form [formGroup]="filtersForm" (ngSubmit)="applyFilters()" class="route-card admin-moderation-filters" novalidate>
-          <mat-form-field appearance="outline">
-            <mat-label>Search campaigns</mat-label>
-            <input matInput formControlName="search" />
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Search campaigns</span>
+            <input formControlName="search" />
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Status</mat-label>
-            <input matInput formControlName="status" placeholder="PendingReview, Active, Rejected" />
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Status</span>
+            <input formControlName="status" placeholder="PendingReview, Active, Rejected" />
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Seller ID</mat-label>
-            <input matInput formControlName="sellerId" />
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Seller ID</span>
+            <input formControlName="sellerId" />
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Assignment</mat-label>
-            <mat-select formControlName="assigned">
-              <mat-option value="Any">Any</mat-option>
-              <mat-option value="Mine">Mine</mat-option>
-              <mat-option value="Unassigned">Unassigned</mat-option>
-            </mat-select>
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Assignment</span>
+            <select formControlName="assigned">
+              <option value="Any">Any</option>
+              <option value="Mine">Mine</option>
+              <option value="Unassigned">Unassigned</option>
+            </select>
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Priority</mat-label>
-            <mat-select formControlName="priority">
-              <mat-option value="">Any</mat-option>
-              <mat-option value="Normal">Normal</mat-option>
-              <mat-option value="High">High</mat-option>
-              <mat-option value="Urgent">Urgent</mat-option>
-            </mat-select>
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Priority</span>
+            <select formControlName="priority">
+              <option value="">Any</option>
+              <option value="Normal">Normal</option>
+              <option value="High">High</option>
+              <option value="Urgent">Urgent</option>
+            </select>
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>SLA</mat-label>
-            <mat-select formControlName="sla">
-              <mat-option value="">Any</mat-option>
-              <mat-option value="OnTrack">On track</mat-option>
-              <mat-option value="DueSoon">Due soon</mat-option>
-              <mat-option value="Overdue">Overdue</mat-option>
-            </mat-select>
-          </mat-form-field>
+          <label class="ui-field">
+            <span>SLA</span>
+            <select formControlName="sla">
+              <option value="">Any</option>
+              <option value="OnTrack">On track</option>
+              <option value="DueSoon">Due soon</option>
+              <option value="Overdue">Overdue</option>
+            </select>
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Notes</mat-label>
-            <mat-select formControlName="hasNotes">
-              <mat-option value="">Any</mat-option>
-              <mat-option value="true">Has notes</mat-option>
-              <mat-option value="false">No notes</mat-option>
-            </mat-select>
-          </mat-form-field>
+          <label class="ui-field">
+            <span>Notes</span>
+            <select formControlName="hasNotes">
+              <option value="">Any</option>
+              <option value="true">Has notes</option>
+              <option value="false">No notes</option>
+            </select>
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Saved view</mat-label>
-            <mat-select formControlName="savedViewId" (selectionChange)="applySavedView($event.value)">
-              <mat-option value="">Manual filters</mat-option>
+          <label class="ui-field">
+            <span>Saved view</span>
+            <select formControlName="savedViewId" (change)="applySavedView($any($event.target).value)">
+              <option value="">Manual filters</option>
               @for (view of savedViews(); track view.viewId) {
-                <mat-option [value]="view.viewId">{{ view.name }}{{ view.isDefault ? ' / default' : '' }}</mat-option>
+                <option [value]="view.viewId">{{ view.name }}{{ view.isDefault ? ' / default' : '' }}</option>
               }
-            </mat-select>
-          </mat-form-field>
+            </select>
+          </label>
 
-          <mat-form-field appearance="outline">
-            <mat-label>View name</mat-label>
-            <input matInput formControlName="savedViewName" />
-          </mat-form-field>
+          <label class="ui-field">
+            <span>View name</span>
+            <input formControlName="savedViewName" />
+          </label>
 
           <div class="admin-audit-actions">
-            <button mat-flat-button type="submit">Apply filters</button>
-            <button mat-stroked-button type="button" (click)="clearFilters()">Clear</button>
-            <button mat-stroked-button type="button" [disabled]="isSavingView()" (click)="saveView()">Save view</button>
-            <button mat-stroked-button type="button" [disabled]="!filtersForm.controls.savedViewId.value || isSavingView()" (click)="updateView()">Update view</button>
-            <button mat-stroked-button type="button" [disabled]="!filtersForm.controls.savedViewId.value || isSavingView()" (click)="makeDefaultView()">Make default</button>
-            <button mat-stroked-button type="button" [disabled]="!filtersForm.controls.savedViewId.value || isSavingView()" (click)="deleteView()">Delete view</button>
+            <button data-ui-button="primary" type="submit">Apply filters</button>
+            <button data-ui-button="secondary" type="button" (click)="clearFilters()">Clear</button>
+            <button data-ui-button="secondary" type="button" [disabled]="isSavingView()" (click)="saveView()">Save view</button>
+            <button data-ui-button="secondary" type="button" [disabled]="!filtersForm.controls.savedViewId.value || isSavingView()" (click)="updateView()">Update view</button>
+            <button data-ui-button="secondary" type="button" [disabled]="!filtersForm.controls.savedViewId.value || isSavingView()" (click)="makeDefaultView()">Make default</button>
+            <button data-ui-button="secondary" type="button" [disabled]="!filtersForm.controls.savedViewId.value || isSavingView()" (click)="deleteView()">Delete view</button>
           </div>
         </form>
 
         @if (statusCounts().length > 0) {
           <div class="admin-audit-actions">
             @for (count of statusCounts(); track count.status) {
-              <button mat-stroked-button type="button" (click)="filterByStatus(count.status)">
+              <button data-ui-button="secondary" type="button" (click)="filterByStatus(count.status)">
                 {{ count.status }} ({{ count.count }})
               </button>
             }
@@ -198,8 +188,8 @@ import { WorkspaceShellComponent } from '../shared/ui/workspace-shell.component'
                 </div>
 
                 <div class="admin-audit-actions">
-                  <button mat-stroked-button type="button" [disabled]="selectedQueueItemIds().length === 0 || isBulkSaving()" (click)="bulkClaim()">Claim selected</button>
-                  <button mat-stroked-button type="button" [disabled]="selectedQueueItemIds().length === 0 || isBulkSaving()" (click)="bulkPriority('High')">Mark high</button>
+                  <button data-ui-button="secondary" type="button" [disabled]="selectedQueueItemIds().length === 0 || isBulkSaving()" (click)="bulkClaim()">Claim selected</button>
+                  <button data-ui-button="secondary" type="button" [disabled]="selectedQueueItemIds().length === 0 || isBulkSaving()" (click)="bulkPriority('High')">Mark high</button>
                   <span class="audit-count">{{ selectedQueueItemIds().length }} selected</span>
                 </div>
 
@@ -220,11 +210,10 @@ import { WorkspaceShellComponent } from '../shared/ui/workspace-shell.component'
                       (click)="selectCampaign(campaign)"
                     >
                       <span role="cell">
-                        <mat-checkbox
-                          [checked]="isQueueItemSelected(campaign.adCampaignId)"
+                        <label class="ui-checkbox"><input type="checkbox" [checked]="isQueueItemSelected(campaign.adCampaignId)"
                           (click)="$event.stopPropagation()"
-                          (change)="toggleQueueItem(campaign.adCampaignId, $event.checked)"
-                        />
+                          (change)="toggleQueueItem(campaign.adCampaignId, $any($event.target).checked)"
+                         /><span class="sr-only">Select item</span></label>
                         <strong>{{ campaign.name }}</strong>
                         <small>{{ campaign.campaignType }} / {{ campaign.productCount }} product{{ campaign.productCount === 1 ? '' : 's' }}</small>
                       </span>
@@ -250,16 +239,16 @@ import { WorkspaceShellComponent } from '../shared/ui/workspace-shell.component'
                         <small>Updated {{ campaign.updatedAtUtc | date:'short' }}</small>
                       </span>
                       <span role="cell">
-                        <a mat-stroked-button [routerLink]="campaign.detailRoute" (click)="$event.stopPropagation()">Review</a>
+                        <a data-ui-button="secondary" [routerLink]="campaign.detailRoute" (click)="$event.stopPropagation()">Review</a>
                       </span>
                     </div>
                   }
                 </div>
 
                 <div class="admin-audit-actions">
-                  <button mat-stroked-button type="button" [disabled]="page() <= 1 || isLoading()" (click)="previousPage()">Previous</button>
+                  <button data-ui-button="secondary" type="button" [disabled]="page() <= 1 || isLoading()" (click)="previousPage()">Previous</button>
                   <span class="audit-count">Page {{ page() }} / {{ totalPages() }}</span>
-                  <button mat-stroked-button type="button" [disabled]="page() >= totalPages() || isLoading()" (click)="nextPage()">Next</button>
+                  <button data-ui-button="secondary" type="button" [disabled]="page() >= totalPages() || isLoading()" (click)="nextPage()">Next</button>
                 </div>
               </div>
 
@@ -293,8 +282,8 @@ import { WorkspaceShellComponent } from '../shared/ui/workspace-shell.component'
                   </div>
 
                   <div class="hf-admin-action-strip">
-                    <a mat-flat-button [routerLink]="selectedCampaign()!.detailRoute">Open review</a>
-                    <a mat-stroked-button routerLink="/admin/audit-logs">Audit trail</a>
+                    <a data-ui-button="primary" [routerLink]="selectedCampaign()!.detailRoute">Open review</a>
+                    <a data-ui-button="secondary" routerLink="/audit-logs">Audit trail</a>
                   </div>
 
                   <app-admin-queue-triage-panel

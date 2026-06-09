@@ -2,9 +2,6 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminReviewService } from '../admin/admin-review.service';
 import { AdminProductReviewDetailResponse } from '../admin/admin-review.models';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
@@ -23,9 +20,6 @@ import { WorkspaceShellComponent } from '../shared/ui/workspace-shell.component'
     AdminWorkspaceNavComponent,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     MetricTileComponent,
     PageHeaderComponent,
     ProductVisualFallbackComponent,
@@ -46,8 +40,8 @@ import { WorkspaceShellComponent } from '../shared/ui/workspace-shell.component'
           description="Moderate verified-purchase reviews before they become visible on product pages."
         >
           <div pageHeaderActions>
-            <a mat-stroked-button routerLink="/admin/products">Product queue</a>
-            <a mat-stroked-button routerLink="/admin/audit-logs">Audit logs</a>
+            <a data-ui-button="secondary" routerLink="/products">Product queue</a>
+            <a data-ui-button="secondary" routerLink="/audit-logs">Audit logs</a>
           </div>
         </app-page-header>
 
@@ -63,19 +57,19 @@ import { WorkspaceShellComponent } from '../shared/ui/workspace-shell.component'
         </div>
 
       <form [formGroup]="filtersForm" (ngSubmit)="applyFilters()" class="route-card admin-moderation-filters" novalidate>
-        <mat-form-field appearance="outline">
-          <mat-label>Search reviews</mat-label>
-          <input matInput formControlName="search" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Search reviews</span>
+          <input formControlName="search" />
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Status</mat-label>
-          <input matInput formControlName="status" placeholder="PendingReview" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Status</span>
+          <input formControlName="status" placeholder="PendingReview" />
+        </label>
 
         <div class="admin-audit-actions">
-          <button mat-flat-button type="submit">Apply filters</button>
-          <button mat-stroked-button type="button" (click)="clearFilters()">Clear</button>
+          <button data-ui-button="primary" type="submit">Apply filters</button>
+          <button data-ui-button="secondary" type="button" (click)="clearFilters()">Clear</button>
         </div>
       </form>
 
@@ -140,7 +134,7 @@ import { WorkspaceShellComponent } from '../shared/ui/workspace-shell.component'
                     <app-status-badge [label]="review.status" [tone]="reviewTone(review.status)" />
                   </span>
                   <span role="cell">
-                    <button mat-stroked-button type="button" (click)="selectReview(review); $event.stopPropagation()">Review</button>
+                    <button data-ui-button="secondary" type="button" (click)="selectReview(review); $event.stopPropagation()">Review</button>
                   </span>
                 </div>
               }
@@ -205,15 +199,15 @@ import { WorkspaceShellComponent } from '../shared/ui/workspace-shell.component'
                 </div>
 
                 <form [formGroup]="reasonForm" class="buyer-form-grid" novalidate>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Moderation reason</mat-label>
-                    <textarea matInput rows="3" formControlName="reason"></textarea>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Moderation reason</span>
+                    <textarea rows="3" formControlName="reason"></textarea>
+                  </label>
 
                   <div class="buyer-action-row">
-                    <button mat-flat-button type="button" [disabled]="isSaving()" (click)="approveSelected()">Approve</button>
-                    <button mat-stroked-button type="button" [disabled]="isSaving() || reasonForm.invalid" (click)="rejectSelected()">Reject</button>
-                    <button mat-stroked-button type="button" [disabled]="isSaving() || reasonForm.invalid" (click)="removeSelected()">Remove</button>
+                    <button data-ui-button="primary" type="button" [disabled]="isSaving()" (click)="approveSelected()">Approve</button>
+                    <button data-ui-button="secondary" type="button" [disabled]="isSaving() || reasonForm.invalid" (click)="rejectSelected()">Reject</button>
+                    <button data-ui-button="secondary" type="button" [disabled]="isSaving() || reasonForm.invalid" (click)="removeSelected()">Remove</button>
                   </div>
                 </form>
               </article>

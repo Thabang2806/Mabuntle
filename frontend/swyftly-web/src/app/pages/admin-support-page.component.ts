@@ -2,10 +2,6 @@ import { DOCUMENT, DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { AdminQueueSavedViewResponse } from '../admin/admin-moderation-queue.models';
 import {
   AdminSupportQualityBreakdownResponse,
@@ -27,10 +23,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     AdminWorkspaceNavComponent,
     PageHeaderComponent,
     ReactiveFormsModule,
@@ -42,7 +34,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     <section class="page admin-support-page">
       <app-admin-workspace-nav />
 
-      <a class="admin-back-link" routerLink="/admin">Back to dashboard</a>
+      <a class="admin-back-link" routerLink="">Back to dashboard</a>
 
       <app-page-header
         eyebrow="Support operations"
@@ -50,73 +42,73 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Review buyer and seller tickets, triage status, and open case detail for public replies or internal notes."
       >
         <div pageHeaderActions>
-          <a mat-stroked-button routerLink="/admin/audit-logs">Audit logs</a>
-          <a mat-stroked-button routerLink="/admin/disputes">Disputes</a>
+          <a data-ui-button="secondary" routerLink="/audit-logs">Audit logs</a>
+          <a data-ui-button="secondary" routerLink="/disputes">Disputes</a>
         </div>
       </app-page-header>
 
       <form [formGroup]="filtersForm" (ngSubmit)="applyFilters()" class="route-card admin-support-filters" novalidate>
-        <mat-form-field appearance="outline">
-          <mat-label>Saved view</mat-label>
-          <mat-select formControlName="savedViewId" (selectionChange)="applySavedView($event.value)">
-            <mat-option value="">Current filters</mat-option>
+        <label class="ui-field">
+          <span>Saved view</span>
+          <select formControlName="savedViewId" (change)="applySavedView($any($event.target).value)">
+            <option value="">Current filters</option>
             @for (view of savedViews(); track view.viewId) {
-              <mat-option [value]="view.viewId">{{ view.name }}{{ view.isDefault ? ' (default)' : '' }}</mat-option>
+              <option [value]="view.viewId">{{ view.name }}{{ view.isDefault ? ' (default)' : '' }}</option>
             }
-          </mat-select>
-        </mat-form-field>
+          </select>
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>View name</mat-label>
-          <input matInput formControlName="savedViewName" placeholder="Overdue checkout tickets" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>View name</span>
+          <input formControlName="savedViewName" placeholder="Overdue checkout tickets" />
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Queue view</mat-label>
-          <mat-select formControlName="view">
-            <mat-option value="NeedsAttention">Needs attention</mat-option>
-            <mat-option value="All">All tickets</mat-option>
-          </mat-select>
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Queue view</span>
+          <select formControlName="view">
+            <option value="NeedsAttention">Needs attention</option>
+            <option value="All">All tickets</option>
+          </select>
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Search</mat-label>
-          <input matInput formControlName="search" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Search</span>
+          <input formControlName="search" />
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Status</mat-label>
-          <input matInput formControlName="status" placeholder="Open, Escalated, Resolved" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Status</span>
+          <input formControlName="status" placeholder="Open, Escalated, Resolved" />
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Category</mat-label>
-          <input matInput formControlName="category" placeholder="OrderIssue, SellerIssue" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Category</span>
+          <input formControlName="category" placeholder="OrderIssue, SellerIssue" />
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Assigned</mat-label>
-          <input matInput formControlName="assigned" placeholder="Any, Mine, Unassigned" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Assigned</span>
+          <input formControlName="assigned" placeholder="Any, Mine, Unassigned" />
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Priority</mat-label>
-          <input matInput formControlName="priority" placeholder="Normal, High, Urgent" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>Priority</span>
+          <input formControlName="priority" placeholder="Normal, High, Urgent" />
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>SLA</mat-label>
-          <input matInput formControlName="sla" placeholder="OnTrack, DueSoon, Overdue" />
-        </mat-form-field>
+        <label class="ui-field">
+          <span>SLA</span>
+          <input formControlName="sla" placeholder="OnTrack, DueSoon, Overdue" />
+        </label>
 
         <div class="admin-audit-actions">
-          <button mat-flat-button type="submit">Apply filters</button>
-          <button mat-stroked-button type="button" (click)="clearFilters()">Clear</button>
-          <button mat-stroked-button type="button" [disabled]="isSavingView()" (click)="saveView(false)">Save view</button>
-          <button mat-stroked-button type="button" [disabled]="!filtersForm.controls.savedViewId.value || isSavingView()" (click)="saveView(true)">Update view</button>
-          <button mat-stroked-button type="button" [disabled]="!filtersForm.controls.savedViewId.value || isSavingView()" (click)="makeDefaultView()">Make default</button>
-          <button mat-stroked-button type="button" [disabled]="!filtersForm.controls.savedViewId.value || isSavingView()" (click)="deleteView()">Delete view</button>
-          <button mat-stroked-button type="button" [disabled]="isExporting()" (click)="exportQueue()">Export CSV</button>
+          <button data-ui-button="primary" type="submit">Apply filters</button>
+          <button data-ui-button="secondary" type="button" (click)="clearFilters()">Clear</button>
+          <button data-ui-button="secondary" type="button" [disabled]="isSavingView()" (click)="saveView(false)">Save view</button>
+          <button data-ui-button="secondary" type="button" [disabled]="!filtersForm.controls.savedViewId.value || isSavingView()" (click)="saveView(true)">Update view</button>
+          <button data-ui-button="secondary" type="button" [disabled]="!filtersForm.controls.savedViewId.value || isSavingView()" (click)="makeDefaultView()">Make default</button>
+          <button data-ui-button="secondary" type="button" [disabled]="!filtersForm.controls.savedViewId.value || isSavingView()" (click)="deleteView()">Delete view</button>
+          <button data-ui-button="secondary" type="button" [disabled]="isExporting()" (click)="exportQueue()">Export CSV</button>
         </div>
       </form>
 
@@ -154,12 +146,12 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
           </article>
           <article class="admin-metric-card">
             <span>First response</span>
-            <strong>{{ formatHours(summary()!.averageFirstResponseHours) }}</strong>
+            <strong>{{ renderHours(summary()!.averageFirstResponseHours) }}</strong>
             <small>Average public support response.</small>
           </article>
           <article class="admin-metric-card">
             <span>Resolution time</span>
-            <strong>{{ formatHours(summary()!.averageResolutionHours) }}</strong>
+            <strong>{{ renderHours(summary()!.averageResolutionHours) }}</strong>
             <small>Average time to resolve.</small>
           </article>
         </div>
@@ -172,51 +164,51 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             <h2 id="support-quality-heading">SLA outcome reporting</h2>
             <p>Read-only support performance context. Targets do not automate escalation, assignment, refunds, or ticket closure.</p>
           </div>
-          <button mat-stroked-button type="button" [disabled]="isExportingQuality()" (click)="exportQualityReport()">Export quality CSV</button>
+          <button data-ui-button="secondary" type="button" [disabled]="isExportingQuality()" (click)="exportQualityReport()">Export quality CSV</button>
         </div>
 
         <form [formGroup]="qualityForm" (ngSubmit)="applyQualityFilters()" class="admin-support-filters" novalidate>
-          <mat-form-field appearance="outline">
-            <mat-label>From UTC</mat-label>
-            <input matInput formControlName="fromUtc" placeholder="2026-05-01T00:00:00Z" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>To UTC</mat-label>
-            <input matInput formControlName="toUtc" placeholder="2026-05-31T23:59:59Z" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Bucket</mat-label>
-            <mat-select formControlName="bucket">
-              <mat-option value="Day">Day</mat-option>
-              <mat-option value="Week">Week</mat-option>
-            </mat-select>
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Category</mat-label>
-            <input matInput formControlName="category" placeholder="OrderIssue" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Priority</mat-label>
-            <input matInput formControlName="priority" placeholder="High" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Assignee ID</mat-label>
-            <input matInput formControlName="assignedSupportUserId" />
-          </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>Requester role</mat-label>
-            <mat-select formControlName="createdByRole">
-              <mat-option value="">Any</mat-option>
-              <mat-option value="Buyer">Buyer</mat-option>
-              <mat-option value="Seller">Seller</mat-option>
-              <mat-option value="SupportAgent">Support agent</mat-option>
-              <mat-option value="Admin">Admin</mat-option>
-              <mat-option value="SuperAdmin">Super admin</mat-option>
-            </mat-select>
-          </mat-form-field>
+          <label class="ui-field">
+            <span>From UTC</span>
+            <input formControlName="fromUtc" placeholder="2026-05-01T00:00:00Z" />
+          </label>
+          <label class="ui-field">
+            <span>To UTC</span>
+            <input formControlName="toUtc" placeholder="2026-05-31T23:59:59Z" />
+          </label>
+          <label class="ui-field">
+            <span>Bucket</span>
+            <select formControlName="bucket">
+              <option value="Day">Day</option>
+              <option value="Week">Week</option>
+            </select>
+          </label>
+          <label class="ui-field">
+            <span>Category</span>
+            <input formControlName="category" placeholder="OrderIssue" />
+          </label>
+          <label class="ui-field">
+            <span>Priority</span>
+            <input formControlName="priority" placeholder="High" />
+          </label>
+          <label class="ui-field">
+            <span>Assignee ID</span>
+            <input formControlName="assignedSupportUserId" />
+          </label>
+          <label class="ui-field">
+            <span>Requester role</span>
+            <select formControlName="createdByRole">
+              <option value="">Any</option>
+              <option value="Buyer">Buyer</option>
+              <option value="Seller">Seller</option>
+              <option value="SupportAgent">Support agent</option>
+              <option value="Admin">Admin</option>
+              <option value="SuperAdmin">Super admin</option>
+            </select>
+          </label>
           <div class="admin-audit-actions">
-            <button mat-flat-button type="submit">Apply quality filters</button>
-            <button mat-stroked-button type="button" (click)="clearQualityFilters()">Clear quality filters</button>
+            <button data-ui-button="primary" type="submit">Apply quality filters</button>
+            <button data-ui-button="secondary" type="button" (click)="clearQualityFilters()">Clear quality filters</button>
           </div>
         </form>
 
@@ -231,12 +223,12 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             </article>
             <article class="admin-metric-card">
               <span>First response</span>
-              <strong>{{ formatHours(qualityReport()!.summary.averageFirstResponseHours) }}</strong>
+              <strong>{{ renderHours(qualityReport()!.summary.averageFirstResponseHours) }}</strong>
               <small>{{ qualityReport()!.summary.firstResponseTargetMissedCount }} missed target.</small>
             </article>
             <article class="admin-metric-card">
               <span>Resolution</span>
-              <strong>{{ formatHours(qualityReport()!.summary.averageResolutionHours) }}</strong>
+              <strong>{{ renderHours(qualityReport()!.summary.averageResolutionHours) }}</strong>
               <small>{{ qualityReport()!.summary.resolutionTargetMissedCount }} missed target.</small>
             </article>
             <article class="admin-metric-card">
@@ -275,7 +267,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                     <div class="admin-table-row" role="row">
                       <span role="cell"><strong>{{ row.assignedSupportDisplayName ?? row.assignedSupportUserId }}</strong></span>
                       <span role="cell">{{ row.createdCount }} created</span>
-                      <span role="cell">{{ formatHours(row.averageFirstResponseHours) }} first response</span>
+                      <span role="cell">{{ renderHours(row.averageFirstResponseHours) }} first response</span>
                       <span role="cell">{{ row.resolutionTargetMissedCount }} resolution misses</span>
                     </div>
                   }
@@ -345,8 +337,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   <small>{{ ticket.ageHours }}h old</small>
                 </span>
                 <span role="cell">
-                  <button mat-stroked-button type="button" [disabled]="isSaving() === ticket.supportTicketId" (click)="claimTicket(ticket.supportTicketId)">Claim</button>
-                  <a mat-stroked-button [routerLink]="['/admin/support', ticket.supportTicketId]">Open</a>
+                  <button data-ui-button="secondary" type="button" [disabled]="isSaving() === ticket.supportTicketId" (click)="claimTicket(ticket.supportTicketId)">Claim</button>
+                  <a data-ui-button="secondary" [routerLink]="['/support', ticket.supportTicketId]">Open</a>
                 </span>
               </div>
             }
@@ -615,7 +607,7 @@ export class AdminSupportPageComponent implements OnInit {
     return 'success';
   }
 
-  protected formatHours(value: number | null): string {
+  protected renderHours(value: number | null): string {
     return value === null || value === undefined ? 'n/a' : `${value.toFixed(1)}h`;
   }
 

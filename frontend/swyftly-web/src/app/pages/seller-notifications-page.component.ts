@@ -1,7 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { getApiErrorMessage } from '../auth/api-error';
 import { SellerNotificationResponse } from '../seller/seller-notification.models';
 import { SellerNotificationRealtimeService } from '../seller/seller-notification-realtime.service';
@@ -17,7 +16,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
     PageHeaderComponent,
     RouterLink,
     SellerWorkspaceNavComponent,
@@ -34,7 +32,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Review marketplace decisions about verification, listings, revisions, and ad campaigns."
       >
         <div pageHeaderActions>
-          <button mat-stroked-button type="button" [disabled]="unreadCount() === 0 || isSaving()" (click)="markAllRead()">
+          <button data-ui-button="secondary" type="button" [disabled]="unreadCount() === 0 || isSaving()" (click)="markAllRead()">
             Mark all read
           </button>
         </div>
@@ -62,7 +60,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="No seller updates yet"
             message="Verification, product review, listing revision, and ad campaign decisions will appear here."
           >
-            <a mat-flat-button routerLink="/seller">Back to seller dashboard</a>
+            <a data-ui-button="primary" routerLink="">Back to seller dashboard</a>
           </app-empty-state>
         } @else {
           <div class="buyer-notification-list">
@@ -83,11 +81,11 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
                 <div class="seller-notification-actions">
                   @if (notificationLink(notification)) {
-                    <a mat-stroked-button [routerLink]="notificationLink(notification)">Open</a>
+                    <a data-ui-button="secondary" [routerLink]="notificationLink(notification)">Open</a>
                   }
                   @if (!notification.readAtUtc) {
                     <button
-                      mat-stroked-button
+                      data-ui-button="secondary"
                       type="button"
                       [disabled]="savingNotificationId() === notification.notificationId"
                       (click)="markRead(notification)"
@@ -204,19 +202,19 @@ export class SellerNotificationsPageComponent implements OnInit {
 
   protected notificationLink(notification: SellerNotificationResponse): string | null {
     if (notification.relatedEntityType === 'Product' && notification.relatedEntityId) {
-      return `/seller/products/${notification.relatedEntityId}/edit`;
+      return `/products/${notification.relatedEntityId}/edit`;
     }
 
     if (notification.relatedEntityType === 'AdCampaign' && notification.relatedEntityId) {
-      return `/seller/ads/${notification.relatedEntityId}`;
+      return `/ads/${notification.relatedEntityId}`;
     }
 
     if (notification.relatedEntityType === 'SellerProfile') {
-      return '/seller';
+      return '';
     }
 
     if (notification.relatedEntityType === 'SellerAnalytics') {
-      return '/seller/analytics';
+      return '/analytics';
     }
 
     return null;

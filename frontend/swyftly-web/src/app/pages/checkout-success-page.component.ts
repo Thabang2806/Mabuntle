@@ -1,7 +1,6 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, NgZone, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerOrderResult } from '../buyer/buyer-order.models';
 import { BuyerOrderService } from '../buyer/buyer-order.service';
@@ -12,7 +11,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
 @Component({
   selector: 'app-checkout-success-page',
-  imports: [CurrencyPipe, DatePipe, LuxuryPublicStylesComponent, MatButtonModule, RouterLink, StatusBadgeComponent, UiAlertComponent],
+  imports: [CurrencyPipe, DatePipe, LuxuryPublicStylesComponent, RouterLink, StatusBadgeComponent, UiAlertComponent],
   template: `
     <app-luxury-public-styles />
     <section class="page checkout-result-page">
@@ -78,14 +77,14 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             @if (canRetryPayment()) {
               <app-ui-alert tone="info">Payment is still pending. You can retry the provider checkout for this order.</app-ui-alert>
               <div class="checkout-result-action-row">
-                <button mat-flat-button type="button" [disabled]="isRetrying()" (click)="retryPayment()">
+                <button data-ui-button="primary" type="button" [disabled]="isRetrying()" (click)="retryPayment()">
                   {{ isRetrying() ? 'Opening payment...' : 'Retry payment' }}
                 </button>
               </div>
             }
 
             <div class="checkout-result-action-row">
-              <button mat-stroked-button type="button" [disabled]="isRefreshing()" (click)="refreshOrder()">
+              <button data-ui-button="secondary" type="button" [disabled]="isRefreshing()" (click)="refreshOrder()">
                 {{ isRefreshing() ? 'Refreshing...' : 'Refresh payment status' }}
               </button>
               @if (lastCheckedAt()) {
@@ -101,8 +100,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         }
 
         <div class="auth-actions checkout-result-actions">
-          <a mat-flat-button [routerLink]="order() ? ['/account/orders', order()!.orderId] : ['/account/orders']">View order</a>
-          <a mat-stroked-button routerLink="/shop">Continue shopping</a>
+          <a data-ui-button="primary" [routerLink]="order() ? ['/account/orders', order()!.orderId] : ['/account/orders']">View order</a>
+          <a data-ui-button="secondary" routerLink="/shop">Continue shopping</a>
         </div>
       </div>
     </section>

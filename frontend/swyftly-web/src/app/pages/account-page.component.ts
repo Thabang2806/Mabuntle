@@ -1,7 +1,6 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { BuyerNotificationResponse, BuyerProductReviewResponse, BuyerWishlistItemResponse } from '../buyer/buyer-engagement.models';
 import { BuyerEngagementService } from '../buyer/buyer-engagement.service';
 import { BuyerDisputeResponse } from '../buyer/buyer-dispute.models';
@@ -30,7 +29,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     DashboardCardComponent,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
     PageHeaderComponent,
     RouterLink,
     StatusBadgeComponent,
@@ -46,8 +44,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Track purchases, returns, disputes, and marketplace support from one workspace."
       >
         <div pageHeaderActions>
-          <a mat-stroked-button routerLink="/shop">Continue shopping</a>
-          <a mat-stroked-button routerLink="/cart">Cart</a>
+          <a data-ui-button="secondary" routerLink="/shop">Continue shopping</a>
+          <a data-ui-button="secondary" routerLink="/cart">Cart</a>
         </div>
       </app-page-header>
 
@@ -64,7 +62,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="Orders"
             [description]="orders().length + ' order' + (orders().length === 1 ? '' : 's') + ' in your account.'"
           >
-            <a mat-stroked-button routerLink="/account/orders">View orders</a>
+            <a data-ui-button="secondary" routerLink="/account/orders">View orders</a>
           </app-dashboard-card>
 
           <app-dashboard-card
@@ -72,7 +70,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="Returns"
             [description]="activeReturns().length + ' active return' + (activeReturns().length === 1 ? '' : 's') + ' need attention.'"
           >
-            <a mat-stroked-button routerLink="/account/returns">View returns</a>
+            <a data-ui-button="secondary" routerLink="/account/returns">View returns</a>
           </app-dashboard-card>
 
           <app-dashboard-card
@@ -80,7 +78,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="Refunds"
             [description]="activeRefunds().length + ' refund' + (activeRefunds().length === 1 ? '' : 's') + ' in progress or needing attention.'"
           >
-            <a mat-stroked-button routerLink="/account/refunds">View refunds</a>
+            <a data-ui-button="secondary" routerLink="/account/refunds">View refunds</a>
           </app-dashboard-card>
 
           <app-dashboard-card
@@ -88,7 +86,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="Disputes"
             [description]="openDisputes().length + ' open dispute' + (openDisputes().length === 1 ? '' : 's') + ' on record.'"
           >
-            <a mat-stroked-button routerLink="/account/disputes">View disputes</a>
+            <a data-ui-button="secondary" routerLink="/account/disputes">View disputes</a>
           </app-dashboard-card>
 
           <app-dashboard-card
@@ -96,7 +94,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="Support"
             [description]="openTickets().length + ' open support ticket' + (openTickets().length === 1 ? '' : 's') + '.'"
           >
-            <a mat-stroked-button routerLink="/account/support">Open support</a>
+            <a data-ui-button="secondary" routerLink="/account/support">Open support</a>
           </app-dashboard-card>
 
           <app-dashboard-card
@@ -104,7 +102,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="Wishlist"
             [description]="wishlist().length + ' saved product' + (wishlist().length === 1 ? '' : 's') + ' in your account.'"
           >
-            <a mat-stroked-button routerLink="/account/wishlist">View wishlist</a>
+            <a data-ui-button="secondary" routerLink="/account/wishlist">View wishlist</a>
           </app-dashboard-card>
 
           <app-dashboard-card
@@ -112,7 +110,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="Reviews"
             [description]="reviews().length + ' product review' + (reviews().length === 1 ? '' : 's') + ' written.'"
           >
-            <a mat-stroked-button routerLink="/account/reviews">Manage reviews</a>
+            <a data-ui-button="secondary" routerLink="/account/reviews">Manage reviews</a>
           </app-dashboard-card>
 
           <app-dashboard-card
@@ -120,7 +118,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="Notifications"
             [description]="unreadNotifications().length + ' unread notification' + (unreadNotifications().length === 1 ? '' : 's') + '.'"
           >
-            <a mat-stroked-button routerLink="/account/notifications">View notifications</a>
+            <a data-ui-button="secondary" routerLink="/account/notifications">View notifications</a>
           </app-dashboard-card>
         </div>
 
@@ -132,7 +130,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 <div>
                   <strong>{{ action.title }}</strong>
                   <span>{{ action.description }}</span>
-                  <a mat-stroked-button [routerLink]="action.route">{{ action.cta }}</a>
+                  <a data-ui-button="secondary" [routerLink]="action.route">{{ action.cta }}</a>
                 </div>
               }
             </div>
@@ -145,7 +143,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="No buyer activity yet"
             message="Orders, returns, disputes, and support tickets will appear here after you start shopping."
           >
-            <a mat-flat-button routerLink="/shop">Browse marketplace</a>
+            <a data-ui-button="primary" routerLink="/shop">Browse marketplace</a>
           </app-empty-state>
         } @else {
           <div class="buyer-detail-grid">

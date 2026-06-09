@@ -63,32 +63,32 @@ export class SellerWorkspaceNavComponent implements OnInit {
     {
       label: 'Overview',
       items: [
-        { label: 'Dashboard', route: '/seller', exact: true },
-        { label: 'Analytics', route: '/seller/analytics', exact: false }
+        { label: 'Dashboard', route: '/', exact: true },
+        { label: 'Analytics', route: '/analytics', exact: false }
       ]
     },
     {
       label: 'Catalog',
       items: [
-        { label: 'Products', route: '/seller/products', exact: false },
-        { label: 'Inventory', route: '/seller/inventory', exact: false },
-        { label: 'Store settings', route: '/seller/settings/store', exact: false }
+        { label: 'Products', route: '/products', exact: false },
+        { label: 'Inventory', route: '/inventory', exact: false },
+        { label: 'Store settings', route: '/settings/store', exact: false }
       ]
     },
     {
       label: 'Operations',
       items: [
-        { label: 'Orders', route: '/seller/orders', exact: false },
-        { label: 'Returns', route: '/seller/returns', exact: false },
-        { label: 'Support', route: '/seller/support', exact: false },
-        { label: 'Notifications', route: '/seller/notifications', exact: false, badge: 'sellerUnread' }
+        { label: 'Orders', route: '/orders', exact: false },
+        { label: 'Returns', route: '/returns', exact: false },
+        { label: 'Support', route: '/support', exact: false },
+        { label: 'Notifications', route: '/notifications', exact: false, badge: 'sellerUnread' }
       ]
     },
     {
       label: 'Growth and finance',
       items: [
-        { label: 'Ads', route: '/seller/ads', exact: false },
-        { label: 'Payouts', route: '/seller/payouts', exact: false }
+        { label: 'Ads', route: '/ads', exact: false },
+        { label: 'Payouts', route: '/payouts', exact: false }
       ]
     }
   ];

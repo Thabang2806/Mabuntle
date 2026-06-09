@@ -2,9 +2,6 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
 import {
   AdminProductVariantRevisionDetailResponse,
@@ -21,9 +18,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     AdminWorkspaceNavComponent,
     DatePipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -33,7 +27,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   template: `
     <section class="page admin-review">
       <app-admin-workspace-nav />
-      <a class="admin-back-link" routerLink="/admin/products">Back to product queue</a>
+      <a class="admin-back-link" routerLink="/products">Back to product queue</a>
 
       @if (isLoading()) {
         <div class="route-card">Loading variant revision...</div>
@@ -85,8 +79,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                         <small>{{ variant.size }} / {{ variant.colour }} {{ variant.barcode ? '/ ' + variant.barcode : '' }}</small>
                       </span>
                       <span role="cell">
-                        <strong>{{ formatAmount(variant.price) }}</strong>
-                        <small>{{ variant.compareAtPrice ? 'Compare ' + formatAmount(variant.compareAtPrice) : 'No compare price' }}</small>
+                        <strong>{{ renderAmount(variant.price) }}</strong>
+                        <small>{{ variant.compareAtPrice ? 'Compare ' + renderAmount(variant.compareAtPrice) : 'No compare price' }}</small>
                       </span>
                       <span role="cell">
                         <strong>{{ variant.stockQuantity }} stock</strong>
@@ -118,8 +112,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                         <small>{{ variant.size }} / {{ variant.colour }} {{ variant.barcode ? '/ ' + variant.barcode : '' }}</small>
                       </span>
                       <span role="cell">
-                        <strong>{{ formatAmount(variant.price) }}</strong>
-                        <small>{{ variant.compareAtPrice ? 'Compare ' + formatAmount(variant.compareAtPrice) : 'No compare price' }}</small>
+                        <strong>{{ renderAmount(variant.price) }}</strong>
+                        <small>{{ variant.compareAtPrice ? 'Compare ' + renderAmount(variant.compareAtPrice) : 'No compare price' }}</small>
                       </span>
                       <span role="cell">
                         <strong>{{ variant.stockQuantity }} stock</strong>
@@ -157,8 +151,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                       <small>{{ item.size }} / {{ item.colour }} {{ item.barcode ? '/ ' + item.barcode : '' }}</small>
                     </span>
                     <span role="cell">
-                      <strong>{{ formatAmount(item.price) }}</strong>
-                      <small>{{ item.compareAtPrice ? 'Compare ' + formatAmount(item.compareAtPrice) : 'No compare price' }}</small>
+                      <strong>{{ renderAmount(item.price) }}</strong>
+                      <small>{{ item.compareAtPrice ? 'Compare ' + renderAmount(item.compareAtPrice) : 'No compare price' }}</small>
                     </span>
                     <span role="cell">
                       <strong>{{ item.initialStockQuantity ?? 'Existing stock' }}</strong>
@@ -188,17 +182,17 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 <div><dt>Seller reason</dt><dd>{{ revision()!.sellerReason ?? 'No reason supplied' }}</dd></div>
               </dl>
               <p>Approval applies variant updates atomically, refreshes active cart snapshots, and leaves historical order items unchanged.</p>
-              <button mat-flat-button type="button" [disabled]="isSaving() || revision()!.status !== 'PendingReview'" (click)="approve()">Approve variant revision</button>
+              <button data-ui-button="primary" type="button" [disabled]="isSaving() || revision()!.status !== 'PendingReview'" (click)="approve()">Approve variant revision</button>
 
               <form [formGroup]="rejectForm" (ngSubmit)="reject()" class="admin-reason-form" novalidate>
-                <mat-form-field appearance="outline" class="swyftly-field">
-                  <mat-label>Rejection reason</mat-label>
-                  <textarea matInput rows="3" formControlName="reason"></textarea>
+                <label class="ui-field">
+                  <span>Rejection reason</span>
+                  <textarea rows="3" formControlName="reason"></textarea>
                   @if (rejectForm.controls.reason.hasError('required')) {
-                    <mat-error>Reason is required.</mat-error>
+                    <span class="ui-field-error">Reason is required.</span>
                   }
-                </mat-form-field>
-                <button mat-stroked-button type="submit" [disabled]="isSaving() || revision()!.status !== 'PendingReview'">Reject variant revision</button>
+                </label>
+                <button data-ui-button="secondary" type="submit" [disabled]="isSaving() || revision()!.status !== 'PendingReview'">Reject variant revision</button>
               </form>
             </div>
           </aside>
@@ -262,7 +256,7 @@ export class AdminProductVariantRevisionDetailPageComponent implements OnInit {
     return 'accent';
   }
 
-  protected formatAmount(value: number): string {
+  protected renderAmount(value: number): string {
     return value.toLocaleString('en-ZA', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2

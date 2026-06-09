@@ -47,7 +47,7 @@ describe('AdminProductsPageComponent', () => {
     expect(compiled.querySelector('.hf-admin-review-layout')).toBeTruthy();
     expect(compiled.textContent).toContain('Selected moderation item');
     const reviewLink = Array.from(compiled.querySelectorAll('a'))
-      .find(link => link.getAttribute('href') === '/admin/products/product-id');
+      .find(link => link.getAttribute('href') === '/products/product-id');
     expect(reviewLink).toBeTruthy();
   });
 
@@ -59,7 +59,7 @@ describe('AdminProductsPageComponent', () => {
         revisionId: 'variant-revision-id',
         riskFlagCount: 0,
         itemCount: 2,
-        detailRoute: '/admin/products/variant-revisions/variant-revision-id'
+        detailRoute: '/products/variant-revisions/variant-revision-id'
       })
     ]));
 
@@ -71,7 +71,7 @@ describe('AdminProductsPageComponent', () => {
     expect(compiled.textContent).toContain('Variant revision');
     expect(compiled.textContent).toContain('2 staged items');
     const reviewLink = Array.from(compiled.querySelectorAll('a'))
-      .find(link => link.getAttribute('href') === '/admin/products/variant-revisions/variant-revision-id');
+      .find(link => link.getAttribute('href') === '/products/variant-revisions/variant-revision-id');
     expect(reviewLink).toBeTruthy();
   });
 
@@ -161,7 +161,7 @@ function createProductItem(overrides: Partial<AdminProductModerationItemResponse
     updatedAtUtc: '2026-05-18T12:00:00Z',
     riskFlagCount: 1,
     itemCount: 0,
-    detailRoute: '/admin/products/product-id',
+    detailRoute: '/products/product-id',
     ...overrides
   };
 }

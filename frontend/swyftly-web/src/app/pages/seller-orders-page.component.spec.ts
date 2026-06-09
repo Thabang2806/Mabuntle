@@ -1,3 +1,4 @@
+import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
@@ -17,7 +18,10 @@ describe('SellerOrdersPageComponent', () => {
       imports: [SellerOrdersPageComponent],
       providers: [
         provideNoopAnimations(),
-        provideRouter([]),
+        provideRouter([
+          { path: 'orders/:orderId', component: StubRouteComponent },
+          { path: 'payouts', component: StubRouteComponent }
+        ]),
         { provide: SellerOrderService, useValue: orderService }
       ]
     }).compileComponents();
@@ -34,8 +38,8 @@ describe('SellerOrdersPageComponent', () => {
     expect(compiled.textContent).toContain('Orders');
     expect(compiled.textContent).toContain('Summer Dress');
     expect(compiled.textContent).toContain('Paid');
-    expect(compiled.querySelector('a[href="/seller/payouts"]')).not.toBeNull();
-    expect(compiled.querySelector('a[href="/seller/orders/order-id"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/payouts"]')).not.toBeNull();
+    expect(compiled.querySelector('a[href="/orders/order-id"]')).not.toBeNull();
   });
 });
 
@@ -74,3 +78,6 @@ export function createOrder(overrides: Partial<SellerOrderResult> = {}): SellerO
     ...overrides
   };
 }
+
+@Component({ template: '' })
+class StubRouteComponent {}

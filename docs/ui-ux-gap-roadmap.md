@@ -48,6 +48,10 @@ Latest seller-inventory note: Phase 9Y added structured inventory movement histo
 
 Latest seller-acquisition note: Phase 9Z added a public `/sell` landing page as the seller acquisition and onboarding entry point, linked from public navigation, mobile navigation, home seller CTAs, the footer, and seller registration context.
 
+Latest frontend-architecture note: The Angular workspace now has separate Cloudflare build entrypoints for the client marketplace, seller workspace, and admin/support/finance console. Seller and admin deployments use root-relative route tables for `seller.mabuntle.com` and `admin.mabuntle.com`, with compatibility redirects from the old `/seller/*` and `/admin/*` paths. The client/buyer, seller workspace, and admin/support/finance route sets have all moved off Angular Material onto Tailwind-based primitives.
+
+Latest frontend-QA note: Frontend Phase 5 ran the split Cloudflare build matrix, Angular specs, source hygiene scans, redirect-output checks, and deployed smoke checks. Local client, seller, and admin outputs passed; `mabuntle.com` and representative client deep links loaded after Cloudflare trailing-slash redirects. Deployed seller/admin smoke is blocked because `seller.mabuntle.com` and `admin.mabuntle.com` do not yet resolve, and API smoke is blocked by a repeated `308` redirect loop on `https://api.mabuntle.com/health`. Evidence and external follow-ups are recorded in `docs/frontend-cross-domain-qa-results.md`.
+
 ## Status Legend
 
 | Status | Meaning |
@@ -60,7 +64,7 @@ Latest seller-acquisition note: Phase 9Z added a public `/sell` landing page as 
 
 ## Current Frontend Shape
 
-Current Angular routing is concentrated in `src/app/app.routes.ts` with standalone page components under `src/app/pages`, plus feature services under `auth`, `shop`, `cart`, `seller`, `buyer`, and `admin`.
+Current Angular routing is split by deployment entrypoint: `src/app/client.routes.ts` for `mabuntle.com`, `src/app/seller.routes.ts` for `seller.mabuntle.com`, and `src/app/admin.routes.ts` for `admin.mabuntle.com`. The legacy `src/app/app.routes.ts` remains for compatibility and shared route-role exports while the split stabilizes. Standalone page components remain under `src/app/pages`, with feature services under `auth`, `shop`, `cart`, `seller`, `buyer`, and `admin`.
 
 High-level coverage:
 
@@ -71,7 +75,7 @@ High-level coverage:
 | Buyer account | Buyer dashboard, order history/detail, payment retry, returns, disputes, support tickets, wishlist, reviews, notifications, refunds, opt-in AI discovery history, saved delivery addresses with local verification, pickup-aware checkout, carrier-aware shipment tracking, and settings exist at useful MVP depth. Buyer transactional email delivery and real-time in-app SignalR updates exist; SMS and push channels remain missing. |
 | Seller | Onboarding, verified seller dashboard with live operational summary, products, dedicated inventory, store settings, polished MVP product editor with production-hardened media uploads, moderation-aware published listing revisions and variant/pricing revisions, seller notifications with preferences/realtime unread badge/toast, AI listing assistant, orders, manual fulfilment, provider-neutral carrier booking/tracking, returns, explicit restock decisions, payouts, support, ads, analytics, and stock-ledger traceability for reservations/orders/returns/refunds. Hardware barcode scanner SDK integration, sensitive payout-bank storage, and real carrier-provider integration remain incomplete. |
 | Admin | Dashboard, seller queue/detail, product queue/detail, audit logs, reports, AI usage, ad campaign queue/detail, finance refunds, finance payouts, dispute resolution, pickup-point management, and read-only order/payment investigation screens. |
-| Shared UI | Product card exists. Most layout and component styling lives in one global stylesheet. |
+| Shared UI | Product card exists and the client/buyer, seller, and admin deployments now use Tailwind-based buttons, fields, checkbox, card, badge, alert, workspace, queue, and operational form primitives. Angular Material has been removed from the app; the next frontend step is cross-domain desktop/mobile browser QA. |
 
 ## Buyer And Public Screen Coverage
 
@@ -165,7 +169,7 @@ High-level coverage:
 
 4. **Product visuals are not strong enough.** The app currently has no marketplace image assets beyond the favicon, and product display relies on remote product URLs or text placeholders. The product card, gallery, and storefront hero need stronger visual fallbacks.
 
-5. **Shared UI primitives are improving, but need discipline.** The global stylesheet now keeps tokens, base layout, app shell, Material baseline overrides, and shared primitives, while luxury route CSS lives in lazy route-group assets. Future UI phases should keep route-specific CSS out of `src/styles.scss`.
+5. **Shared UI primitives are improving, but need discipline.** The global stylesheet now keeps tokens, base layout, app shell, and shared Tailwind-native primitives, while luxury route CSS lives in lazy route-group assets. Future UI phases should keep route-specific CSS out of `src/styles.scss`.
 
 6. **Operational screens need denser layouts.** Admin and seller screens should be quiet, table-heavy, filterable, and optimized for repeated work. Avoid making these screens look like marketing pages.
 
@@ -186,7 +190,7 @@ High-level coverage:
 ### Phase 1: UI Foundation
 
 - Clean encoding artifacts in Angular templates.
-- Replace manual text symbols with Angular Material icons where applicable.
+- Replace manual text symbols with lightweight icon components where applicable; Angular Material is no longer part of the frontend dependency set.
 - Add shared UI primitives for badges, alerts, empty states, page headers, product cards, data tables, dashboard cards, and step panels.
 - Split navigation into public, buyer, seller, and admin patterns with mobile-safe behavior.
 - Keep the global stylesheet for tokens and base layout only; move component-specific styles closer to shared components over time.
@@ -197,6 +201,8 @@ High-level coverage:
 - Improve shop filters, sort, mobile filter behavior, product cards, and empty states.
 - Improve product detail with gallery, seller trust, return/shipping cues, variant clarity, and wishlist entry point.
 - Improve seller storefront with logo/profile, seller verification cues, policies, and product merchandising.
+
+Status: Implemented through buyer discovery/product confidence phases and the client/buyer Tailwind migration wave. The public and buyer pages reachable from `src/app/client.routes.ts` no longer depend on Angular Material modules or Material DOM controls.
 
 ### Phase 3: Cart And Checkout Trust
 
@@ -213,7 +219,7 @@ Status: Implemented as frontend trust polish and later deepened in Phase 9E. The
 - Improve product list and editor with thumbnails, filters, stronger stepper UX, save/submission state, and rejection feedback.
 - Build seller order, fulfilment, returns, payout/balance, storefront settings, and support ticket UI before further ads/analytics polish.
 
-Status: Ops-first implementation completed and extended through Phase 10N. Verified sellers now get a dashboard with a live seller-owned operational summary and shared seller workspace navigation. API-backed seller orders, order detail/fulfilment actions, selected delivery-method snapshots, checkout-time seller-policy snapshots, ready-to-ship, manual tracking, provider-neutral carrier booking/tracking, delivery confirmation, delivery exception recording, returns with policy context and explicit seller restock decisions, payout/balance history, support ticket screens, dedicated inventory management with bulk CSV stocktake tooling, SKU/barcode lookup, seller-visible stock movement history and reservation/order/return/refund/restock stock-ledger context, seller-managed delivery methods/rates, buyer-facing store policies, store settings, payout-profile change requests, seller transactional notifications, and product merchandising/SEO fields exist. The product list now includes thumbnails, merchandising labels, inventory summaries, and public previews. The product editor now has clearer status/read-only messaging, step completion, production-hardened media uploads, image metadata/gallery controls, variant edit mode, SEO/search preview, buyer-facing attribute preview, product care/disclaimer guidance, honest shipping guidance, a buyer-facing review preview, published-product listing revisions, published variant/pricing revisions, bulk CSV variant revision staging, and seller-facing moderation history. Real carrier-provider integration, hardware barcode scanning, and full sensitive payout-bank storage remain later work.
+Status: Ops-first implementation completed and extended through Phase 10N, then migrated off Angular Material in Frontend Phase 3. Verified sellers now get a dashboard with a live seller-owned operational summary and shared seller workspace navigation. API-backed seller orders, order detail/fulfilment actions, selected delivery-method snapshots, checkout-time seller-policy snapshots, ready-to-ship, manual tracking, provider-neutral carrier booking/tracking, delivery confirmation, delivery exception recording, returns with policy context and explicit seller restock decisions, payout/balance history, support ticket screens, dedicated inventory management with bulk CSV stocktake tooling, SKU/barcode lookup, seller-visible stock movement history and reservation/order/return/refund/restock stock-ledger context, seller-managed delivery methods/rates, buyer-facing store policies, store settings, payout-profile change requests, seller transactional notifications, and product merchandising/SEO fields exist. The product list now includes thumbnails, merchandising labels, inventory summaries, and public previews. The product editor now has clearer status/read-only messaging, step completion, production-hardened media uploads, image metadata/gallery controls, variant edit mode, SEO/search preview, buyer-facing attribute preview, product care/disclaimer guidance, honest shipping guidance, a buyer-facing review preview, published-product listing revisions, published variant/pricing revisions, bulk CSV variant revision staging, and seller-facing moderation history. Real carrier-provider integration, hardware barcode scanning, and full sensitive payout-bank storage remain later work.
 
 ### Phase 5: Admin Operations And Finance
 
@@ -226,7 +232,7 @@ Status: Phase 5A implemented for admin finance operations. `/admin/refunds`, `/a
 
 Status: Phase 5B implemented for support and catalog-reference operations. `/admin/support` and `/admin/support/:ticketId` now use the support-ticket APIs for list/detail, public replies, internal notes, resolve, and close.
 
-Status: Phase 5C implemented for moderation review polish. Admin sections now share a lightweight workspace navigation component. Seller and product moderation queues use client-side filters, denser review rows, shared page headers/status badges/alerts/empty states, and clearer action links. Seller detail review has completeness indicators and reorganized profile/storefront/address/payout/audit panels. Product detail review has larger image review, thumbnail selection, fallbacks, variant stock summaries, seller context, AI risk display, and unchanged approve/reject/change-request payloads. Audit logs use the shared admin navigation and improved filter/empty/error presentation.
+Status: Phase 5C implemented for moderation review polish. Admin sections now share a lightweight workspace navigation component. Seller and product moderation queues use client-side filters, denser review rows, shared page headers/status badges/alerts/empty states, and clearer action links. Seller detail review has completeness indicators and reorganized profile/storefront/address/payout/audit panels. Product detail review has larger image review, thumbnail selection, fallbacks, variant stock summaries, seller context, AI risk display, and unchanged approve/reject/change-request payloads. Audit logs use the shared admin navigation and improved filter/empty/error presentation. Frontend Phase 4 later migrated admin/support/finance pages off Angular Material onto Tailwind-native primitives without changing workflows.
 
 Status: Phase 5D implemented for admin order/payment investigation. `/admin/orders`, `/admin/orders/:orderId`, `/admin/payments`, and `/admin/payments/:paymentId` now use FinanceRead-protected backend APIs and replace the previous API-gap pages. The screens are intentionally read-only and do not add manual order mutation, payment capture, or raw webhook-payload exposure.
 
@@ -277,15 +283,16 @@ Status: Phase 8A implemented as checkout lifecycle closure. `/checkout` now crea
 
 The highest-value next implementation candidates are:
 
-1. Choose the next buyer phase. Phase 11L now defines the safe personalization boundary; good next candidates are richer visual-search diagnostics, catalog similar-products API depth, or a manual browser sign-off pass for AI personalization and `/admin/reports` buyer-growth cards at desktop/mobile widths.
-2. Use the completed Phase 10Q seller browser sign-off as the baseline for future seller/admin UI regressions; rerun it after larger seller workflow changes.
-3. Implement the next seller depth candidate: seller notification analytics, public seller acquisition analytics/content management, richer storefront attribution/source segmentation, or all-state admin seller/product/ad operational queues.
-4. Complete manual desktop/mobile visual spot checks after the Phase 9S style split, especially `/`, `/checkout`, `/account`, `/assistant`, `/seller/products`, `/seller/notifications`, and `/admin/payments`.
-5. Run PayFast sandbox verification before production payments when credentials and callback URL are available.
-6. Choose a real production media scanner adapter before enabling strict production scanner readiness.
-7. Implement the first real carrier adapter after Bob Go API docs/sandbox credentials are available, or use the documented PUDO fallback if Bob Go access is blocked. Carrier-provided rate calculation, external address verification/geocoding, pickup-network APIs, and SMS/push notifications remain separate candidates.
-8. Deeper payout hardening can revisit encrypted/tokenized bank-detail storage after a real external payout provider is selected.
-9. If stricter performance targets are needed, minify/cache the lazy static route CSS assets or split them further by route cluster; do not raise the initial budget to hide regressions.
+1. Finish deployment configuration blockers from `docs/frontend-cross-domain-qa-results.md`: create/verify `seller.mabuntle.com` and `admin.mabuntle.com` DNS/custom domains, and fix the `api.mabuntle.com` health-check `308` redirect loop.
+2. Rerun the cross-domain desktop/mobile browser QA pass for `mabuntle.com`, `seller.mabuntle.com`, and `admin.mabuntle.com` after the deployed DNS/API blockers are fixed.
+3. Choose the next buyer phase. Phase 11L now defines the safe personalization boundary; good next candidates are richer visual-search diagnostics, catalog similar-products API depth, or a manual browser sign-off pass for AI personalization and `/admin/reports` buyer-growth cards at desktop/mobile widths.
+4. Use the completed Phase 10Q seller browser sign-off as the baseline for future seller/admin UI regressions; rerun it after larger seller workflow changes.
+5. Implement the next seller depth candidate: seller notification analytics, public seller acquisition analytics/content management, richer storefront attribution/source segmentation, or all-state admin seller/product/ad operational queues.
+6. Run PayFast sandbox verification before production payments when credentials and callback URL are available.
+7. Choose a real production media scanner adapter before enabling strict production scanner readiness.
+8. Implement the first real carrier adapter after Bob Go API docs/sandbox credentials are available, or use the documented PUDO fallback if Bob Go access is blocked. Carrier-provided rate calculation, external address verification/geocoding, pickup-network APIs, and SMS/push notifications remain separate candidates.
+9. Deeper payout hardening can revisit encrypted/tokenized bank-detail storage after a real external payout provider is selected.
+10. If stricter performance targets are needed, minify/cache the lazy static route CSS assets or split them further by route cluster; do not raise the initial budget to hide regressions.
 
 This keeps UI work tied to real contracts instead of creating fake surfaces that would need to be unwound later.
 

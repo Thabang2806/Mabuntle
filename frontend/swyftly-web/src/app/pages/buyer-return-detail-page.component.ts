@@ -2,9 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerRefundResult } from '../buyer/buyer-refund.models';
 import { BuyerRefundService } from '../buyer/buyer-refund.service';
@@ -21,9 +18,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     BuyerWorkspaceNavComponent,
     CurrencyPipe,
     DatePipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -80,15 +74,15 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               @if (canDispute()) {
                 <p>If you disagree with the seller response, escalate this return for admin review.</p>
                 <form [formGroup]="disputeForm" (ngSubmit)="disputeReturn()" class="buyer-form-grid" novalidate>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Dispute reason</mat-label>
-                    <textarea matInput rows="4" formControlName="reason"></textarea>
-                  </mat-form-field>
-                  <button mat-flat-button type="submit" [disabled]="isSaving()">Open dispute</button>
+                  <label class="ui-field">
+                    <span>Dispute reason</span>
+                    <textarea rows="4" formControlName="reason"></textarea>
+                  </label>
+                  <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Open dispute</button>
                 </form>
               } @else {
                 <app-ui-alert tone="info">Dispute escalation is available after a return is rejected by the seller.</app-ui-alert>
-                <a mat-stroked-button routerLink="/account/support" [queryParams]="supportQueryParams()">Contact support</a>
+                <a data-ui-button="secondary" routerLink="/account/support" [queryParams]="supportQueryParams()">Contact support</a>
               }
             </section>
 

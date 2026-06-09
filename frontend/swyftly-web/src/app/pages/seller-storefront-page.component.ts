@@ -1,10 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { StorefrontAnalyticsService } from '../analytics/storefront-analytics.service';
 import { getApiErrorMessage } from '../auth/api-error';
 import { ProductCardComponent } from '../shop/product-card.component';
@@ -20,10 +16,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     EmptyStateComponent,
     LuxuryPublicStylesComponent,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     ProductCardComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -104,7 +96,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="No published products"
             message="This seller does not have public products yet."
           >
-            <a mat-flat-button routerLink="/shop">Browse other sellers</a>
+            <a data-ui-button="primary" routerLink="/shop">Browse other sellers</a>
           </app-empty-state>
         } @else {
           <div class="storefront-products-header">
@@ -112,34 +104,34 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               <h2>Products from {{ storefront()?.storeName }}</h2>
               <p>{{ filteredProducts().length }} shown from this storefront. Each listing shows price, stock, and product detail before checkout.</p>
             </div>
-            <a mat-stroked-button routerLink="/shop">Browse marketplace</a>
+            <a data-ui-button="secondary" routerLink="/shop">Browse marketplace</a>
           </div>
 
           <form [formGroup]="storefrontFiltersForm" class="storefront-filter-bar" aria-label="Storefront product filters" novalidate>
-            <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-              <mat-label>Search this store</mat-label>
-              <input matInput formControlName="query">
-            </mat-form-field>
+            <label class="ui-field">
+              <span>Search this store</span>
+              <input formControlName="query">
+            </label>
 
-            <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-              <mat-label>Availability</mat-label>
-              <mat-select formControlName="availability">
-                <mat-option value="">All products</mat-option>
-                <mat-option value="in_stock">In stock</mat-option>
-                <mat-option value="out_of_stock">Out of stock</mat-option>
-              </mat-select>
-            </mat-form-field>
+            <label class="ui-field">
+              <span>Availability</span>
+              <select formControlName="availability">
+                <option value="">All products</option>
+                <option value="in_stock">In stock</option>
+                <option value="out_of_stock">Out of stock</option>
+              </select>
+            </label>
 
-            <mat-form-field class="swyftly-field swyftly-field--compact" appearance="outline">
-              <mat-label>Sort</mat-label>
-              <mat-select formControlName="sort">
-                <mat-option value="newest">Newest</mat-option>
-                <mat-option value="price_asc">Price low to high</mat-option>
-                <mat-option value="price_desc">Price high to low</mat-option>
-              </mat-select>
-            </mat-form-field>
+            <label class="ui-field">
+              <span>Sort</span>
+              <select formControlName="sort">
+                <option value="newest">Newest</option>
+                <option value="price_asc">Price low to high</option>
+                <option value="price_desc">Price high to low</option>
+              </select>
+            </label>
 
-            <button mat-stroked-button type="button" (click)="clearStorefrontFilters()">Clear</button>
+            <button data-ui-button="secondary" type="button" (click)="clearStorefrontFilters()">Clear</button>
           </form>
 
           @if (filteredProducts().length === 0) {
@@ -148,7 +140,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               heading="No products match these store filters"
               message="Clear the storefront search or browse the wider marketplace."
             >
-              <button mat-flat-button type="button" (click)="clearStorefrontFilters()">Clear store filters</button>
+              <button data-ui-button="primary" type="button" (click)="clearStorefrontFilters()">Clear store filters</button>
             </app-empty-state>
           } @else {
             <div class="product-grid">

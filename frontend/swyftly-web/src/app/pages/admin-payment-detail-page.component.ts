@@ -1,7 +1,6 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { AdminPaymentDetailResponse } from '../admin/admin-order-payment.models';
 import { AdminOrderPaymentService } from '../admin/admin-order-payment.service';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
@@ -16,7 +15,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     AdminWorkspaceNavComponent,
     CurrencyPipe,
     DatePipe,
-    MatButtonModule,
     PageHeaderComponent,
     RouterLink,
     StatusBadgeComponent,
@@ -25,7 +23,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   template: `
     <section class="page admin-finance-page">
       <app-admin-workspace-nav />
-      <a class="admin-back-link" routerLink="/admin/payments">Back to payments</a>
+      <a class="admin-back-link" routerLink="/payments">Back to payments</a>
 
       @if (isLoading()) {
         <div class="route-card">Loading payment...</div>
@@ -39,7 +37,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         >
           <div pageHeaderActions>
             <app-status-badge [label]="payment()!.status" [tone]="statusTone(payment()!.status)" />
-            <a mat-stroked-button [routerLink]="['/admin/orders', payment()!.orderId]">Open order</a>
+            <a data-ui-button="secondary" [routerLink]="['/orders', payment()!.orderId]">Open order</a>
           </div>
         </app-page-header>
 

@@ -1,7 +1,6 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerRefundResult } from '../buyer/buyer-refund.models';
 import { BuyerRefundService } from '../buyer/buyer-refund.service';
@@ -18,7 +17,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     CurrencyPipe,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
     PageHeaderComponent,
     RouterLink,
     StatusBadgeComponent,
@@ -47,7 +45,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="No refund activity"
             message="Refund requests will appear here after a return, dispute, or finance review creates one."
           >
-            <a mat-flat-button routerLink="/account/orders">View orders</a>
+            <a data-ui-button="primary" routerLink="/account/orders">View orders</a>
           </app-empty-state>
         } @else {
           <div class="admin-table buyer-ops-table" role="table" aria-label="Buyer refunds">
@@ -80,9 +78,9 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 </span>
                 <span role="cell">
                   <div class="buyer-action-row">
-                    <a mat-stroked-button [routerLink]="['/account/orders', refund.orderId]">Order</a>
+                    <a data-ui-button="secondary" [routerLink]="['/account/orders', refund.orderId]">Order</a>
                     @if (refund.returnRequestId) {
-                      <a mat-stroked-button [routerLink]="['/account/returns', refund.returnRequestId]">Return</a>
+                      <a data-ui-button="secondary" [routerLink]="['/account/returns', refund.returnRequestId]">Return</a>
                     }
                   </div>
                 </span>

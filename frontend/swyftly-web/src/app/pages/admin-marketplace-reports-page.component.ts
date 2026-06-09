@@ -2,9 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { AdminBuyerGrowthReportResponse, AdminMarketplaceReportResponse } from '../admin/admin-marketplace-report.models';
 import { AdminMarketplaceReportService } from '../admin/admin-marketplace-report.service';
 import { AdminWorkspaceNavComponent } from '../admin/admin-workspace-nav.component';
@@ -15,9 +12,6 @@ import { getApiErrorMessage } from '../auth/api-error';
   imports: [
     CurrencyPipe,
     DatePipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
     AdminWorkspaceNavComponent,
     ReactiveFormsModule,
     RouterLink
@@ -26,7 +20,7 @@ import { getApiErrorMessage } from '../auth/api-error';
     <section class="page admin-review">
       <app-admin-workspace-nav />
 
-      <a class="admin-back-link" routerLink="/admin">Back to admin</a>
+      <a class="admin-back-link" routerLink="">Back to admin</a>
 
       <div class="page-header">
         <span class="eyebrow">Admin reports</span>
@@ -35,20 +29,20 @@ import { getApiErrorMessage } from '../auth/api-error';
       </div>
 
       <form [formGroup]="filtersForm" (ngSubmit)="loadReport()" class="route-card admin-audit-filters" novalidate>
-        <mat-form-field appearance="outline">
-          <mat-label>From</mat-label>
-          <input matInput type="datetime-local" formControlName="from">
-        </mat-form-field>
+        <label class="ui-field">
+          <span>From</span>
+          <input type="datetime-local" formControlName="from">
+        </label>
 
-        <mat-form-field appearance="outline">
-          <mat-label>To</mat-label>
-          <input matInput type="datetime-local" formControlName="to">
-        </mat-form-field>
+        <label class="ui-field">
+          <span>To</span>
+          <input type="datetime-local" formControlName="to">
+        </label>
 
         <div class="admin-audit-actions">
-          <button mat-flat-button type="submit" [disabled]="isLoading()">Apply range</button>
+          <button data-ui-button="primary" type="submit" [disabled]="isLoading()">Apply range</button>
           @if (csvExportHref() && !errorMessage()) {
-            <a mat-stroked-button [href]="csvExportHref()" target="_blank" rel="noreferrer">Export CSV</a>
+            <a data-ui-button="secondary" [href]="csvExportHref()" target="_blank" rel="noreferrer">Export CSV</a>
           }
         </div>
       </form>
@@ -316,8 +310,8 @@ export class AdminMarketplaceReportsPageComponent implements OnInit {
       { label: 'AI-attributed checkout starts', value: report.outcomeSummary.checkoutStartedCount },
       { label: 'AI-attributed orders', value: report.outcomeSummary.orderCreatedCount },
       { label: 'AI-attributed paid orders', value: report.outcomeSummary.paidOrderCount },
-      { label: 'Open to cart rate', value: this.formatRate(report.outcomeSummary.productOpenToCartRate) },
-      { label: 'Order to paid rate', value: this.formatRate(report.outcomeSummary.orderToPaidRate) }
+      { label: 'Open to cart rate', value: this.renderRate(report.outcomeSummary.productOpenToCartRate) },
+      { label: 'Order to paid rate', value: this.renderRate(report.outcomeSummary.orderToPaidRate) }
     ];
   }
 
@@ -327,7 +321,7 @@ export class AdminMarketplaceReportsPageComponent implements OnInit {
       : 'No context captured';
   }
 
-  protected formatRate(value: number): string {
+  protected renderRate(value: number): string {
     return `${Math.round(value * 1000) / 10}%`;
   }
 

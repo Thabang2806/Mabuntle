@@ -2,10 +2,6 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerEngagementService } from '../buyer/buyer-engagement.service';
 import { BuyerOrderResult } from '../buyer/buyer-order.models';
@@ -25,10 +21,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     BuyerWorkspaceNavComponent,
     CurrencyPipe,
     DatePipe,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
     PageHeaderComponent,
     ReactiveFormsModule,
     RouterLink,
@@ -49,12 +41,12 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         <div pageHeaderActions>
           @if (order()) {
             <app-status-badge [label]="order()!.status" [tone]="statusTone(order()!.status)" />
-            <button mat-stroked-button type="button" [disabled]="isLoading()" (click)="refreshOrder()">Refresh payment status</button>
-            <a mat-stroked-button routerLink="/account/support" [queryParams]="supportQueryParams()">Contact support</a>
+            <button data-ui-button="secondary" type="button" [disabled]="isLoading()" (click)="refreshOrder()">Refresh payment status</button>
+            <a data-ui-button="secondary" routerLink="/account/support" [queryParams]="supportQueryParams()">Contact support</a>
             @if (canRetryPayment()) {
-              <button mat-flat-button type="button" [disabled]="isSaving()" (click)="retryPayment()">Retry payment</button>
+              <button data-ui-button="primary" type="button" [disabled]="isSaving()" (click)="retryPayment()">Retry payment</button>
             } @else if (order()!.status === 'Cancelled') {
-              <a mat-stroked-button routerLink="/cart">Start checkout again</a>
+              <a data-ui-button="secondary" routerLink="/cart">Start checkout again</a>
             }
           }
         </div>
@@ -136,7 +128,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                     </div>
                   }
                 </div>
-                <a mat-stroked-button routerLink="/account/refunds">View all refunds</a>
+                <a data-ui-button="secondary" routerLink="/account/refunds">View all refunds</a>
               }
             </section>
 
@@ -146,7 +138,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 <dl class="seller-facts">
                   <div><dt>Recipient</dt><dd>{{ order()!.deliveryAddress!.recipientName }}</dd></div>
                   <div><dt>Phone</dt><dd>{{ order()!.deliveryAddress!.phoneNumber }}</dd></div>
-                  <div><dt>Address</dt><dd>{{ formatDeliveryAddress(order()!.deliveryAddress!) }}</dd></div>
+                  <div><dt>Address</dt><dd>{{ renderDeliveryAddress(order()!.deliveryAddress!) }}</dd></div>
                   @if (order()!.deliveryAddress!.deliveryInstructions) {
                     <div><dt>Instructions</dt><dd>{{ order()!.deliveryAddress!.deliveryInstructions }}</dd></div>
                   }
@@ -195,47 +187,47 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               @if (canRequestReturn()) {
                 <p>Delivered orders can be submitted for return review. Choose one line item per request.</p>
                 <form [formGroup]="returnForm" (ngSubmit)="createReturn()" class="buyer-form-grid" novalidate>
-                  <mat-form-field appearance="outline">
-                    <mat-label>Item</mat-label>
-                    <mat-select formControlName="orderItemId">
+                  <label class="ui-field">
+                    <span>Item</span>
+                    <select formControlName="orderItemId">
                       @for (item of order()!.items; track item.orderItemId) {
-                        <mat-option [value]="item.orderItemId">{{ item.productTitle ?? item.sku }} - {{ item.quantity }} available</mat-option>
+                        <option [ngValue]="item.orderItemId">{{ item.productTitle ?? item.sku }} - {{ item.quantity }} available</option>
                       }
-                    </mat-select>
-                  </mat-form-field>
+                    </select>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Quantity</mat-label>
-                    <input matInput type="number" min="1" [attr.max]="selectedReturnItem()?.quantity ?? null" formControlName="quantity" />
+                  <label class="ui-field">
+                    <span>Quantity</span>
+                    <input type="number" min="1" [attr.max]="selectedReturnItem()?.quantity ?? null" formControlName="quantity" />
                     @if (selectedReturnItem(); as selectedItem) {
-                      <mat-hint>Up to {{ selectedItem.quantity }} item{{ selectedItem.quantity === 1 ? '' : 's' }} can be requested from this order line.</mat-hint>
+                      <span class="ui-field-hint">Up to {{ selectedItem.quantity }} item{{ selectedItem.quantity === 1 ? '' : 's' }} can be requested from this order line.</span>
                     }
-                  </mat-form-field>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Reason</mat-label>
-                    <input matInput formControlName="reason" />
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Reason</span>
+                    <input formControlName="reason" />
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Item condition</mat-label>
-                    <mat-select formControlName="isOpenedOrUnsealed">
-                      <mat-option [value]="false">Unopened or sealed</mat-option>
-                      <mat-option [value]="true">Opened or unsealed</mat-option>
-                    </mat-select>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Item condition</span>
+                    <select formControlName="isOpenedOrUnsealed">
+                      <option [ngValue]="false">Unopened or sealed</option>
+                      <option [ngValue]="true">Opened or unsealed</option>
+                    </select>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Details</mat-label>
-                    <textarea matInput rows="3" formControlName="details"></textarea>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Details</span>
+                    <textarea rows="3" formControlName="details"></textarea>
+                  </label>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Item note</mat-label>
-                    <textarea matInput rows="2" formControlName="note"></textarea>
-                  </mat-form-field>
+                  <label class="ui-field">
+                    <span>Item note</span>
+                    <textarea rows="2" formControlName="note"></textarea>
+                  </label>
 
-                  <button mat-flat-button type="submit" [disabled]="isSaving()">Request return</button>
+                  <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Request return</button>
                 </form>
               } @else {
                 <app-ui-alert tone="info">Returns can be requested after an order is delivered. Current status: {{ order()!.status }}.</app-ui-alert>
@@ -245,8 +237,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   <app-ui-alert tone="warning">This order was cancelled after payment failure. Start checkout again from your cart, or add the items again if the cart is empty.</app-ui-alert>
                 }
                 <div class="buyer-action-row">
-                  <a mat-stroked-button routerLink="/account/support" [queryParams]="supportQueryParams()">Contact support</a>
-                  <a mat-stroked-button routerLink="/account/disputes">View disputes</a>
+                  <a data-ui-button="secondary" routerLink="/account/support" [queryParams]="supportQueryParams()">Contact support</a>
+                  <a data-ui-button="secondary" routerLink="/account/disputes">View disputes</a>
                 </div>
               }
             </section>
@@ -257,37 +249,37 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
               <h2>Leave a product review</h2>
               <p>Reviews are tied to delivered order items and are submitted for moderation before they appear publicly.</p>
               <form [formGroup]="reviewForm" (ngSubmit)="createReview()" class="buyer-form-grid" novalidate>
-                <mat-form-field appearance="outline">
-                  <mat-label>Item</mat-label>
-                  <mat-select formControlName="orderItemId">
+                <label class="ui-field">
+                  <span>Item</span>
+                  <select formControlName="orderItemId">
                     @for (item of order()!.items; track item.orderItemId) {
-                      <mat-option [value]="item.orderItemId">{{ item.productTitle ?? item.sku }}</mat-option>
+                      <option [ngValue]="item.orderItemId">{{ item.productTitle ?? item.sku }}</option>
                     }
-                  </mat-select>
-                </mat-form-field>
+                  </select>
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Rating</mat-label>
-                  <mat-select formControlName="rating">
+                <label class="ui-field">
+                  <span>Rating</span>
+                  <select formControlName="rating">
                     @for (rating of ratings; track rating) {
-                      <mat-option [value]="rating">{{ rating }} star{{ rating === 1 ? '' : 's' }}</mat-option>
+                      <option [ngValue]="rating">{{ rating }} star{{ rating === 1 ? '' : 's' }}</option>
                     }
-                  </mat-select>
-                </mat-form-field>
+                  </select>
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Title</mat-label>
-                  <input matInput formControlName="title" />
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Title</span>
+                  <input formControlName="title" />
+                </label>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Review</mat-label>
-                  <textarea matInput rows="3" formControlName="body"></textarea>
-                </mat-form-field>
+                <label class="ui-field">
+                  <span>Review</span>
+                  <textarea rows="3" formControlName="body"></textarea>
+                </label>
 
                 <div class="buyer-action-row">
-                  <button mat-flat-button type="submit" [disabled]="isSaving()">Submit review</button>
-                  <a mat-stroked-button routerLink="/account/reviews">My reviews</a>
+                  <button data-ui-button="primary" type="submit" [disabled]="isSaving()">Submit review</button>
+                  <a data-ui-button="secondary" routerLink="/account/reviews">My reviews</a>
                 </div>
               </form>
             </section>
@@ -531,7 +523,7 @@ export class BuyerOrderDetailPageComponent implements OnInit {
     return 'neutral';
   }
 
-  protected formatDeliveryAddress(address: NonNullable<BuyerOrderResult['deliveryAddress']>): string {
+  protected renderDeliveryAddress(address: NonNullable<BuyerOrderResult['deliveryAddress']>): string {
     return [
       address.addressLine1,
       address.addressLine2,

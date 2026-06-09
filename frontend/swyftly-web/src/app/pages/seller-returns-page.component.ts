@@ -1,7 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { getApiErrorMessage } from '../auth/api-error';
 import { SellerReturnRequestResult } from '../seller/seller-return.models';
 import { SellerReturnService } from '../seller/seller-return.service';
@@ -16,7 +15,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
   imports: [
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
     PageHeaderComponent,
     RouterLink,
     SellerWorkspaceNavComponent,
@@ -79,7 +77,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   }
                 </span>
                 <span role="cell">
-                  <a mat-stroked-button [routerLink]="['/seller/returns', returnRequest.returnRequestId]">Open</a>
+                  <a data-ui-button="secondary" [routerLink]="['/returns', returnRequest.returnRequestId]">Open</a>
                 </span>
               </div>
             }

@@ -1,7 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerReturnRequestResult } from '../buyer/buyer-return.models';
 import { BuyerReturnService } from '../buyer/buyer-return.service';
@@ -17,7 +16,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     BuyerWorkspaceNavComponent,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
     PageHeaderComponent,
     RouterLink,
     StatusBadgeComponent,
@@ -46,7 +44,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="No return requests"
             message="Return requests can be started from delivered order details."
           >
-            <a mat-flat-button routerLink="/account/orders">View orders</a>
+            <a data-ui-button="primary" routerLink="/account/orders">View orders</a>
           </app-empty-state>
         } @else {
           <div class="admin-table buyer-ops-table" role="table" aria-label="Buyer returns">
@@ -81,7 +79,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   }
                 </span>
                 <span role="cell">
-                  <a mat-stroked-button [routerLink]="['/account/returns', returnRequest.returnRequestId]">Open</a>
+                  <a data-ui-button="secondary" [routerLink]="['/account/returns', returnRequest.returnRequestId]">Open</a>
                 </span>
               </div>
             }

@@ -1,11 +1,11 @@
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
+import { FRONTEND_HOSTS } from '../frontend-experience';
 import { LuxuryPublicStylesComponent } from '../shared/ui/luxury-public-styles.component';
 
 @Component({
   selector: 'app-access-denied-page',
-  imports: [LuxuryPublicStylesComponent, MatButtonModule, RouterLink],
+  imports: [LuxuryPublicStylesComponent, RouterLink],
   template: `
     <app-luxury-public-styles />
     <section class="page auth-page">
@@ -14,11 +14,13 @@ import { LuxuryPublicStylesComponent } from '../shared/ui/luxury-public-styles.c
         <h1>Access denied</h1>
         <p>Your account does not have access to this area.</p>
         <div class="auth-actions">
-          <a mat-flat-button routerLink="/shop">Go to shop</a>
-          <a mat-button routerLink="/login">Use another account</a>
+          <a class="ui-button ui-button--primary" [href]="shopUrl">Go to shop</a>
+          <a class="ui-button ui-button--ghost" routerLink="/login">Use another account</a>
         </div>
       </div>
     </section>
   `
 })
-export class AccessDeniedPageComponent {}
+export class AccessDeniedPageComponent {
+  protected readonly shopUrl = `${FRONTEND_HOSTS.client}/shop`;
+}

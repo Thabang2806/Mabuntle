@@ -1,7 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { MatButtonModule } from '@angular/material/button';
 import { getApiErrorMessage } from '../auth/api-error';
 import { BuyerAiDiscoveryHistoryResponse } from '../buyer/buyer-ai-discovery.models';
 import { BuyerAiDiscoveryService } from '../buyer/buyer-ai-discovery.service';
@@ -17,7 +16,6 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
     BuyerWorkspaceNavComponent,
     DatePipe,
     EmptyStateComponent,
-    MatButtonModule,
     PageHeaderComponent,
     RouterLink,
     StatusBadgeComponent,
@@ -33,9 +31,9 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
         description="Review opt-in assistant and visual-search summaries saved for your convenience."
       >
         <div pageHeaderActions>
-          <a mat-stroked-button routerLink="/assistant">Assistant</a>
-          <a mat-stroked-button routerLink="/visual-search">Visual search</a>
-          <a mat-stroked-button routerLink="/account/settings">Privacy controls</a>
+          <a data-ui-button="secondary" routerLink="/assistant">Assistant</a>
+          <a data-ui-button="secondary" routerLink="/visual-search">Visual search</a>
+          <a data-ui-button="secondary" routerLink="/account/settings">Privacy controls</a>
         </div>
       </app-page-header>
 
@@ -56,7 +54,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="AI history is off"
             message="Enable it in account settings if you want Swyftly to save safe AI discovery summaries across devices."
           >
-            <a mat-flat-button routerLink="/account/settings">Manage AI history</a>
+            <a data-ui-button="primary" routerLink="/account/settings">Manage AI history</a>
           </app-empty-state>
         } @else if (historyItems().length === 0 && !errorMessage()) {
           <app-empty-state
@@ -64,8 +62,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
             heading="No saved AI discoveries yet"
             message="Once enabled, successful assistant and visual-search results can save category, colour, material, confidence, result count, and product ids. Prompts and images are not stored."
           >
-            <a mat-flat-button routerLink="/assistant">Try assistant</a>
-            <a mat-stroked-button routerLink="/visual-search">Try visual search</a>
+            <a data-ui-button="primary" routerLink="/assistant">Try assistant</a>
+            <a data-ui-button="secondary" routerLink="/visual-search">Try visual search</a>
           </app-empty-state>
         } @else {
           <section class="route-card">
@@ -77,7 +75,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                   Server history is separate from browser-local recent prompts.
                 </p>
               </div>
-              <button mat-stroked-button type="button" [disabled]="isSaving() || historyItems().length === 0" (click)="clearAllHistory()">
+              <button data-ui-button="secondary" type="button" [disabled]="isSaving() || historyItems().length === 0" (click)="clearAllHistory()">
                 {{ isSaving() ? 'Clearing...' : 'Clear all history' }}
               </button>
             </div>
@@ -117,8 +115,8 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
                 }
 
                 <div class="buyer-action-row">
-                  <a mat-stroked-button routerLink="/shop" [queryParams]="shopQueryParams(item)">Repeat in shop</a>
-                  <button mat-stroked-button type="button" [disabled]="deletingHistoryId() === item.historyId" (click)="deleteHistoryItem(item)">
+                  <a data-ui-button="secondary" routerLink="/shop" [queryParams]="shopQueryParams(item)">Repeat in shop</a>
+                  <button data-ui-button="secondary" type="button" [disabled]="deletingHistoryId() === item.historyId" (click)="deleteHistoryItem(item)">
                     {{ deletingHistoryId() === item.historyId ? 'Deleting...' : 'Delete' }}
                   </button>
                 </div>
@@ -128,7 +126,7 @@ import { UiAlertComponent } from '../shared/ui/ui-alert.component';
 
           @if (canLoadMore()) {
             <div class="buyer-action-row">
-              <button mat-stroked-button type="button" [disabled]="isLoadingMore()" (click)="loadMore()">
+              <button data-ui-button="secondary" type="button" [disabled]="isLoadingMore()" (click)="loadMore()">
                 {{ isLoadingMore() ? 'Loading...' : 'Load more' }}
               </button>
             </div>
